@@ -22996,22 +22996,46 @@ function fitZoomToChunk(ceiling) {
   // safety factor and the 0.05 rounding left chunks a quarter smaller than
   // they needed to be.
   const STEP = 0.05;
+  const trial = trialZoom(el);
   let z = clampZoom(state.zoom * (avail / (heightOf() || avail)));
   if (z > cap) z = cap;
-  applyZoom(z);
+  trial(z);
 
   // Shrink until it fits, in all three senses.
   while ((heightOf() > avail || overflowsX() || figCapped()) && z > 0.6) {
     z = clampZoom(z - STEP);
-    applyZoom(z);
+    trial(z);
   }
   // Grow back while it still fits, never past the ceiling.
   while (z + STEP <= cap) {
     const probe = clampZoom(z + STEP);
-    applyZoom(probe);
-    if (heightOf() > avail || overflowsX() || figCapped()) { applyZoom(z); break; }
+    trial(probe);
+    if (heightOf() > avail || overflowsX() || figCapped()) { trial(z); break; }
     z = probe;
   }
+  commitZoom(el);
+}
+
+// The fit's steps are written on the one chunk being fitted, not on <html>.
+// Every rule that reads var(--zoom) sits on .chunk or below it, so the chunk
+// measures exactly what it would under a document-wide value - but a change
+// on <html> restyles and relays every element of every slide, and the walk
+// above takes up to twenty steps. Measured on lectures/diagrams (47 chunks,
+// 5,700 elements): 90 ms a step, up to two seconds a press, two thirds of it
+// style recalculation. On the chunk a step costs that chunk; the document is
+// restyled once, by commitZoom, and not at all when the answer is the zoom
+// it already had - which is every press that only reveals a beat.
+// state.zoom follows each step because figureCapProbe memoises on it.
+function trialZoom(el) {
+  return (z) => {
+    state.zoom = clampZoom(z);
+    el.style.setProperty('--zoom', state.zoom);
+  };
+}
+function commitZoom(el) {
+  el.style.removeProperty('--zoom');
+  const root = document.documentElement.style;
+  if (root.getPropertyValue('--zoom') !== String(state.zoom)) root.setProperty('--zoom', state.zoom);
 }
 
 // With auto-fit off the zoom is the lecturer's, and it is deliberately never
@@ -23040,12 +23064,14 @@ function clampZoomToWidth() {
   const el = entry && entry.el;
   if (!el) return false;
   const overflowsX = nowrapProbe(el);
+  const trial = trialZoom(el);
   let z = clampZoom(collapsedZoom);
-  applyZoom(z);
+  trial(z);
   while (overflowsX() && z > 0.6) {
     z = clampZoom(z - 0.05);
-    applyZoom(z);
+    trial(z);
   }
+  commitZoom(el);
   return z < collapsedZoom;
 }
 
