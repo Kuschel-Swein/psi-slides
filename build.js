@@ -5271,6 +5271,12 @@ const TALK_CLOCK_RE = new RegExp('^' + TALK_CLOCK_SRC + '$');
 const TALK_DURATION_LINE_RE = new RegExp(
   '^duration:[ \\t]*(' + TALK_CLOCK_SRC + ')[ \\t]*(?:#.*)?$', 'm');
 
+// The opener the parser writes for a ::: slide block. renderAudienceChunk
+// looks for the same string to mark the reveal segment holding one
+// (data-explicit), which the collapse CSS and --squint read; one constant,
+// so the two cannot come apart.
+const SLIDE_EXPLICIT_OPEN = '<div class="slide-explicit">';
+
 function parseLecture(src) {
   // Windows line endings. Every matcher below anchors on `$`, and a `\r`
   // before it made every heading and every directive miss - a CRLF source
@@ -6900,7 +6906,7 @@ function parseLecture(src) {
         if (/^:::\s+slide\s*$/.test(line)) {
           layoutStack.push({ close: '</div>', kind: 'slide', narrows: false,
                              from: target === bodyLines ? bodyLines.length : -1 });
-          target.push('', `<div class="slide-explicit">`, '');
+          target.push('', SLIDE_EXPLICIT_OPEN, '');
           continue;
         }
         if (/^:::\s+script\s*$/.test(line)) {
@@ -13943,9 +13949,9 @@ function renderAudienceChunk(chunk, frontmatter, colIdx, chunkIdx, nums, parts =
     // attribute on the ancestor the browser ran its :has() for every node in
     // every segment on each full restyle - a fifth of all selector time on a
     // deck of figures with no ::: slide in it. The string is the parser's own
-    // opener; quoted in a code span or a fence, marked escapes it, so it is
-    // found only where the element is.
-    const explicit = inner.includes('<div class="slide-explicit">') ? ' data-explicit=""' : '';
+    // opener, one constant for both; quoted in a code span or a fence, marked
+    // escapes it, so it is found only where the element is.
+    const explicit = inner.includes(SLIDE_EXPLICIT_OPEN) ? ' data-explicit=""' : '';
     return `<div class="reveal-segment" data-seg="${i}"${hidden}${from}${empty}${explicit}>${inner}</div>`;
   }).join('\n');
 
@@ -33241,7 +33247,7 @@ function squintScan() {
       // paragraphs beside it never arrived. Reported at the highest hidden
       // element, which is where the walk stops, so nothing is said twice.
       const seg = el.closest('.reveal-segment');
-      if (seg && seg !== el && seen(seg) && seg.querySelector('.slide-explicit')
+      if (seg && seg !== el && seen(seg) && seg.hasAttribute('data-explicit')
         && !el.closest('.slide-explicit')) {
         withheld(textOf(el), 'not in the ::: slide block');
       }
