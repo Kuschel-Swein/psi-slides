@@ -4466,8 +4466,13 @@ body:not([data-bold=accent-bold]) .chunk:not(.chunk-title, .chunk-section) p:not
    of .reveal-segment is not enough: a ::: slide nested in a ::: side or
    ::: cols sits below a wrapper div, and hiding that wrapper takes the slide
    block down with it. The guard is per reveal-segment, not per chunk, so a
-   segment without an explicit block still falls back to rule 3. */
-[data-collapse=topic-bold] .reveal-segment:has(.slide-explicit)
+   segment without an explicit block still falls back to rule 3.
+   The segment is named by data-explicit, which renderAudienceChunk writes
+   on any segment holding a ::: slide, rather than by :has(.slide-explicit):
+   an attribute on an ancestor lets the browser's ancestor filter turn the
+   rule away for every element outside such a segment before it runs a
+   single :has(). */
+[data-collapse=topic-bold] .reveal-segment[data-explicit]
   *:not(.slide-explicit):not(:has(.slide-explicit)):not(.slide-explicit *),
 [data-collapse=topic-bold] .script-only { display: none; }
 
@@ -14391,6 +14396,17 @@ function fitZoomToChunk(ceiling) {
   const cap = ceiling === undefined ? collapsedZoom : ceiling;
   const avail = fitAvail(el);
   if (!(avail > 0)) return;
+  onChunk(el, (trial) => {
+    // Measured at state.zoom, which <html> may not be showing: the slide PDF
+    // export writes its ceiling there without telling state.zoom. Answering
+    // "nothing to gain" from a reading at another zoom made a chunk's fit
+    // depend on the order the deck was walked in.
+    trial(state.zoom);
+    fitWalk(el, cap, avail, trial);
+  });
+}
+
+function fitWalk(el, cap, avail, trial) {
   const overflowsX = nowrapProbe(el);
   const heightOf = flowHeightProbe(el);
   const figCapped = figureCapProbe(el);
@@ -14410,20 +14426,65 @@ function fitZoomToChunk(ceiling) {
   const STEP = 0.05;
   let z = clampZoom(state.zoom * (avail / (heightOf() || avail)));
   if (z > cap) z = cap;
-  applyZoom(z);
+  trial(z);
 
   // Shrink until it fits, in all three senses.
   while ((heightOf() > avail || overflowsX() || figCapped()) && z > 0.6) {
     z = clampZoom(z - STEP);
-    applyZoom(z);
+    trial(z);
   }
   // Grow back while it still fits, never past the ceiling.
   while (z + STEP <= cap) {
     const probe = clampZoom(z + STEP);
-    applyZoom(probe);
-    if (heightOf() > avail || overflowsX() || figCapped()) { applyZoom(z); break; }
+    trial(probe);
+    if (heightOf() > avail || overflowsX() || figCapped()) { trial(z); break; }
     z = probe;
   }
+}
+
+// The fit's steps are written on the one chunk being fitted, not on <html>.
+// Every rule that reads var(--zoom) sits on .chunk or below it, so the chunk
+// measures exactly what it would under a document-wide value - but a change
+// on <html> restyles and relays every element of every slide, and the walk
+// above takes up to twenty steps. Measured on lectures/diagrams (47 chunks,
+// 5,700 elements): 90 ms a step, up to two seconds a press, two thirds of it
+// style recalculation. On the chunk a step costs that chunk; the document is
+// restyled once, by commitZoom, and not at all when the answer is the zoom
+// it already had - which is every press that only reveals a beat.
+// state.zoom follows each step because figureCapProbe memoises on it.
+//
+// That "on .chunk or below" is held by the zoom-scope gate, which fails on a
+// rule reading var(--zoom) whose selector is not on its reviewed list.
+//
+// onChunk runs a walk and always ends it with commitZoom, in a finally: a
+// throw mid-walk would otherwise leave the slide on a private zoom that + and
+// - cannot reach. A walk that throws commits the zoom it started from, not
+// the step it had reached - each trial moves state.zoom, so committing it
+// as it stands would put a half-walked value on the slide and in the next
+// snapshot, a zoom nobody chose.
+function onChunk(el, walk) {
+  const before = state.zoom;
+  let done = false;
+  try {
+    walk((z) => applyZoom(z, el));
+    done = true;
+  } finally {
+    if (!done) state.zoom = before;
+    commitZoom(el);
+  }
+}
+function commitZoom(el) {
+  el.style.removeProperty('--zoom');
+  showZoom();
+}
+// Puts state.zoom on <html>, and does nothing when it is there already, so a
+// caller that set state.zoom and then ran a fit that may have returned before
+// committing can call it unconditionally. Writing <html> restyles every
+// slide; writing it twice in one press is what the chunk-scoped walk exists
+// to avoid.
+function showZoom() {
+  const shown = parseFloat(document.documentElement.style.getPropertyValue('--zoom'));
+  if (shown !== state.zoom) applyZoom(state.zoom);
 }
 
 // With auto-fit off the zoom is the lecturer's, and it is deliberately never
@@ -14453,11 +14514,13 @@ function clampZoomToWidth() {
   if (!el) return false;
   const overflowsX = nowrapProbe(el);
   let z = clampZoom(collapsedZoom);
-  applyZoom(z);
-  while (overflowsX() && z > 0.6) {
-    z = clampZoom(z - 0.05);
-    applyZoom(z);
-  }
+  onChunk(el, (trial) => {
+    trial(z);
+    while (overflowsX() && z > 0.6) {
+      z = clampZoom(z - 0.05);
+      trial(z);
+    }
+  });
   return z < collapsedZoom;
 }
 
@@ -14485,13 +14548,17 @@ function cycleAutoFit(dir) {
     // Back to the lecturer's zoom first, so the fit solves from the setting
     // rather than from whatever the previous mode left on this slide - in
     // shrink mode that value IS the ceiling, and starting below it would
-    // read as a mode that never gives the size back.
-    applyZoom(state.collapse === 'topic-bold' ? collapsedZoom : state.zoom);
+    // read as a mode that never gives the size back. Set on state.zoom
+    // only: the fit trials on the chunk and commits once, and writing the
+    // setting to <html> first would restyle every slide for a value about
+    // to be replaced. showZoom covers a fit that returned before committing.
+    state.zoom = clampZoom(state.collapse === 'topic-bold' ? collapsedZoom : state.zoom);
     fitZoomToChunk(autoFitCeiling());
   } else {
-    applyZoom(state.collapse === 'topic-bold' ? collapsedZoom : state.zoom);
+    state.zoom = clampZoom(state.collapse === 'topic-bold' ? collapsedZoom : state.zoom);
     clampZoomToWidth();
   }
+  showZoom();
   applyState();
   focusCamera(false);
   flashMode(AUTO_FIT_LABEL[state.autoFitMode]);
@@ -14516,9 +14583,10 @@ function clampZoom(z) {
 }
 // Write the zoom without the announcement or the broadcast, for the
 // automatic fit which would otherwise flash a number on every C press.
-function applyZoom(z) {
+// On the document by default; the fit's trial steps pass the chunk (onChunk).
+function applyZoom(z, target = document.documentElement) {
   state.zoom = clampZoom(z);
-  document.documentElement.style.setProperty('--zoom', state.zoom);
+  target.style.setProperty('--zoom', state.zoom);
 }
 
 function cycleCollapse(dir = 1) {
@@ -14535,7 +14603,8 @@ function cycleCollapse(dir = 1) {
   applyState();
   if (autoFitOn()) fitZoomToChunk(autoFitCeiling());
   else if (state.collapse === 'none') fitZoomToChunk();
-  else { applyZoom(collapsedZoom); clampZoomToWidth(); }
+  else { state.zoom = clampZoom(collapsedZoom); clampZoomToWidth(); }
+  showZoom();     // as in cycleAutoFit: one write to <html>, after the fit
   focusCamera(false);
   broadcastState();
   flashMode('collapse: ' + COLLAPSE_LABEL[state.collapse]);
@@ -16808,18 +16877,21 @@ window.psiExport = {
   zoom: () => state.zoom,
   // What the fit would measure, without fitting: el's flow height at each
   // zoom given, by the probe fitZoomToChunk uses, and the limit it holds a
-  // chunk to. Only --zoom on <html> is written, and its inline value is put
-  // back before returning; state.zoom is not touched. Read by the PDF
-  // export's parity numbers and by nothing in the live views.
+  // chunk to. Each zoom is written on el, as the fit's trial steps are, and
+  // el's inline value is put back before returning; state.zoom is not
+  // touched. Read by the PDF export's parity numbers and by nothing in the
+  // live views.
   fitMeasure: (el, zooms) => {
     const limit = fitAvail(el);
     if (!(limit > 0)) return null;
     const probe = flowHeightProbe(el);
-    const root = document.documentElement.style;
-    const before = root.getPropertyValue('--zoom');
-    const heights = zooms.map(z => { root.setProperty('--zoom', z); return probe(); });
-    if (before) root.setProperty('--zoom', before); else root.removeProperty('--zoom');
-    return { limit, heights };
+    const before = el.style.getPropertyValue('--zoom');
+    try {
+      const heights = zooms.map(z => { el.style.setProperty('--zoom', z); return probe(); });
+      return { limit, heights };
+    } finally {
+      if (before) el.style.setProperty('--zoom', before); else el.style.removeProperty('--zoom');
+    }
   },
 };
 

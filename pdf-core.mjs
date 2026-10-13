@@ -500,8 +500,10 @@ function pageCollect(cfg) {
         // fitZoomToChunk takes a cap, but it also returns early when the chunk
         // already fits and state.zoom is at or above that cap - so passing a
         // lower one leaves whatever the previous slide happened to end on, and
-        // the ceiling silently does nothing. (That early return is also why a
-        // chunk's fitted zoom depends on the order the deck was walked in.)
+        // the ceiling silently does nothing. (That early return used to make a
+        // chunk's fitted zoom depend on the order the deck was walked in; it
+        // now measures at state.zoom rather than at what <html> shows, which
+        // this clamp writes without telling state.zoom, so it no longer does.)
         // Clamping afterwards needs no re-solve and cannot be wrong: the fit
         // has just shown the chunk fits at a larger size, so it fits at a
         // smaller one.

@@ -102,6 +102,17 @@ const measure = (page) => page.evaluate(() => {
   };
 });
 
+// The walk writes its trial zooms on the chunk it measures and commits the
+// answer to <html> once (fitZoomToChunk, onChunk, commitZoom). What that
+// owes everything else: no chunk is left with a zoom of its own, which + and
+// - could not reach, and <html> shows the zoom state.zoom says it does.
+const zoomHeld = (page) => page.evaluate(() => ({
+  root: parseFloat(document.documentElement.style.getPropertyValue('--zoom')),
+  state: window.psiExport.zoom(),
+  private: [...document.querySelectorAll('.chunk')]
+    .filter(c => c.style.getPropertyValue('--zoom') !== '').map(c => c.id),
+}));
+
 export async function run({ page, report, walkTo }) {
   const { ok, note } = report;
 
@@ -121,6 +132,12 @@ export async function run({ page, report, walkTo }) {
     await page.reload({ waitUntil: 'load' });
     await page.waitForTimeout(700);
 
+    const checkHeld = async (when) => {
+      const h = await zoomHeld(page);
+      ok(h.private.length === 0, `${when}: no chunk keeps a zoom of its own after the fit`, h.private.join(', '));
+      ok(h.root === h.state, `${when}: <html> shows the zoom the runtime holds`, `${h.root} vs ${h.state}`);
+    };
+
     // ── off, which is where a deck that says nothing opens ──
     await walkTo('tall');
     const offTall = await measure(page);
@@ -139,6 +156,7 @@ export async function run({ page, report, walkTo }) {
        'one press of # shrinks that slide', `${shrinkTall.zoom} from ${DEFAULT_ZOOM}`);
     ok(shrinkTall.h <= shrinkTall.frame + 1,
        'and brings it inside the frame', `${shrinkTall.h}px in ${shrinkTall.frame}px`);
+    await checkHeld('shrink, tall slide');
 
     // The claim the mode is named for. Same mode, a slide that fits, and the
     // zoom has to be the one that was set - not a fit that happens to land
@@ -164,6 +182,42 @@ export async function run({ page, report, walkTo }) {
     ok(fullTall.h <= fullTall.frame + 1,
        'and full still fits the tall one, which is what it always did',
        `${fullTall.h}px in ${fullTall.frame}px`);
+    await checkHeld('full, tall slide');
+
+    // A throw in the middle of a walk, from the first trial write on a chunk
+    // at a zoom other than the one the walk started from. Each trial moves
+    // state.zoom, so this is the case that tells a walk rolled back from one
+    // that commits the step it had reached; a throw at the starting zoom
+    // could not tell the two apart. (Counting writes instead was tried: on
+    // this slide the third write lands back on the starting zoom.)
+    const threw = await page.evaluate(() => {
+      const P = window.psiExport;
+      const before = P.zoom();
+      const proto = CSSStyleDeclaration.prototype;
+      const real = proto.setProperty;
+      const root = document.documentElement.style;
+      let at = null;
+      proto.setProperty = function (name, value, ...rest) {
+        if (name === '--zoom' && this !== root && Number(value) !== before) {
+          at = Number(value);
+          throw new Error('probe failed');
+        }
+        return real.call(this, name, value, ...rest);
+      };
+      let msg = 'no throw';
+      try { P.settle(); } catch (e) { msg = e.message; }
+      finally { proto.setProperty = real; }
+      return { msg, before, at, after: P.zoom(),
+               root: parseFloat(root.getPropertyValue('--zoom')) };
+    });
+    ok(threw.msg === 'probe failed', 'a probe that throws mid-walk reaches the caller', threw.msg);
+    ok(threw.at !== null && threw.at !== threw.before,
+       'and it threw part-way, at a zoom other than the one the walk started from',
+       `${threw.at} from ${threw.before}`);
+    ok(threw.after === threw.before && threw.root === threw.before,
+       'the walk that threw leaves the zoom it started from, on the runtime and on <html>',
+       `state ${threw.after}, <html> ${threw.root}, started ${threw.before}`);
+    await checkHeld('after a walk that threw');
 
     // ── a third press comes back round ──
     await page.keyboard.press('#');
