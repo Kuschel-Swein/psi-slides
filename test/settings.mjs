@@ -4026,6 +4026,13 @@ console.log('\nlayout generations');
       ['duration: soon', 'duration: soon\n', /duration: soon/, 'bad-duration'],
       ['duration: 0', 'duration: 0\n', /duration: 0/, 'bad-duration'],
       ['duration: 13:00:00', 'duration: 13:00:00\n', /up to twelve hours/, 'bad-duration'],
+      // start: a time of day, 24-hour HH:MM, and nothing else. A bare 14:20:00
+      // is 51600 to YAML; the refusal quotes what the author wrote.
+      ['start: soon', 'start: soon\n', /start: soon/, 'bad-start'],
+      ['start: 25:00', 'start: 25:00\n', /start: 25:00.*not a time of day/, 'bad-start'],
+      ['start: 14:60', 'start: "14:60"\n', /start: 14:60/, 'bad-start'],
+      ['start: 14:20:00', 'start: 14:20:00\n', /start: 14:20:00/, 'bad-start'],
+      ['start: 860', 'start: 860\n', /start: 860/, 'bad-start'],
       ['prompter: one value', 'prompter: on\n', /block of keys, not a single value/, 'unknown-prompter-setting'],
       ['an unknown prompter key', 'prompter:\n  modell: x\n', /prompter has no key "modell"/, 'unknown-prompter-setting'],
       ['cues: maybe', 'prompter:\n  cues: maybe\n', /prompter\.cues: maybe/, 'unknown-prompter-setting'],
@@ -4047,6 +4054,24 @@ console.log('\nlayout generations');
     const p = raw(FM('duration: 45m\n'), ['--print-only']);
     ok(p.code !== 0 && /duration: 45m/.test(p.out) && p.files.length === 0,
        '--print-only refuses a bad duration before writing anything', p.out.split('\n')[0]);
+    const ps = raw(FM('start: 2pm\n'), ['--print-only']);
+    ok(ps.code !== 0 && /start: 2pm/.test(ps.out) && ps.files.length === 0,
+       '--print-only refuses a bad start before writing anything', ps.out.split('\n')[0]);
+    // What the key buys: one button beside the cockpit's clock, carrying the
+    // minutes after midnight. A deck without it has the two minute buttons
+    // and no third - and no view but the cockpit carries any of them.
+    {
+      const withStart = raw(FM('start: 14:20\n'), ['--speaker-only']);
+      const html = withStart.files.includes('speaker.html') ? fs.readFileSync(path.join(withStart.dir, 'speaker.html'), 'utf8') : '';
+      ok(/<button id="psiINT-clock-plan"[^>]* data-start="860"[^>]*>since 14:20<\/button>/.test(html),
+         'start: 14:20 puts the button for the planned start beside the clock, 860 minutes after midnight',
+         (html.match(/<button id="psiINT-clock-plan"[^>]*>[^<]*/) || ['no button'])[0]);
+      const without = raw(FM(''), ['--speaker-only']);
+      const bare = without.files.includes('speaker.html') ? fs.readFileSync(path.join(without.dir, 'speaker.html'), 'utf8') : '';
+      ok(!/<button id="psiINT-clock-plan"/.test(bare) && /<button id="psiINT-clock-back"/.test(bare)
+         && /<button id="psiINT-clock-fwd"/.test(bare),
+         'a deck without the key has the minute back and the minute forward, and no third button');
+    }
     const accepts = [
       ['minutes', 'duration: 45\n'],
       ['a clock', 'duration: 1:30:00\n'],
@@ -4058,6 +4083,13 @@ console.log('\nlayout generations');
       // narrower than the reader let `120:00` lint clean and then be refused
       // as a talk of 7200 minutes.
       ['a bare clock', 'duration: 45:00\n'],
+      // The same trap for start: - a bare 14:20 arrives as 860, a bare 9:05
+      // as 545, and 09:05 as text.
+      ['a quoted start', 'start: "14:20"\n'],
+      ['a bare start', 'start: 14:20\n'],
+      ['a bare start before ten', 'start: 9:05\n'],
+      ['a start with a leading zero', 'start: 09:05\n'],
+      ['midnight', 'start: 0:00\n'],
       ['a bare clock past the hour', 'duration: 120:00\n'],
       ['the whole block', 'duration: 45\nprompter:\n  model: google/gemini-2.5-flash\n  language: de-DE\n  cadence: 30\n  cooldown: 90\n  cues: off\n  calls-per-hour: 120\n'],
       ['the flow form', 'prompter: {cues: off, cadence: 20}\n'],

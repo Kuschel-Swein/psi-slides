@@ -134,8 +134,16 @@ const PRESSES = [
   // Let through then, let through now.
   ['e', null, null], ['x', null, null], ['Tab', null, null],
 ];
-// The one key this slice added: a presenter remote's black-screen key.
-const ADDED = [['.', 'blank', 'blank']];
+// The keys added since: a presenter remote's black-screen key, and the three
+// that set the cockpit's clock.
+const ADDED = [
+  ['.', 'blank', 'blank'],
+  // The cockpit's clock, moved without restarting it. < and > arrive with or
+  // without Shift, depending on the layout; the projection answers none.
+  ['<', null, 'clock-back'], ['Shift+<', null, 'clock-back'],
+  ['>', null, 'clock-forward'], ['Shift+>', null, 'clock-forward'],
+  ['z', null, 'clock-plan'], ['Shift+Z', null, 'clock-plan'],
+];
 
 function press(spec) {
   const shift = spec.startsWith('Shift+') && spec.length > 6;

@@ -10463,6 +10463,20 @@ const COMMANDS = [
   { id: 'clock-reset', group: 'cards', views: SPK,
     mouse: 'click the clock',
     hint: 'restart it at 0:00 – it started when this window opened' },
+  // The clock without restarting it. < and > rather than two letters: the
+  // pair reads as back and forward, it is one physical key on a German
+  // layout and two neighbours on a US one, and no presenter remote sends
+  // either. The shifted spelling needs no entry - commandFor falls back to
+  // the plain key, and > arrives with Shift held on both layouts.
+  { id: 'clock-back', group: 'cards', views: SPK, keys: ['<'],
+    label: 'Move the clock a minute back', reach: 'local', state: null,
+    hint: 'the clock one minute back, never below 0:00 – or the <b>&minus;1</b> beside it' },
+  { id: 'clock-forward', group: 'cards', views: SPK, keys: ['>'],
+    label: 'Move the clock a minute forward', reach: 'local', state: null,
+    hint: 'the clock one minute forward, for a talk that began before the clock did – or the <b>+1</b> beside it' },
+  { id: 'clock-plan', group: 'cards', views: SPK, keys: ['z'],
+    label: 'Set the clock to the planned start', reach: 'local', state: null,
+    hint: 'the clock as the time since the planned start – at 14:25, <code>start: "14:20"</code> in the frontmatter reads 5:00; before it, the clock holds at 0:00 until then' },
 
   // ── arranging this window (cockpit) ──
   { id: 'preview-orientation', group: 'arrange', views: SPK, keys: ['shift+v'],

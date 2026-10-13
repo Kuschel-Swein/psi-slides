@@ -1109,15 +1109,37 @@ export const CLOCK_JUMP_S = 5;
  * one without the other left every cool-down answering to a clock nobody was
  * on – see `createPolicy`'s `rebase`.
  *
+ * `set` is the other case, and the opposite one: the speaker moved the clock
+ * on purpose and the cockpit said so. See the branch below.
+ *
  * @returns {null|{delta, onAt, lastTickAt, transcript, dropped}} null when the
  *          clock did not jump, which is every ordinary message.
  */
 export function rebaseClock({
-  prev, next, onAt, lastTickAt, transcript, startQuiet, tolerance,
+  prev, next, onAt, lastTickAt, transcript, startQuiet, tolerance, set,
 } = {}) {
   const was = num(prev, 0);
   const now = num(next, 0);
   const tol = num(tolerance, CLOCK_JUMP_S);
+  // The speaker set the clock (`set`): a minute back or forward, or to the
+  // planned start. The talk goes on and only its reading changed, so every
+  // stamp moves by the difference, in either direction and however small,
+  // and nothing is dropped or re-quieted: a stamp that lands before zero is
+  // simply long ago, which is all the rules that read it ask.
+  if (set) {
+    const d = now - was;
+    if (!d) return null;
+    return {
+      delta: d,
+      onAt: num(onAt, 0) + d,
+      lastTickAt: lastTickAt == null ? null : num(lastTickAt, 0) + d,
+      transcript: (Array.isArray(transcript) ? transcript : []).map((s) => Object.assign({}, s, {
+        t0: num(s && s.t0, 0) + d,
+        t1: num(s && s.t1, 0) + d,
+      })),
+      dropped: 0,
+    };
+  }
   if (!(was - now > tol)) return null;
   const delta = now - was;              // negative, by more than the tolerance
   const quiet = num(startQuiet, START_QUIET_S);
@@ -1505,6 +1527,16 @@ export function replayAnswers(lines, opts = {}) {
       const st = String(line.state || '');
       if (st === 'idle' || st === 'off') onAt = null;
       else if (onAt == null && line.elapsed != null) onAt = num(line.elapsed, 0);
+      continue;
+    }
+    // The clock moved under the run, by a restart or by the speaker's hand.
+    // The live policy was rebased at that moment and this one has to be too,
+    // or every cool-down after it is measured across the jump.
+    if (line.type === 'clock' || line.type === 'clock-set') {
+      const d = num(line.delta, 0);
+      policy.rebase(d);
+      at = Math.max(0, at + d);
+      if (onAt != null) onAt = line.onAt != null && isFinite(Number(line.onAt)) ? Number(line.onAt) : onAt + d;
       continue;
     }
     if (line.type === 'tick') {

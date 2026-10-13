@@ -9,6 +9,33 @@ from building the same way is a major version.
 
 ### Added
 
+- **The cockpit's clock can be moved without being restarted, and set to
+  the planned start.** A talk planned for 14:20 that begins at 14:25 is five
+  minutes behind every `@mm:ss` mark on its cue cards from the first word,
+  and the clock said 0:00. Three small buttons now stand beside the digits,
+  over the stage and in the cue cards' header alike: `−1` and `+1` (`<` and
+  `>`) move the reading a minute, never below 0:00; `since 14:20` (`Z`) is
+  there when the deck says `start: "14:20"` – a new top-level frontmatter
+  key, local time, 24-hour `HH:MM`, refused by the build and by the linter
+  (`bad-start`) when it is anything else – and sets the clock to the time
+  since then. Before the planned start the clock holds at 0:00 and starts by
+  itself; nothing ever sets it without a press, so a rehearsal at another
+  hour opens at 0:00 as before. The drift beside the clock follows at once.
+  A click on the clock still restarts it. All three are commands in
+  `commands.mjs` (`clock-back`, `clock-forward`, `clock-plan`), so the `?`
+  panel lists and runs them. Without `start:` nothing changes but the two
+  minute buttons, and `Z` names the key that is missing.
+
+  What a gesture set – a restart included – now survives a reload of the
+  cockpit window (`sessionStorage`, this deck, twelve hours); a cockpit
+  opened afresh still starts at 0:00. Under `--prompter` the cockpit tells
+  the sidecar that the clock was set (`clockDelta` on a `souffleuse-move`):
+  everything stamped on it moves by the same seconds in both places, nothing
+  is forgotten and no call is bought, and the log says so on a line of a new
+  type, `clock-set` – not `clock`, which a debrief reads as the talk
+  beginning. `--prompter-replay` rebases its policy on both, which it did
+  not do for a restart either.
+
 - `pitchblack: on | off`, a twelfth viewer default: every dark theme on a
   true black ground. A projector cannot show black, so the paper of `dark`,
   `terminal-amber` and `terminal-green` (oklch 0.17, 0.12, 0.11) is a lit

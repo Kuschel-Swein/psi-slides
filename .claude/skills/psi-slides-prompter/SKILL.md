@@ -89,6 +89,9 @@ are the build's:
 talk like `lang:`, and the cockpit's clock can measure against it whether or not
 a prompter is listening. `duration: 45` is minutes, `45:00` and `1:30:00` are
 clocks, twelve hours is the ceiling, and anything else fails the build.
+`start: "14:20"` is its neighbour and has nothing to do with the prompter
+either: the time of day the talk is planned to begin, which the speaker can
+set the cockpit's clock against (`Z`; speaker.md §4.1, Clock).
 
 Precedence: CLI, then frontmatter, then default. In the cockpit the frontmatter
 is a **ceiling** for the cue preference rather than a default – a deck with
@@ -523,6 +526,7 @@ refuses both, by name. Every line carries `t` and `type`:
 | `prefs` | `cues`, `ceiling` – the cue checkbox changed in the cockpit |
 | `status`, `error` | every transition with the cockpit clock it happened on (`elapsed` – the replay measures the opening quiet from the `listening` the switch wrote, and nothing else in the log says when it was thrown), and every failure with its streak |
 | `clock` | the cockpit's clock went backwards and everything was moved onto the new one: `delta`, `was`, `now`, the new `onAt`, and how many transcript segments were older than the new zero |
+| `clock-set` | the speaker moved the clock – a minute back or forward, or to the planned start (`clockDelta` on a `souffleuse-move`): the same fields as `clock`, either sign, nothing dropped. A type of its own because a `clock` line is read as the talk beginning; every `elapsed` before it is on the old reading and every one after it on the new. `replayAnswers` rebases its policy on both |
 | `warn` | something the sidecar carried on through and a person should know: today, only a slide index past the end of the deck |
 | `cue-dropped` | a card whose slide this build no longer has |
 

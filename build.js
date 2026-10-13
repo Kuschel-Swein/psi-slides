@@ -5270,6 +5270,16 @@ const TALK_CLOCK_SRC = '(?:(\\d{1,2}):)?(\\d{1,3}):(\\d{2})';
 const TALK_CLOCK_RE = new RegExp('^' + TALK_CLOCK_SRC + '$');
 const TALK_DURATION_LINE_RE = new RegExp(
   '^duration:[ \\t]*(' + TALK_CLOCK_SRC + ')[ \\t]*(?:#.*)?$', 'm');
+// And the one shape for the time of day a `start:` takes: 24-hour H:MM or
+// HH:MM, nothing after the minutes. Three readers again - the restore in
+// `parseLecture` (a bare `start: 14:20` is the sexagesimal integer 860 to
+// YAML 1.1), `talkStart`, and the literal `lint.js` mirrors by hand.
+const TALK_START_SRC = '(\\d{1,2}):(\\d{2})';
+const TALK_START_RE = new RegExp('^' + TALK_START_SRC + '$');
+// Wider than the shape on purpose: whatever digits and colons the author
+// wrote are put back, so a refusal quotes `14:20:00` and not the 51600 that
+// YAML made of it.
+const TALK_START_LINE_RE = /^start:[ \t]*([\d:]+)[ \t]*(?:#.*)?$/m;
 
 // The opener the parser writes for a ::: slide block. renderAudienceChunk
 // looks for the same string to mark the reveal segment holding one
@@ -5296,6 +5306,11 @@ function parseLecture(src) {
   {
     const m = String(fmRaw || '').match(TALK_DURATION_LINE_RE);
     if (m && typeof frontmatter.duration === 'number') frontmatter.duration = m[1];
+  }
+  // The same for `start: 14:20`, which arrives as 860.
+  {
+    const m = String(fmRaw || '').match(TALK_START_LINE_RE);
+    if (m && typeof frontmatter.start === 'number') frontmatter.start = m[1];
   }
   // The lecture-wide diagram layer, parsed once and handed to every block.
   // Validated here rather than at the first diagram, because a lecture whose
@@ -7422,6 +7437,30 @@ function talkDuration(frontmatter = {}) {
     throw err;
   }
   return secs;
+}
+
+// The time of day the talk is planned to begin, in minutes after local
+// midnight, or null when the deck does not say. `start: "14:20"` - a time and
+// no date, because a lecture is given every week and a deck that named the
+// day would be wrong on all the others; the cockpit reads it against the day
+// it is opened on. Nothing happens by itself: the key puts one command and one
+// button beside the cockpit's clock, which set it to the time since then
+// (speaker.md, Clock). Refused rather than ignored, like `duration:`.
+function talkStart(frontmatter = {}) {
+  const v = frontmatter.start;
+  if (v == null || v === '') return null;
+  const raw = String(v).trim();
+  const m = raw.match(TALK_START_RE);
+  const h = m ? Number(m[1]) : NaN;
+  const min = m ? Number(m[2]) : NaN;
+  if (!m || h > 23 || min > 59) {
+    const err = new Error(
+      `Frontmatter: "start: ${raw}" is not a time of day this key reads.\n` +
+      '  Expected the local time the talk is planned to begin, 24-hour HH:MM (start: "14:20").');
+    err.userFacing = true;
+    throw err;
+  }
+  return h * 60 + min;
 }
 
 // ── the words the build invents (localised by `lang:`) ───────────────
@@ -25674,6 +25713,14 @@ function renderSpeaker(lecture, opts = {}) {
   // that is their classic home - absolutely positioned over its bottom edge,
   // the way the "+ note" button owns the other corner. In cue-card mode
   // cuePlaceStrip moves both into the head of the card column and back.
+  // `start:` puts one more button beside the clock: the clock as the time
+  // since the planned beginning. The minutes ride on the button, which is
+  // where the runtime reads them from; a deck without the key has no button.
+  const planStart = talkStart(frontmatter);
+  const planClock = planStart == null ? ''
+    : Math.floor(planStart / 60) + ':' + String(planStart % 60).padStart(2, '0');
+  const clockPlanBtn = planStart == null ? ''
+    : `<button id="psiINT-clock-plan" class="clock-step" type="button" data-start="${planStart}" title="Set the clock to the time since ${planClock}, the planned start (Z)">since ${planClock}</button>`;
   const souffleuseStrip = souffSettings
     ? `\n  <div id="psiINT-souffleuse-strip" role="status" aria-live="polite" hidden><span class="souffleuse-glyph"></span><span class="souffleuse-text"></span><button class="souffleuse-x" type="button" aria-label="dismiss">&times;</button></div>
   <div id="psiINT-souffleuse-heard" hidden></div>`
@@ -25718,7 +25765,7 @@ ${columnsHtml}
     </div>
   </div>
   <button id="psiINT-add-note-btn" type="button" title="Open speaker notes (Shift-N)">+ note</button>
-  <button id="psiINT-clock" type="button" title="Elapsed since the talk began · click to restart from 0:00"><span id="psiINT-timer">0:00</span><span id="psiINT-drift" hidden></span><span id="psiINT-clock-hint" aria-hidden="true">reset</span></button>${souffleuseStrip}
+  <div id="psiINT-clock-box">${clockPlanBtn}<button id="psiINT-clock-back" class="clock-step" type="button" title="The clock one minute back (&lt;)" aria-label="Clock one minute back">&minus;1</button><button id="psiINT-clock-fwd" class="clock-step" type="button" title="The clock one minute forward (&gt;)" aria-label="Clock one minute forward">+1</button><button id="psiINT-clock" type="button" title="Elapsed since the talk began · click to restart from 0:00"><span id="psiINT-timer">0:00</span><span id="psiINT-drift" hidden></span><span id="psiINT-clock-hint" aria-hidden="true">reset</span></button></div>${souffleuseStrip}
 </div>
 <section id="psiINT-cue-panel" aria-label="Cue cards">
   <header id="psiINT-cue-where">
@@ -26165,11 +26212,19 @@ body.preview-resizing #psiINT-preview-resizer::after { opacity: 1; }
    is pressed: tStart is the page load, ten minutes early when the cockpit
    is opened before the room fills, so a click restarts it at 0:00. The
    cue-card mode moves this same element into its header. */
-#psiINT-clock {
+#psiINT-clock-box {
   position: absolute;
   right: 0.7rem;
   top: 0.6rem;
   z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.25em;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--paper) 82%, transparent);
+  font-size: clamp(18px, 2.4vh, 30px);
+}
+#psiINT-clock {
   display: flex;
   align-items: baseline;
   gap: 0.5em;
@@ -26177,15 +26232,39 @@ body.preview-resizing #psiINT-preview-resizer::after { opacity: 1; }
   padding: 0.1em 0.45em;
   border: 1px solid transparent;
   border-radius: 3px;
-  background: color-mix(in oklab, var(--paper) 82%, transparent);
+  background: transparent;
   font-family: var(--mono-font);
   font-variant-numeric: tabular-nums;
-  font-size: clamp(18px, 2.4vh, 30px);
+  font-size: 1em;
   line-height: 1.2;
   color: var(--ink);
   cursor: pointer;
   transition: border-color 120ms;
 }
+/* The clock holding at 0:00 for a planned start that is still ahead: the
+   digits are not running yet, and say so by standing back. */
+#psiINT-clock-box.waiting #psiINT-timer { color: var(--ink-soft); }
+/* Beside it, what moves it without restarting it: a minute back, a minute
+   forward and, where the deck names its planned start, the time since then.
+   Small and quiet, because the digits are what is read every minute and
+   these are pressed twice a term - but always there, because the moment they
+   are wanted is the moment nobody has a hand free to look for them. */
+#psiINT-clock-box .clock-step {
+  margin: 0;
+  padding: 0.25em 0.5em;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: transparent;
+  font-family: var(--sans-font);
+  font-variant-numeric: tabular-nums;
+  font-size: max(11px, 0.48em);
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+#psiINT-clock-box .clock-step:hover { color: var(--ink); border-color: var(--ink-soft); }
+#psiINT-clock-box .clock-step:focus-visible { outline: 2px solid var(--emph); outline-offset: 2px; }
 #psiINT-clock:hover { border-color: var(--rule); }
 #psiINT-clock:focus-visible { outline: 2px solid var(--emph); outline-offset: 2px; }
 /* What the click does, said before it is clicked. A tooltip is not enough
@@ -26657,14 +26736,14 @@ body[data-view=speaker].cue-cards #psiINT-cue-panel {
 }
 /* The clock moves into this header while the cards are up, so it loses
    its corner position and its scrim. */
-body[data-view=speaker].cue-cards #psiINT-clock {
+body[data-view=speaker].cue-cards #psiINT-clock-box {
   position: static;
   flex: 0 0 auto;
   background: transparent;
-  padding: 0;
   margin-left: 1.2em;
   font-size: clamp(22px, 3.4vh, 40px);
 }
+body[data-view=speaker].cue-cards #psiINT-clock { padding: 0 0 0 0.2em; }
 /* No overflow: hidden here - the clock is two and a half times the size of
    this line's own type and sits on it, so a clipped box took the top off
    the digits. The two text children do their own truncating instead. */
@@ -27452,18 +27531,102 @@ previewStrip.addEventListener('wheel', (e) => {
 // is one stray click away from a drift that is wrong for the rest of the
 // talk, and a restart is the case that actually happens: the cockpit was
 // opened while the room was still filling.
+//
+// Three more things move it without restarting it, and all four go through
+// clockSet. A minute back and a minute forward (the two small buttons, < and
+// >): a talk that began late has lost those minutes against its @mm:ss marks,
+// and the speaker who wants to see them puts them on the clock. And, where
+// the deck names its planned start (start: "14:20"), the time since then (the
+// button that says so, Z): at 14:25 the clock reads 5:00 and runs on. Before
+// the planned start it holds at 0:00 and starts by itself when the time comes
+// - one rule, the clock is the time since the planned start and never less
+// than zero - which is why tStart may lie in the future and every reader
+// floors at zero. Nothing sets the clock by itself: a rehearsal at another
+// hour must find it at 0:00, as it always did.
+//
+// What a gesture set survives a reload of this window (sessionStorage, this
+// deck's key, twelve hours at most) and nothing else does: a cockpit opened
+// afresh starts at 0:00, and one navigated here from elsewhere too.
 let tStart = Date.now();
-function elapsedSeconds() { return Math.floor((Date.now() - tStart) / 1000); }
+const CLOCK_KEY = storageKey('clock');
+const CLOCK_KEEP_MS = 12 * 3600 * 1000;
+const clockBox = document.getElementById('psiINT-clock-box');
+const clockPlanBtn = document.getElementById('psiINT-clock-plan');
+try {
+  const nav = performance.getEntriesByType('navigation')[0];
+  const kept = Number(sessionStorage.getItem(CLOCK_KEY));
+  if (nav && nav.type === 'reload' && isFinite(kept) && kept > 0
+      && Math.abs(Date.now() - kept) < CLOCK_KEEP_MS) tStart = kept;
+  else sessionStorage.removeItem(CLOCK_KEY);
+} catch (e) { /* a private window is allowed to refuse */ }
+// The clock unrounded, in seconds, and never below zero.
+function clockSeconds() { return Math.max(0, (Date.now() - tStart) / 1000); }
+function elapsedSeconds() { return Math.floor(clockSeconds()); }
 function renderTimer() {
   timerEl.textContent = PSI_CARDS.formatClock(elapsedSeconds());
+  clockBox.classList.toggle('waiting', tStart > Date.now());
 }
 setInterval(renderTimer, 1000);
 renderTimer();
-document.getElementById('psiINT-clock').addEventListener('click', () => {
-  tStart = Date.now();
+// Called with (how, delta) after every gesture that set the clock: 'restart',
+// 'step' or 'plan', and the seconds the reading moved by, forward positive.
+// The prompter listens, because it stamps things on this clock.
+const clockListeners = [];
+function clockSet(origin, how, say) {
+  const before = clockSeconds();
+  tStart = origin;
+  const delta = clockSeconds() - before;
+  try { sessionStorage.setItem(CLOCK_KEY, String(tStart)); } catch (e) { /* private window */ }
   renderTimer();
-  flashCenter('clock restarted');
+  renderDrift();
+  for (const fn of clockListeners) fn(how, delta);
+  flashCenter(say);
+}
+// One minute, in either direction, and not below 0:00. A step from a clock
+// that is holding for its planned start lets go of the plan: the speaker has
+// said what the clock should read.
+function clockStep(dir) {
+  const now = clockSeconds();
+  if (dir < 0 && now < 1) { flashCenter('the clock is at 0:00'); return; }
+  const next = Math.max(0, now + dir * 60);
+  clockSet(Date.now() - next * 1000, 'step',
+    'clock ' + PSI_CARDS.formatClock(Math.floor(next)) + ' \u00b7 ' + (dir > 0 ? '+' : '\u2212') + '1 min');
+}
+// The moment the talk was planned to begin, as this window's own clock knows
+// the day: the last time it was that time of day if that is less than twelve
+// hours ago, and the next time otherwise. So a quarter past midnight is forty
+// minutes into a talk planned for 23:35, and a rehearsal at nine in the
+// morning finds a 14:20 talk still ahead.
+function clockPlanOrigin(minutes, now) {
+  const d = new Date(now);
+  const at = (day) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + day,
+    Math.floor(minutes / 60), minutes % 60, 0, 0).getTime();
+  const past = at(0) <= now ? at(0) : at(-1);
+  if (now - past < CLOCK_KEEP_MS) return past;
+  return at(0) > now ? at(0) : at(1);
+}
+function clockToPlan() {
+  const minutes = clockPlanBtn ? Number(clockPlanBtn.dataset.start) : NaN;
+  if (!isFinite(minutes)) {
+    flashCenter('no planned start \u2013 start: "14:20" in the frontmatter', { duration: 3200 });
+    return;
+  }
+  const hhmm = Math.floor(minutes / 60) + ':' + String(minutes % 60).padStart(2, '0');
+  const origin = clockPlanOrigin(minutes, Date.now());
+  const ahead = origin > Date.now();
+  clockSet(origin, 'plan', ahead
+    ? 'clock holds at 0:00 until ' + hhmm
+    : 'clock ' + PSI_CARDS.formatClock(Math.floor((Date.now() - origin) / 1000)) + ' \u00b7 since ' + hhmm);
+}
+document.getElementById('psiINT-clock').addEventListener('click', () => {
+  clockSet(Date.now(), 'restart', 'clock restarted');
 });
+document.getElementById('psiINT-clock-back').addEventListener('click', () => clockStep(-1));
+document.getElementById('psiINT-clock-fwd').addEventListener('click', () => clockStep(1));
+if (clockPlanBtn) clockPlanBtn.addEventListener('click', clockToPlan);
+COMMAND_RUN['clock-back'] = (e) => { clockStep(-1); e.preventDefault(); };
+COMMAND_RUN['clock-forward'] = (e) => { clockStep(1); e.preventDefault(); };
+COMMAND_RUN['clock-plan'] = (e) => { clockToPlan(); e.preventDefault(); };
 
 // Hook: refresh scrubber on every state change, notes+preview on chunk
 // change only. The full-strip rebuild (populatePreviewStrip) happens
@@ -27542,8 +27705,8 @@ function applyCueMode(on) {
   cueBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
   // The clock is one element in two places: over the stage's letterbox in
   // the classic arrangement, in the column's header here.
-  if (on) cueRoot.querySelector('#psiINT-cue-where').appendChild(clockEl);
-  else stageCell.appendChild(clockEl);
+  if (on) cueRoot.querySelector('#psiINT-cue-where').appendChild(clockBox);
+  else stageCell.appendChild(clockBox);
   if (!on) document.body.insertBefore(stageCell, stageHome);
   populatePreviewStrip();
   if (on) cueSync();
@@ -28797,6 +28960,13 @@ if (SOUFFLEUSE && window.psiWatch) {
         restarts = [];
         open(lang);
       },
+      // The speaker moved the clock under an utterance: the two stamps a span
+      // is measured between move with it, or the sentence being said is a
+      // minute longer or has no length at all.
+      shift(delta) {
+        mark += delta;
+        if (speechAt != null) speechAt += delta;
+      },
       stop() {
         want = false;
         if (rec) { try { rec.abort(); } catch (e) { /* already gone */ } }
@@ -28830,7 +29000,9 @@ if (SOUFFLEUSE && window.psiWatch) {
   // The cockpit's clock, unrounded. renderTimer floors the same number for
   // the digits; four fifths of a second of speech is not zero seconds of
   // speech, and the cadence is counted in those.
-  function souffClock() { return Math.round((Date.now() - tStart) / 10) / 100; }
+  // Never below zero, like the digits: a clock holding for a planned start
+  // that is still ahead stands at 0:00 for the sidecar too.
+  function souffClock() { return Math.round(Math.max(0, Date.now() - tStart) / 10) / 100; }
 
   // The badge is for degraded states only, and two things have to remember
   // which - a status arrives every tick, and the first version of this
@@ -28925,6 +29097,32 @@ if (SOUFFLEUSE && window.psiWatch) {
   if (souffClockBtn) {
     souffClockBtn.addEventListener('click', () => { if (souffOn) souffRemember(true); });
   }
+  // A minute back or forward, or the clock set to the planned start, is not a
+  // restart: the talk goes on and only the reading changed. Everything this
+  // window has stamped on the clock moves by the same seconds - the switch-on
+  // moment, so the opening quiet is neither owed again nor skipped, the
+  // heartbeat, the open utterance, the rows of the history - and the sidecar
+  // is told in so many words (clockDelta on a move), because a jump forward
+  // is otherwise indistinguishable from a minute that passed, and a jump back
+  // of less than its tolerance from two messages out of order. A restart
+  // sends nothing of the kind: the sidecar reads that one off the clock going
+  // backwards, as it always did.
+  clockListeners.push((how, delta) => {
+    if (!souffOn || how === 'restart' || !delta) return;
+    if (souffOnAt != null) souffOnAt += delta;
+    if (souffAskedAt != null) souffAskedAt += delta;
+    if (souffStt.shift) souffStt.shift(delta);
+    for (const h of souffHistory) h.at = Math.max(0, (Number(h.at) || 0) + delta);
+    souffRenderLog();
+    souffRemember(true);
+    const w = souffWhere();
+    if (!w) return;
+    souffLastSent = { idx: w.idx, beat: w.beat };
+    souffWatch.ask('souffleuse-move', {
+      chunkId: w.chunkId, idx: w.idx, beat: w.beat, beats: w.beats,
+      elapsed: souffClock(), clockDelta: Math.round(delta * 100) / 100,
+    });
+  });
 
   function souffHello() {
     return souffWatch.ask('souffleuse-hello', {
@@ -30592,15 +30790,23 @@ async function createSouffleuse({
       // new one at once - see `rebaseClock`. The cockpit persists its origin
       // while the prompter is on, so this is the second line of defence rather
       // than the first, and it holds whatever page the sidecar is talking to.
+      //
+      // And the other way a clock moves: the speaker set it - a minute back or
+      // forward, or to the planned start - and the cockpit says so with a
+      // `clockDelta` on the move. Then the reading is taken as sent, in either
+      // direction and however small, and everything moves with it; but nothing
+      // is forgotten, because the talk did not start again: the count since
+      // the last call stands, so a page cannot buy a call by moving its clock.
+      const set = msg.clockDelta != null && isFinite(Number(msg.clockDelta)) && Number(msg.clockDelta) !== 0;
       const jump = souff.rebaseClock({
         prev: nowElapsed(), next, onAt: onAtElapsed, lastTickAt, transcript,
-        startQuiet: souff.START_QUIET_S,
+        startQuiet: souff.START_QUIET_S, set,
       });
       if (jump) {
         onAtElapsed = jump.onAt;
         lastTickAt = jump.lastTickAt;
         transcript.splice(0, transcript.length, ...jump.transcript);
-        sinceTick = { seconds: 0, words: 0, wall: Date.now() };
+        if (!set) sinceTick = { seconds: 0, words: 0, wall: Date.now() };
         if (lastTimeHint) lastTimeHint = { ...lastTimeHint, at: lastTimeHint.at + jump.delta };
         // And everything else stamped on the clock that died. The policy keeps
         // four timestamps of its own, and moving the transcript without them
@@ -30613,8 +30819,12 @@ async function createSouffleuse({
         if (policy) policy.rebase(jump.delta);
         for (const h of hints) h.at = (Number(h.at) || 0) + jump.delta;
         for (const c of cues) c.at = (Number(c.at) || 0) + jump.delta;
-        logLine('clock', {
-          why: 'the cockpit clock restarted', delta: Math.round(jump.delta),
+        // Two line types, because the debrief reads a `clock` line as the talk
+        // beginning: what stands before the last one is the room filling. A
+        // clock the speaker moved mid-talk is not that, and gets its own.
+        logLine(set ? 'clock-set' : 'clock', {
+          why: set ? 'the speaker set the clock' : 'the cockpit clock restarted',
+          delta: Math.round(jump.delta),
           was: Math.round(nowElapsed()), now: next,
           onAt: jump.onAt, dropped: jump.dropped,
         });
@@ -31563,6 +31773,7 @@ function buildOnce(absIn, only, opts = {}) {
   // --print-only build looks at them, so this is the only place a typo
   // in `duration:` or `prompter:` is caught for that build.
   talkDuration(lecture.frontmatter);
+  talkStart(lecture.frontmatter);
   souffleuseSettings(lecture.frontmatter);
   const chunkCount = lecture.columns.reduce((n, c) => n + c.chunks.length, 0);
   const shape = `${lecture.columns.length} columns, ${chunkCount} chunks`;

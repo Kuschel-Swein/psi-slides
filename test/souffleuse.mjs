@@ -826,6 +826,46 @@ export async function run({ page, report }) {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(500);
 
+    // ── the clock, moved by the speaker ─────────────────────────────
+    // A minute forward (>) and a minute back (<) are not a restart: the talk
+    // goes on and only its reading changed. The cockpit says so on a move
+    // (clockDelta), and the sidecar moves everything it has stamped by that
+    // much and writes a line of a type of its own - a `clock` line is read
+    // by the debrief as the talk beginning, and this is not that. The stamp
+    // of the switch-on moves with the clock in both places, so the opening
+    // quiet is neither owed again nor skipped.
+    {
+      const kept = () => page.evaluate(() => ({
+        origin: Number(sessionStorage.getItem('psi-slides:souffleuse-clock')),
+        onAt: Number(sessionStorage.getItem('psi-slides:souffleuse-onat')),
+        tStart, elapsed: elapsedSeconds(),
+      }));
+      const sets = () => logLines(dir).filter((l) => l.type === 'clock-set');
+      const restarts = logLines(dir).filter((l) => l.type === 'clock').length;
+      const k0 = await kept();
+      await page.keyboard.press('>');
+      const fwd = await until(() => (sets().length === 1 ? sets()[0] : null), 5000);
+      ok(!!fwd && Math.abs(fwd.delta - 60) <= 1 && Math.abs((fwd.now - fwd.was) - 60) <= 2
+         && /speaker set the clock/.test(fwd.why),
+         'a minute forward reaches the sidecar as a clock the speaker set, by sixty seconds', JSON.stringify(fwd));
+      const k1 = await kept();
+      ok(k1.origin === k1.tStart && Math.abs((k0.tStart - k1.tStart) - 60000) < 5,
+         'the origin kept for a reload is the moved one', JSON.stringify({ k0, k1 }));
+      ok(Math.abs((k1.onAt - k0.onAt) - 60) < 0.05,
+         'and the moment the switch was thrown moved with it, so the opening quiet is not shortened',
+         JSON.stringify({ was: k0.onAt, now: k1.onAt }));
+      await page.keyboard.press('<');
+      const back = await until(() => (sets().length === 2 ? sets()[1] : null), 5000);
+      ok(!!back && Math.abs(back.delta + 60) <= 1,
+         'a minute back is the same line with the other sign – inside no tolerance, because it was said',
+         JSON.stringify(back));
+      ok(logLines(dir).filter((l) => l.type === 'clock').length === restarts,
+         'and neither of them was read as a restart', JSON.stringify(logLines(dir).filter((l) => l.type === 'clock')));
+      const k2 = await kept();
+      ok(Math.abs(k2.tStart - k0.tStart) < 5 && Math.abs(k2.onAt - k0.onAt) < 0.05,
+         'forward and back again is where the clock was', JSON.stringify({ k0, k2 }));
+    }
+
     // ── the tempo, which no transcript carries ──────────────────────
     // The model receives text, and speaking rate, hesitation and silence are
     // simply absent from text: "notice that I am speaking too fast" is

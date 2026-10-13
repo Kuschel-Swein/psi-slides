@@ -7,7 +7,7 @@ Two suites, split by one question: **can this be decided without a browser?**
   hand-mirrored list one file keeps of another's. Twenty-three gates, about three seconds,
   no browser and no `npm install`. Run by `gates.yml` on push and pull
   request.
-- **`test/`** – the things that only break in a built page. 52 specs, about 1,600
+- **`test/`** – the things that only break in a built page. 53 specs, about 1,650
   assertions, about twelve minutes, one Chromium for the whole run. One of
   them, `souffleuse`, starts an engine of its own beside that browser – see
   below.
@@ -147,7 +147,7 @@ fixture is compiled *and* linted.
 ## The browser suite: four families
 
 **Navigation** – `nav`, `nav-cockpit`, `nav-goto`, `nav-fullscreen`, `help-search`, `palette`, `transition`, `pitchblack`,
-`cue-cards`, `autoplay`, `live-sync`. The navigation
+`cue-cards`, `clock`, `autoplay`, `live-sync`. The navigation
 model, and what a slide change looks like under `transition: pan | cut | fade` –
 the one spec here that samples per animation frame rather than after a settle,
 because its whole subject is what happens between two states.
@@ -300,9 +300,18 @@ is fine. **They assert the property and never a coordinate.**
 context the bar is not in the document and a measurement of it reports no
 overlaps among no buttons.
 
-### The twenty-one specs that build a deck of their own
+### The twenty-two specs that build a deck of their own
 
 Four different reasons, and the last is the one to remember.
+
+**Because the property is about the time of day** – `clock` builds one deck
+with `start: 14:20` and one without and opens the cockpit under Playwright's
+clock at a moment each case names (14:25, 14:10, a quarter past midnight):
+nothing sets the clock by itself, `Z` is the time since the planned start
+and holds at 0:00 before it, `<` and `>` are a minute and never go below
+zero, and the drift beside the clock follows at once. The reload case runs
+in a context of its own on the real clock, because the fake one is the
+context's and carries no navigation entry to say what a reload is.
 
 **Because the property is about two windows** – `cue-cards` opens the cockpit
 from the projection with `S` on a fixture and, after every Space and

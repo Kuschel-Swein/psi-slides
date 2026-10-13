@@ -98,6 +98,9 @@ const KNOWN_FRONTMATTER_KEYS = new Set([
   // the block because it is a property of the talk like `lang:` – the
   // cockpit's clock measures against it whether or not a prompter listens.
   'duration', 'prompter',
+  // the time of day the talk is planned to begin, which the cockpit's clock
+  // can be set against (speaker.md, Clock)
+  'start',
 ]);
 
 // Mirrors VIEW_DEFAULT_SPEC in build.js: frontmatter keys that pin how a
@@ -3285,6 +3288,21 @@ function lintFile(filePath) {
     if (secs == null || !(secs > 0) || secs > 12 * 3600) {
       addFm(i + 2, 'error', 'bad-duration',
         `'duration: ${v}' is not a length this key reads – minutes (45) or a clock (45:00, 1:30:00), up to twelve hours`);
+    }
+  });
+
+  // start: the local time the talk is planned to begin, 24-hour HH:MM. The
+  // literal is `TALK_START_SRC` in build.js, mirrored by hand; the build
+  // refuses anything else, so the linter does too.
+  header.split('\n').forEach((raw, i) => {
+    const m = raw.match(/^start:[ \t]*(.*)$/);
+    if (!m) return;
+    const v = m[1].replace(/\s+#.*$/, '').trim().replace(/^["']|["']$/g, '');
+    if (!v) return;
+    const c = v.match(/^(\d{1,2}):(\d{2})$/);
+    if (!c || Number(c[1]) > 23 || Number(c[2]) > 59) {
+      addFm(i + 2, 'error', 'bad-start',
+        `'start: ${v}' is not a time of day this key reads – the local time the talk is planned to begin, 24-hour HH:MM ("14:20")`);
     }
   });
 

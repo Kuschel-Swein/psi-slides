@@ -576,6 +576,12 @@ the corner of an eye:
 - **`@12:30`** – alone on a line above a paragraph, or at its start – is when
   the card should be reached, counted from the start of the talk. The
   cockpit shows the drift beside the clock (`+0:40` behind, `−0:20` ahead).
+- **`start: "14:20"`** in the frontmatter – local time, 24-hour `HH:MM`, no
+  date – is when the talk is planned to begin. It puts a `since 14:20` button
+  beside the cockpit's clock (`Z`): a talk that began at 14:25 then reads
+  5:00, and the drift shows what the late start cost. Nothing happens by
+  itself, so a rehearsal at another hour still opens at 0:00. `<` and `>`
+  move the clock a minute either way in any deck.
 - **The cards can be scaled** with the two buttons in the cockpit header, so
   write for the wording rather than for a size.
 - **Where the note stands is when it is said.** A note before the first

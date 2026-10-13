@@ -612,6 +612,29 @@ export async function run({ report }) {
      'inside the quiet the stamp follows the clock, which at worst buys the minute again',
      j(rb && rb.onAt));
 
+  // ── the clock, set by the speaker ────────────────────────────────
+  // A minute back or forward, or the planned start: the talk goes on and
+  // only its reading changed. Either direction, any size, and nothing is
+  // forgotten - the opposite of a restart on every count.
+  ok(rebaseClock({ prev: 300, next: 300, set: true }) === null, 'a clock set to what it read is not a jump');
+  rb = rebaseClock({
+    prev: 300, next: 600, onAt: 30, lastTickAt: 280, set: true,
+    transcript: [{ text: 'eben', t0: 290, t1: 296 }],
+  });
+  ok(rb && rb.delta === 300 && rb.onAt === 330 && rb.lastTickAt === 580
+     && rb.transcript[0].t0 === 590 && rb.transcript[0].t1 === 596 && rb.dropped === 0,
+     'five minutes forward moves the switch-on, the last call and the words by five minutes', j(rb));
+  rb = rebaseClock({
+    prev: 90, next: 30, onAt: 50, lastTickAt: 40, set: true, startQuiet: START_QUIET_S,
+    transcript: [{ text: 'früh', t0: 20, t1: 24 }, { text: 'eben', t0: 80, t1: 86 }],
+  });
+  ok(rb && rb.delta === -60 && rb.onAt === -10 && rb.lastTickAt === -20,
+     'a minute back inside the quiet keeps how much of it is left: the stamps go below zero rather than to it', j(rb));
+  ok(rb && rb.transcript.length === 2 && rb.transcript[0].t1 === -36 && rb.dropped === 0,
+     'and drops none of what was heard', j(rb && rb.transcript));
+  rb = rebaseClock({ prev: 300, next: 298, onAt: 0, set: true });
+  ok(rb && rb.delta === -2, 'two seconds back are taken as said, where an unannounced drop that small is ignored', j(rb));
+
   // ── the log, read back ───────────────────────────────────────────
   const rows = replayAnswers([
     { type: 'status', state: 'listening', elapsed: 0 },
@@ -626,6 +649,30 @@ export async function run({ report }) {
      'the first is whispered, with the reason the model gave for the log', j(rows[0]));
   ok(rows[1].show === false && rows[1].reason === 'standing',
      'and the second meets the policy the first one left behind', j(rows[1]));
+  // A clock that moved under the run. Live, the policy was rebased with it;
+  // the replay reads the line and does the same, or the cool-down after it is
+  // measured across the jump: 100 s after a hint at 120 is inside a cool-down
+  // of 240, and stays inside it when the clock is set five minutes forward.
+  {
+    const run = (jump) => replayAnswers([
+      { type: 'status', state: 'listening', elapsed: 0 },
+      { type: 'tick', elapsed: 120, chunkId: 'a', cueTargets: [], timeHintAllowed: false },
+      { type: 'answer', body: answer({ action: 'hint', kind: 'example', text: 'Den Fall jetzt nennen' }) },
+      { type: 'hint', hintId: 'h1' },
+      { type: 'dismiss', hintId: 'h1' },
+      ...jump,
+      { type: 'tick', elapsed: 220 + (jump.length ? jump[0].delta : 0), chunkId: 'a', cueTargets: [], timeHintAllowed: false },
+      { type: 'answer', body: answer({ action: 'hint', kind: 'fact', text: 'Es waren zwei' }) },
+    ], { cooldown: 240 });
+    const still = run([]);
+    ok(still[1].show === false && still[1].reason === 'cooldown', 'a low hint 100 s after the last one is inside the cool-down', j(still[1]));
+    const moved = run([{ type: 'clock-set', delta: 300, was: 200, now: 500, onAt: 300 }]);
+    ok(moved[1].show === false && moved[1].reason === 'cooldown',
+       'and still is when the speaker set the clock five minutes forward in between', j(moved[1]));
+    const restarted = run([{ type: 'clock', delta: -200, was: 200, now: 0, onAt: -200 }]);
+    ok(restarted[1].show === false && restarted[1].reason === 'cooldown',
+       'or when the clock restarted, which the live policy was rebased for as well', j(restarted[1]));
+  }
   ok(replayAnswers([{ type: 'tick', elapsed: 5 },
     { type: 'answer', body: answer({ action: 'hint', kind: 'fact', text: 'Zu früh' }) }])[0].reason === 'start-quiet',
      'a log too old to say when the switch was thrown measures the quiet from the first tick');
