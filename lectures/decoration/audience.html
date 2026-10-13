@@ -4466,8 +4466,13 @@ body:not([data-bold=accent-bold]) .chunk:not(.chunk-title, .chunk-section) p:not
    of .reveal-segment is not enough: a ::: slide nested in a ::: side or
    ::: cols sits below a wrapper div, and hiding that wrapper takes the slide
    block down with it. The guard is per reveal-segment, not per chunk, so a
-   segment without an explicit block still falls back to rule 3. */
-[data-collapse=topic-bold] .reveal-segment:has(.slide-explicit)
+   segment without an explicit block still falls back to rule 3.
+   The segment is named by data-explicit, which renderAudienceChunk writes
+   on any segment holding a ::: slide, rather than by :has(.slide-explicit):
+   an attribute on an ancestor lets the browser's ancestor filter turn the
+   rule away for every element outside such a segment before it runs a
+   single :has(). */
+[data-collapse=topic-bold] .reveal-segment[data-explicit]
   *:not(.slide-explicit):not(:has(.slide-explicit)):not(.slide-explicit *),
 [data-collapse=topic-bold] .script-only { display: none; }
 

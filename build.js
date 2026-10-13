@@ -13937,7 +13937,16 @@ function renderAudienceChunk(chunk, frontmatter, colIdx, chunkIdx, nums, parts =
     // because the block gap between two segments has to skip it and a
     // selector that reads the box says why.
     const empty = seg ? '' : ' data-empty=""';
-    return `<div class="reveal-segment" data-seg="${i}"${hidden}${from}${empty}>${inner}</div>`;
+    // A segment that holds a ::: slide block, at any depth, says so: the
+    // collapse rule that hides the prose round the block is keyed on it.
+    // That rule's rightmost compound matches every element, so without an
+    // attribute on the ancestor the browser ran its :has() for every node in
+    // every segment on each full restyle - a fifth of all selector time on a
+    // deck of figures with no ::: slide in it. The string is the parser's own
+    // opener; quoted in a code span or a fence, marked escapes it, so it is
+    // found only where the element is.
+    const explicit = inner.includes('<div class="slide-explicit">') ? ' data-explicit=""' : '';
+    return `<div class="reveal-segment" data-seg="${i}"${hidden}${from}${empty}${explicit}>${inner}</div>`;
   }).join('\n');
 
   const headingHtml = renderHeadingHtml(chunk);
@@ -18950,8 +18959,13 @@ ${boldLookCss('bold', 'plain', 'var(--bold-weight)')}
    of .reveal-segment is not enough: a ::: slide nested in a ::: side or
    ::: cols sits below a wrapper div, and hiding that wrapper takes the slide
    block down with it. The guard is per reveal-segment, not per chunk, so a
-   segment without an explicit block still falls back to rule 3. */
-[data-collapse=topic-bold] .reveal-segment:has(.slide-explicit)
+   segment without an explicit block still falls back to rule 3.
+   The segment is named by data-explicit, which renderAudienceChunk writes
+   on any segment holding a ::: slide, rather than by :has(.slide-explicit):
+   an attribute on an ancestor lets the browser's ancestor filter turn the
+   rule away for every element outside such a segment before it runs a
+   single :has(). */
+[data-collapse=topic-bold] .reveal-segment[data-explicit]
   *:not(.slide-explicit):not(:has(.slide-explicit)):not(.slide-explicit *),
 [data-collapse=topic-bold] .script-only { display: none; }
 
