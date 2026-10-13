@@ -15953,17 +15953,14 @@ function fitZoomToChunk(ceiling) {
   const cap = ceiling === undefined ? collapsedZoom : ceiling;
   const avail = fitAvail(el);
   if (!(avail > 0)) return;
-  const trial = trialZoom(el);
-  try {
+  onChunk(el, (trial) => {
     // Measured at state.zoom, which <html> may not be showing: the slide PDF
     // export writes its ceiling there without telling state.zoom. Answering
     // "nothing to gain" from a reading at another zoom made a chunk's fit
     // depend on the order the deck was walked in.
     trial(state.zoom);
     fitWalk(el, cap, avail, trial);
-  } finally {
-    commitZoom(el);
-  }
+  });
 }
 
 function fitWalk(el, cap, avail, trial) {
@@ -16014,15 +16011,35 @@ function fitWalk(el, cap, avail, trial) {
 // state.zoom follows each step because figureCapProbe memoises on it.
 //
 // That "on .chunk or below" is held by the zoom-scope gate, which fails on a
-// rule reading var(--zoom) whose selector is not on its reviewed list. And a
-// trial is always followed by commitZoom in a finally: a throw mid-walk
-// would otherwise leave the slide on a private zoom that + and - cannot
-// reach.
-function trialZoom(el) {
-  return (z) => applyZoom(z, el);
+// rule reading var(--zoom) whose selector is not on its reviewed list.
+//
+// onChunk runs a walk and always ends it with commitZoom, in a finally: a
+// throw mid-walk would otherwise leave the slide on a private zoom that + and
+// - cannot reach. A walk that throws commits the zoom it started from, not
+// the step it had reached - each trial moves state.zoom, so committing it
+// as it stands would put a half-walked value on the slide and in the next
+// snapshot, a zoom nobody chose.
+function onChunk(el, walk) {
+  const before = state.zoom;
+  let done = false;
+  try {
+    walk((z) => applyZoom(z, el));
+    done = true;
+  } finally {
+    if (!done) state.zoom = before;
+    commitZoom(el);
+  }
 }
 function commitZoom(el) {
   el.style.removeProperty('--zoom');
+  showZoom();
+}
+// Puts state.zoom on <html>, and does nothing when it is there already, so a
+// caller that set state.zoom and then ran a fit that may have returned before
+// committing can call it unconditionally. Writing <html> restyles every
+// slide; writing it twice in one press is what the chunk-scoped walk exists
+// to avoid.
+function showZoom() {
   const shown = parseFloat(document.documentElement.style.getPropertyValue('--zoom'));
   if (shown !== state.zoom) applyZoom(state.zoom);
 }
@@ -16053,17 +16070,14 @@ function clampZoomToWidth() {
   const el = entry && entry.el;
   if (!el) return false;
   const overflowsX = nowrapProbe(el);
-  const trial = trialZoom(el);
   let z = clampZoom(collapsedZoom);
-  try {
+  onChunk(el, (trial) => {
     trial(z);
     while (overflowsX() && z > 0.6) {
       z = clampZoom(z - 0.05);
       trial(z);
     }
-  } finally {
-    commitZoom(el);
-  }
+  });
   return z < collapsedZoom;
 }
 
@@ -16091,13 +16105,17 @@ function cycleAutoFit(dir) {
     // Back to the lecturer's zoom first, so the fit solves from the setting
     // rather than from whatever the previous mode left on this slide - in
     // shrink mode that value IS the ceiling, and starting below it would
-    // read as a mode that never gives the size back.
-    applyZoom(state.collapse === 'topic-bold' ? collapsedZoom : state.zoom);
+    // read as a mode that never gives the size back. Set on state.zoom
+    // only: the fit trials on the chunk and commits once, and writing the
+    // setting to <html> first would restyle every slide for a value about
+    // to be replaced. showZoom covers a fit that returned before committing.
+    state.zoom = clampZoom(state.collapse === 'topic-bold' ? collapsedZoom : state.zoom);
     fitZoomToChunk(autoFitCeiling());
   } else {
-    applyZoom(state.collapse === 'topic-bold' ? collapsedZoom : state.zoom);
+    state.zoom = clampZoom(state.collapse === 'topic-bold' ? collapsedZoom : state.zoom);
     clampZoomToWidth();
   }
+  showZoom();
   applyState();
   focusCamera(false);
   flashMode(AUTO_FIT_LABEL[state.autoFitMode]);
@@ -16122,7 +16140,7 @@ function clampZoom(z) {
 }
 // Write the zoom without the announcement or the broadcast, for the
 // automatic fit which would otherwise flash a number on every C press.
-// On the document by default; the fit's trial steps pass the chunk (trialZoom).
+// On the document by default; the fit's trial steps pass the chunk (onChunk).
 function applyZoom(z, target = document.documentElement) {
   state.zoom = clampZoom(z);
   target.style.setProperty('--zoom', state.zoom);
@@ -16142,7 +16160,8 @@ function cycleCollapse(dir = 1) {
   applyState();
   if (autoFitOn()) fitZoomToChunk(autoFitCeiling());
   else if (state.collapse === 'none') fitZoomToChunk();
-  else { applyZoom(collapsedZoom); clampZoomToWidth(); }
+  else { state.zoom = clampZoom(collapsedZoom); clampZoomToWidth(); }
+  showZoom();     // as in cycleAutoFit: one write to <html>, after the fit
   focusCamera(false);
   broadcastState();
   flashMode('collapse: ' + COLLAPSE_LABEL[state.collapse]);

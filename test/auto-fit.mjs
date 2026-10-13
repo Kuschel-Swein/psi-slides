@@ -103,7 +103,7 @@ const measure = (page) => page.evaluate(() => {
 });
 
 // The walk writes its trial zooms on the chunk it measures and commits the
-// answer to <html> once (fitZoomToChunk, trialZoom, commitZoom). What that
+// answer to <html> once (fitZoomToChunk, onChunk, commitZoom). What that
 // owes everything else: no chunk is left with a zoom of its own, which + and
 // - could not reach, and <html> shows the zoom state.zoom says it does.
 const zoomHeld = (page) => page.evaluate(() => ({
@@ -184,21 +184,39 @@ export async function run({ page, report, walkTo }) {
        `${fullTall.h}px in ${fullTall.frame}px`);
     await checkHeld('full, tall slide');
 
-    // A throw in the middle of a walk. The probes read computed styles, so
-    // one that throws stands for any failure between the first trial step
-    // and the commit; the chunk must still come out without a zoom of its own.
-    const thrown = await page.evaluate(() => {
-      const real = window.getComputedStyle;
-      let calls = 0;
-      window.getComputedStyle = function (...a) {
-        if (++calls === 2) throw new Error('probe failed');
-        return real.apply(this, a);
+    // A throw in the middle of a walk, from the first trial write on a chunk
+    // at a zoom other than the one the walk started from. Each trial moves
+    // state.zoom, so this is the case that tells a walk rolled back from one
+    // that commits the step it had reached; a throw at the starting zoom
+    // could not tell the two apart. (Counting writes instead was tried: on
+    // this slide the third write lands back on the starting zoom.)
+    const threw = await page.evaluate(() => {
+      const P = window.psiExport;
+      const before = P.zoom();
+      const proto = CSSStyleDeclaration.prototype;
+      const real = proto.setProperty;
+      const root = document.documentElement.style;
+      let at = null;
+      proto.setProperty = function (name, value, ...rest) {
+        if (name === '--zoom' && this !== root && Number(value) !== before) {
+          at = Number(value);
+          throw new Error('probe failed');
+        }
+        return real.call(this, name, value, ...rest);
       };
-      try { window.psiExport.settle(); return 'no throw'; }
-      catch (e) { return e.message; }
-      finally { window.getComputedStyle = real; }
+      let msg = 'no throw';
+      try { P.settle(); } catch (e) { msg = e.message; }
+      finally { proto.setProperty = real; }
+      return { msg, before, at, after: P.zoom(),
+               root: parseFloat(root.getPropertyValue('--zoom')) };
     });
-    ok(thrown === 'probe failed', 'a probe that throws mid-walk reaches the caller', thrown);
+    ok(threw.msg === 'probe failed', 'a probe that throws mid-walk reaches the caller', threw.msg);
+    ok(threw.at !== null && threw.at !== threw.before,
+       'and it threw part-way, at a zoom other than the one the walk started from',
+       `${threw.at} from ${threw.before}`);
+    ok(threw.after === threw.before && threw.root === threw.before,
+       'the walk that threw leaves the zoom it started from, on the runtime and on <html>',
+       `state ${threw.after}, <html> ${threw.root}, started ${threw.before}`);
     await checkHeld('after a walk that threw');
 
     // ── a third press comes back round ──

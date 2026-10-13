@@ -12,9 +12,12 @@
  * chunk's room depends on it the fit converges on a zoom that overflows.
  * Nothing throws: the slide is cut off in the hall.
  *
- * So every selector of such a rule must either name a chunk class (.chunk or
- * .chunk-...), or have its subject on the reviewed list below: classes the
- * renderers only ever emit inside a chunk article. A new rule outside both
+ * So the subject of every such rule must be placed inside a chunk by its own
+ * selector: .chunk on the subject or on one of its ancestors, or a class the
+ * renderers only ever emit inside a chunk article (.chunk-..., or the
+ * reviewed list below) anywhere in the chain that leads to the subject. A
+ * class anywhere else does not place it: .chunk ~ .x is a sibling of the
+ * article, and :has(.chunk-title) only asks a question. A new rule outside
  * fails here and names itself; the answer is either to put it on a chunk or
  * to write a different fit.
  */
@@ -58,11 +61,45 @@ export function zoomSelectors(src) {
   return out;
 }
 
-function onSlide(selector) {
-  if (/\.chunk(?![\w-])|\.chunk-[\w-]+/.test(selector)) return true;
-  const last = selector.split(/[\s>+~]+/).filter(Boolean).pop() || '';
-  const cls = /^\.([\w-]+)/.exec(last);
-  return !!(cls && IN_CHUNK[cls[1]]);
+// The selector as compounds, subject last, each with the combinator that
+// joins it to the next one. The arguments of :has(), :not(), :is() and
+// :where() are dropped first: they constrain an element, they do not say
+// where it is.
+function chain(selector) {
+  let flat = '', depth = 0;
+  for (const ch of selector) {
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    else if (!depth) flat += ch;
+  }
+  const tokens = flat.trim().replace(/\s*([>+~])\s*/g, ' $1 ').split(/\s+/).filter(Boolean);
+  const out = [];
+  for (const t of tokens) {
+    if (/^[>+~]$/.test(t)) out[out.length - 1].next = t;
+    else out.push({ compound: t, next: ' ' });
+  }
+  return out;
+}
+
+const classesOf = (compound) => [...compound.matchAll(/\.([\w-]+)/g)].map(m => m[1]);
+const inChunkClass = (c) => /^chunk-/.test(c) || !!IN_CHUNK[c];
+
+export function onSlide(selector) {
+  const parts = chain(selector);
+  // Walking from the subject outwards: once a descendant or child combinator
+  // has been crossed, every compound further out is an ancestor (or an
+  // ancestor's sibling) of the subject. Before that, it is the subject or a
+  // sibling of it.
+  let ancestor = false;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const cls = classesOf(parts[i].compound);
+    // Inside a chunk, and so is anything that shares a parent with it.
+    if (cls.some(inChunkClass)) return true;
+    // The article itself: the subject, or a box the subject sits in.
+    if (cls.includes('chunk') && (i === parts.length - 1 || ancestor)) return true;
+    if (i > 0 && (parts[i - 1].next === ' ' || parts[i - 1].next === '>')) ancestor = true;
+  }
+  return false;
 }
 
 export async function run({ report }) {
@@ -80,4 +117,11 @@ export async function run({ report }) {
 
   // The gate must be able to fail.
   ok(!onSlide('body .foot-band') && !onSlide('#psiINT-viewport'), 'a rule outside a chunk is caught');
+  ok(!onSlide('.chunk.active ~ .foot-band') && !onSlide('.chunk + .x'),
+     'and so is one whose subject is a sibling of a chunk');
+  ok(!onSlide('body:has(.chunk-title.active) #psiINT-stage-viewport') && !onSlide('.x:not(.chunk)'),
+     'and one that names a chunk class only inside a pseudo-class argument');
+  ok(onSlide('.chunk .x') && onSlide('.chunk > .x ~ .y') && onSlide('.chunk-content + .x')
+     && onSlide('body .chunk') && onSlide('.dock .x'),
+     'while a subject inside a chunk, or the chunk itself, passes');
 }
