@@ -102,6 +102,17 @@ const measure = (page) => page.evaluate(() => {
   };
 });
 
+// The walk writes its trial zooms on the chunk it measures and commits the
+// answer to <html> once (fitZoomToChunk, trialZoom, commitZoom). What that
+// owes everything else: no chunk is left with a zoom of its own, which + and
+// - could not reach, and <html> shows the zoom state.zoom says it does.
+const zoomHeld = (page) => page.evaluate(() => ({
+  root: parseFloat(document.documentElement.style.getPropertyValue('--zoom')),
+  state: window.psiExport.zoom(),
+  private: [...document.querySelectorAll('.chunk')]
+    .filter(c => c.style.getPropertyValue('--zoom') !== '').map(c => c.id),
+}));
+
 export async function run({ page, report, walkTo }) {
   const { ok, note } = report;
 
@@ -121,6 +132,12 @@ export async function run({ page, report, walkTo }) {
     await page.reload({ waitUntil: 'load' });
     await page.waitForTimeout(700);
 
+    const checkHeld = async (when) => {
+      const h = await zoomHeld(page);
+      ok(h.private.length === 0, `${when}: no chunk keeps a zoom of its own after the fit`, h.private.join(', '));
+      ok(h.root === h.state, `${when}: <html> shows the zoom the runtime holds`, `${h.root} vs ${h.state}`);
+    };
+
     // ── off, which is where a deck that says nothing opens ──
     await walkTo('tall');
     const offTall = await measure(page);
@@ -139,6 +156,7 @@ export async function run({ page, report, walkTo }) {
        'one press of # shrinks that slide', `${shrinkTall.zoom} from ${DEFAULT_ZOOM}`);
     ok(shrinkTall.h <= shrinkTall.frame + 1,
        'and brings it inside the frame', `${shrinkTall.h}px in ${shrinkTall.frame}px`);
+    await checkHeld('shrink, tall slide');
 
     // The claim the mode is named for. Same mode, a slide that fits, and the
     // zoom has to be the one that was set - not a fit that happens to land
@@ -164,6 +182,24 @@ export async function run({ page, report, walkTo }) {
     ok(fullTall.h <= fullTall.frame + 1,
        'and full still fits the tall one, which is what it always did',
        `${fullTall.h}px in ${fullTall.frame}px`);
+    await checkHeld('full, tall slide');
+
+    // A throw in the middle of a walk. The probes read computed styles, so
+    // one that throws stands for any failure between the first trial step
+    // and the commit; the chunk must still come out without a zoom of its own.
+    const thrown = await page.evaluate(() => {
+      const real = window.getComputedStyle;
+      let calls = 0;
+      window.getComputedStyle = function (...a) {
+        if (++calls === 2) throw new Error('probe failed');
+        return real.apply(this, a);
+      };
+      try { window.psiExport.settle(); return 'no throw'; }
+      catch (e) { return e.message; }
+      finally { window.getComputedStyle = real; }
+    });
+    ok(thrown === 'probe failed', 'a probe that throws mid-walk reaches the caller', thrown);
+    await checkHeld('after a walk that threw');
 
     // ── a third press comes back round ──
     await page.keyboard.press('#');

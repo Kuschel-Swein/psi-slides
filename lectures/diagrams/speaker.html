@@ -15943,6 +15943,20 @@ function fitZoomToChunk(ceiling) {
   const cap = ceiling === undefined ? collapsedZoom : ceiling;
   const avail = fitAvail(el);
   if (!(avail > 0)) return;
+  const trial = trialZoom(el);
+  try {
+    // Measured at state.zoom, which <html> may not be showing: the slide PDF
+    // export writes its ceiling there without telling state.zoom. Answering
+    // "nothing to gain" from a reading at another zoom made a chunk's fit
+    // depend on the order the deck was walked in.
+    trial(state.zoom);
+    fitWalk(el, cap, avail, trial);
+  } finally {
+    commitZoom(el);
+  }
+}
+
+function fitWalk(el, cap, avail, trial) {
   const overflowsX = nowrapProbe(el);
   const heightOf = flowHeightProbe(el);
   const figCapped = figureCapProbe(el);
@@ -15960,7 +15974,6 @@ function fitZoomToChunk(ceiling) {
   // safety factor and the 0.05 rounding left chunks a quarter smaller than
   // they needed to be.
   const STEP = 0.05;
-  const trial = trialZoom(el);
   let z = clampZoom(state.zoom * (avail / (heightOf() || avail)));
   if (z > cap) z = cap;
   trial(z);
@@ -15977,7 +15990,6 @@ function fitZoomToChunk(ceiling) {
     if (heightOf() > avail || overflowsX() || figCapped()) { trial(z); break; }
     z = probe;
   }
-  commitZoom(el);
 }
 
 // The fit's steps are written on the one chunk being fitted, not on <html>.
@@ -15990,16 +16002,19 @@ function fitZoomToChunk(ceiling) {
 // restyled once, by commitZoom, and not at all when the answer is the zoom
 // it already had - which is every press that only reveals a beat.
 // state.zoom follows each step because figureCapProbe memoises on it.
+//
+// That "on .chunk or below" is held by the zoom-scope gate, which fails on a
+// rule reading var(--zoom) whose selector is not on its reviewed list. And a
+// trial is always followed by commitZoom in a finally: a throw mid-walk
+// would otherwise leave the slide on a private zoom that + and - cannot
+// reach.
 function trialZoom(el) {
-  return (z) => {
-    state.zoom = clampZoom(z);
-    el.style.setProperty('--zoom', state.zoom);
-  };
+  return (z) => applyZoom(z, el);
 }
 function commitZoom(el) {
   el.style.removeProperty('--zoom');
-  const root = document.documentElement.style;
-  if (root.getPropertyValue('--zoom') !== String(state.zoom)) root.setProperty('--zoom', state.zoom);
+  const shown = parseFloat(document.documentElement.style.getPropertyValue('--zoom'));
+  if (shown !== state.zoom) applyZoom(state.zoom);
 }
 
 // With auto-fit off the zoom is the lecturer's, and it is deliberately never
@@ -16030,12 +16045,15 @@ function clampZoomToWidth() {
   const overflowsX = nowrapProbe(el);
   const trial = trialZoom(el);
   let z = clampZoom(collapsedZoom);
-  trial(z);
-  while (overflowsX() && z > 0.6) {
-    z = clampZoom(z - 0.05);
+  try {
     trial(z);
+    while (overflowsX() && z > 0.6) {
+      z = clampZoom(z - 0.05);
+      trial(z);
+    }
+  } finally {
+    commitZoom(el);
   }
-  commitZoom(el);
   return z < collapsedZoom;
 }
 
@@ -16094,9 +16112,10 @@ function clampZoom(z) {
 }
 // Write the zoom without the announcement or the broadcast, for the
 // automatic fit which would otherwise flash a number on every C press.
-function applyZoom(z) {
+// On the document by default; the fit's trial steps pass the chunk (trialZoom).
+function applyZoom(z, target = document.documentElement) {
   state.zoom = clampZoom(z);
-  document.documentElement.style.setProperty('--zoom', state.zoom);
+  target.style.setProperty('--zoom', state.zoom);
 }
 
 function cycleCollapse(dir = 1) {
@@ -18386,18 +18405,21 @@ window.psiExport = {
   zoom: () => state.zoom,
   // What the fit would measure, without fitting: el's flow height at each
   // zoom given, by the probe fitZoomToChunk uses, and the limit it holds a
-  // chunk to. Only --zoom on <html> is written, and its inline value is put
-  // back before returning; state.zoom is not touched. Read by the PDF
-  // export's parity numbers and by nothing in the live views.
+  // chunk to. Each zoom is written on el, as the fit's trial steps are, and
+  // el's inline value is put back before returning; state.zoom is not
+  // touched. Read by the PDF export's parity numbers and by nothing in the
+  // live views.
   fitMeasure: (el, zooms) => {
     const limit = fitAvail(el);
     if (!(limit > 0)) return null;
     const probe = flowHeightProbe(el);
-    const root = document.documentElement.style;
-    const before = root.getPropertyValue('--zoom');
-    const heights = zooms.map(z => { root.setProperty('--zoom', z); return probe(); });
-    if (before) root.setProperty('--zoom', before); else root.removeProperty('--zoom');
-    return { limit, heights };
+    const before = el.style.getPropertyValue('--zoom');
+    try {
+      const heights = zooms.map(z => { el.style.setProperty('--zoom', z); return probe(); });
+      return { limit, heights };
+    } finally {
+      if (before) el.style.setProperty('--zoom', before); else el.style.removeProperty('--zoom');
+    }
   },
 };
 

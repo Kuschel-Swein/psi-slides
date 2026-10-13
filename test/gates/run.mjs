@@ -9,7 +9,7 @@
  * two agree – in seconds, on a bare checkout, with no `npm install` and no
  * Chromium, because both of those files are zero-dependency by design.
  *
- * Twenty-two gates, and they prove twenty-two different things – which is
+ * Twenty-three gates, and they prove twenty-three different things – which is
  * worth stating because a green run summarised as one number hid a wrong
  * drawing behind a passing parse:
  *
@@ -84,6 +84,8 @@
  *              and readable by a strict YAML parser, and each ZIP with the
  *              skill's folder at its top level, the bundled reference
  *              file, the addresses of what it names, the same bytes twice
+ *   zoom-scope every CSS rule that reads var(--zoom) sits on a slide, which
+ *              is what lets the auto-fit walk measure on the chunk alone
  *
  * `test/run.mjs` is the other half and stays separate: it builds and serves
  * the lectures, launches a browser and takes about four minutes. Splitting
@@ -117,6 +119,7 @@ const GATES = [
   './commands.mjs',
   './editor.mjs',
   './skills.mjs',
+  './zoom-scope.mjs',
 ];
 
 const filter = process.argv.slice(2).filter(a => !a.startsWith('-'));
