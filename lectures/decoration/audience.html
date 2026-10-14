@@ -11423,6 +11423,13 @@ const viewHooks = {
   // a click comes to count differently from a key.
   consumeForward: () => false,
   consumeBack: () => false,
+  // A forward or back press, called first of all in goForward and goBack -
+  // ahead of the cue cards, and whether or not it moves anything. The
+  // cockpit starts its clock on the first one; the projection tells the
+  // cockpit, because a clicker may be aimed at this window. An autoplay
+  // figure steps through advanceReveal and never comes here. remote is true
+  // for a press reported by the other window.
+  onPress: (remote) => { if (!remote) sendToPeer({ type: 'press', source: VIEW }); },
   onEnter: () => false,
   // The prompter's step in the Esc chain: its history panel if that is
   // open, otherwise the hint standing on the strip. Returns whether it took
@@ -12201,6 +12208,11 @@ window.addEventListener('message', (ev) => {
     applyRemoteState(m.payload);
     return;
   }
+  // A press in the other window - the projection's clicker. Not state: the
+  // cockpit's clock starts on the first one, and nothing else reads it.
+  // Ahead of nothing it could be confused with, and past the freeze gate,
+  // because a frozen cockpit is looking ahead while the room's talk begins.
+  if (m.type === 'press') { viewHooks.onPress(true); return; }
   if (m.type === 'video') { applyRemoteVideo(m); return; }
   // A diagram the other window edited. Its own message rather than a field
   // of the snapshot, following the video precedent and for the same reason:
@@ -13729,6 +13741,7 @@ function unfocusAsStage() {
   return true;
 }
 function goForward() {
+  viewHooks.onPress(false);
   endStartMenu();
   settleFade();
   if (viewHooks.consumeForward()) return;
@@ -13736,6 +13749,7 @@ function goForward() {
   nextChunk();
 }
 function goBack() {
+  viewHooks.onPress(false);
   endStartMenu();
   settleFade();
   if (viewHooks.consumeBack()) return;
@@ -15885,7 +15899,7 @@ const COMMAND_RUN = {
   'forward': (e) => {
     if (e.key === 'Enter') {
       if (overview) { toggleOverview(); e.preventDefault(); return; }
-      if (viewHooks.onEnter()) { e.preventDefault(); return; }
+      if (viewHooks.onEnter()) { viewHooks.onPress(false); e.preventDefault(); return; }
     } else if (overview) { e.preventDefault(); return; }
     goForward();
     e.preventDefault();

@@ -1091,9 +1091,12 @@ export const CLOCK_JUMP_S = 5;
  * The cockpit's clock restarted, and everything the sidecar remembers is
  * stamped on the old one.
  *
- * `tStart` in the cockpit is the page load, and a `--watch` rebuild reloads
- * the page on every save – so in the middle of a rehearsal the clock can go
- * back to zero while the talk carries on. The cockpit persists its own origin
+ * `tStart` in the cockpit was once the page load, and a `--watch` rebuild
+ * reloads the page on every save – so in the middle of a rehearsal the clock
+ * could go back to zero while the talk carried on. And it waits at 0:00 now
+ * until the first press, while the sidecar's reading runs on with the wall
+ * clock: the press that starts it is sent with `clockStart`, and the sidecar
+ * passes `tolerance: 0` so any drop is a new clock. The cockpit persists its own origin
  * now (`psi-slides:souffleuse-clock`), which is the real fix; this is the
  * sidecar refusing to be fooled by a clock it did not set, whatever page it is
  * talking to. Without it: the drift went wildly negative, `shouldTick`'s

@@ -135,8 +135,9 @@ function installEar() {
   window.__stt = {
     rec: null,
     // tStart is the cockpit's clock origin (SPEAKER_JS); moving it back is a
-    // talk that has been running that much longer.
-    advance(s) { tStart -= s * 1000; },
+    // talk that has been running that much longer. A clock that has not
+    // started yet (Infinity, until the first press) is started here first.
+    advance(s) { if (!isFinite(tStart)) tStart = Date.now(); tStart -= s * 1000; },
     utterance(text, pause, spoken) {
       if (pause) window.__stt.advance(pause);
       const rec = window.__stt.rec;

@@ -20051,6 +20051,13 @@ const viewHooks = {
   // a click comes to count differently from a key.
   consumeForward: () => false,
   consumeBack: () => false,
+  // A forward or back press, called first of all in goForward and goBack -
+  // ahead of the cue cards, and whether or not it moves anything. The
+  // cockpit starts its clock on the first one; the projection tells the
+  // cockpit, because a clicker may be aimed at this window. An autoplay
+  // figure steps through advanceReveal and never comes here. remote is true
+  // for a press reported by the other window.
+  onPress: (remote) => { if (!remote) sendToPeer({ type: 'press', source: VIEW }); },
   onEnter: () => false,
   // The prompter's step in the Esc chain: its history panel if that is
   // open, otherwise the hint standing on the strip. Returns whether it took
@@ -20829,6 +20836,11 @@ window.addEventListener('message', (ev) => {
     applyRemoteState(m.payload);
     return;
   }
+  // A press in the other window - the projection's clicker. Not state: the
+  // cockpit's clock starts on the first one, and nothing else reads it.
+  // Ahead of nothing it could be confused with, and past the freeze gate,
+  // because a frozen cockpit is looking ahead while the room's talk begins.
+  if (m.type === 'press') { viewHooks.onPress(true); return; }
   if (m.type === 'video') { applyRemoteVideo(m); return; }
   // A diagram the other window edited. Its own message rather than a field
   // of the snapshot, following the video precedent and for the same reason:
@@ -22357,6 +22369,7 @@ function unfocusAsStage() {
   return true;
 }
 function goForward() {
+  viewHooks.onPress(false);
   endStartMenu();
   settleFade();
   if (viewHooks.consumeForward()) return;
@@ -22364,6 +22377,7 @@ function goForward() {
   nextChunk();
 }
 function goBack() {
+  viewHooks.onPress(false);
   endStartMenu();
   settleFade();
   if (viewHooks.consumeBack()) return;
@@ -24513,7 +24527,7 @@ const COMMAND_RUN = {
   'forward': (e) => {
     if (e.key === 'Enter') {
       if (overview) { toggleOverview(); e.preventDefault(); return; }
-      if (viewHooks.onEnter()) { e.preventDefault(); return; }
+      if (viewHooks.onEnter()) { viewHooks.onPress(false); e.preventDefault(); return; }
     } else if (overview) { e.preventDefault(); return; }
     goForward();
     e.preventDefault();
@@ -26209,9 +26223,9 @@ body.preview-resizing #psiINT-preview-resizer::after { opacity: 1; }
    button and the key crib, and it was the one thing there the lecturer
    looks at every minute - and could not find. Now a button over the
    letterbox corner of the stage, large, tabular, and a button because it
-   is pressed: tStart is the page load, ten minutes early when the cockpit
-   is opened before the room fills, so a click restarts it at 0:00. The
-   cue-card mode moves this same element into its header. */
+   is pressed: the clock waits at 0:00, dimmed (.waiting), until the first
+   forward or back press, and a click restarts it at 0:00 when that press
+   came early. The cue-card mode moves this same element into its header. */
 #psiINT-clock-box {
   position: absolute;
   right: 0.7rem;
@@ -27526,28 +27540,43 @@ previewStrip.addEventListener('wheel', (e) => {
   e.preventDefault();
 }, { passive: false });
 
-// The clock: elapsed since the page loaded, or since the last click on
-// it. A click is the whole control - no pause, because a paused clock
-// is one stray click away from a drift that is wrong for the rest of the
-// talk, and a restart is the case that actually happens: the cockpit was
-// opened while the room was still filling.
+// The clock: elapsed since the talk began, which is the first forward or back
+// press, or since the last click on it. Until that press it stands at 0:00,
+// dimmed: a lecturer opens the deck early, often with a figure cycling on the
+// title slide while the room fills, and the talk begins when they first touch
+// the deck - the moment a presentation program starts its own clock. A back
+// press counts too, so the clock can be started on the title slide without
+// leaving it; a press a cue card consumes counts, and so does one in the
+// projection (a clicker focused on the other window), which says so with a
+// press message of its own. A jump does not - the preview strip, the overview,
+// go-to, search - nor an autoplay figure stepping by itself, nor a press in a
+// frozen cockpit, which is the lecturer looking ahead rather than the talk.
+// A click is the whole control - no pause, because a paused clock is one
+// stray click away from a drift that is wrong for the rest of the talk, and a
+// restart is the case that actually happens: the first press came early.
 //
-// Three more things move it without restarting it, and all four go through
-// clockSet. A minute back and a minute forward (the two small buttons, < and
-// >): a talk that began late has lost those minutes against its @mm:ss marks,
-// and the speaker who wants to see them puts them on the clock. And, where
-// the deck names its planned start (start: "14:20"), the time since then (the
-// button that says so, Z): at 14:25 the clock reads 5:00 and runs on. Before
-// the planned start it holds at 0:00 and starts by itself when the time comes
-// - one rule, the clock is the time since the planned start and never less
-// than zero - which is why tStart may lie in the future and every reader
-// floors at zero. Nothing sets the clock by itself: a rehearsal at another
-// hour must find it at 0:00, as it always did.
+// "Not started yet" is tStart = Infinity, which every reader already floors
+// at zero and the waiting class already reads as a clock that holds.
 //
-// What a gesture set survives a reload of this window (sessionStorage, this
-// deck's key, twelve hours at most) and nothing else does: a cockpit opened
-// afresh starts at 0:00, and one navigated here from elsewhere too.
-let tStart = Date.now();
+// Three more things move it without restarting it, and all of them go
+// through clockSet, as the first press does. A minute back and a minute
+// forward (the two small buttons, < and >): a talk that began late has lost
+// those minutes against its @mm:ss marks, and the speaker who wants to see
+// them puts them on the clock. And, where the deck names its planned start
+// (start: "14:20"), the time since then (the button that says so, Z): at
+// 14:25 the clock reads 5:00 and runs on. Before the planned start it holds
+// at 0:00 and starts by itself when the time comes - one rule, the clock is
+// the time since the planned start and never less than zero - which is why
+// tStart may lie in the future and every reader floors at zero. Only a clock
+// nobody has set is started by a press: one holding for its planned start
+// keeps holding. Nothing but a press sets it: a rehearsal at another hour
+// must find it at 0:00, as it always did.
+//
+// What a press or a gesture set survives a reload of this window
+// (sessionStorage, this deck's key, twelve hours at most) and nothing else
+// does: a cockpit opened afresh waits at 0:00, and one navigated here from
+// elsewhere too - and so does a reload of one that had not started.
+let tStart = Infinity;
 const CLOCK_KEY = storageKey('clock');
 const CLOCK_KEEP_MS = 12 * 3600 * 1000;
 const clockBox = document.getElementById('psiINT-clock-box');
@@ -27568,9 +27597,10 @@ function renderTimer() {
 }
 setInterval(renderTimer, 1000);
 renderTimer();
-// Called with (how, delta) after every gesture that set the clock: 'restart',
-// 'step' or 'plan', and the seconds the reading moved by, forward positive.
-// The prompter listens, because it stamps things on this clock.
+// Called with (how, delta) after every press or gesture that set the clock:
+// 'start' (the first press), 'restart', 'step' or 'plan', and the seconds the
+// reading moved by, forward positive. The prompter listens, because it stamps
+// things on this clock.
 const clockListeners = [];
 function clockSet(origin, how, say) {
   const before = clockSeconds();
@@ -27582,6 +27612,15 @@ function clockSet(origin, how, say) {
   for (const fn of clockListeners) fn(how, delta);
   flashCenter(say);
 }
+// The first press of the talk, from this window (viewHooks.onPress, at the
+// head of goForward and goBack, before a cue card can consume it) or from the
+// projection's (a press message). A clock already set - started, restarted,
+// stepped or holding for its planned start - is left alone.
+function clockAutoStart() {
+  if (tStart !== Infinity) return;
+  clockSet(Date.now(), 'start', 'clock started');
+}
+viewHooks.onPress = (remote) => { if (remote || !frozen) clockAutoStart(); };
 // One minute, in either direction, and not below 0:00. A step from a clock
 // that is holding for its planned start lets go of the plan: the speaker has
 // said what the clock should read.
@@ -28712,15 +28751,17 @@ if (SOUFFLEUSE && window.psiWatch) {
   const SOUFF_HEARD_KEY = 'psi-slides:souffleuse-heard';
   const SOUFF_CUES_KEY = 'psi-slides:souffleuse-cues';
   // The clock's origin, kept beside the consent and only while the prompter is
-  // on. tStart is the page load, and --watch reloads the page on every save:
-  // the clock used to restart in the middle of a rehearsal, which the sidecar
-  // believed - the drift went wildly negative, a negative gap since the last
-  // tick stopped every slide tick for the rest of the talk, and the opening
-  // quiet minute was stamped again on each save. Only while the prompter is
-  // on, because that is the one case where a restarted clock is wrong rather
-  // than merely new: a cockpit opened while the room fills is meant to start
-  // at 0:00, and the clock button is still the way to say so. sessionStorage,
-  // like the consent it sits beside - the clock of this talk in this tab.
+  // on. tStart was once the page load, and --watch reloads the page on every
+  // save: the clock used to restart in the middle of a rehearsal, which the
+  // sidecar believed - the drift went wildly negative, a negative gap since the
+  // last tick stopped every slide tick for the rest of the talk, and the
+  // opening quiet minute was stamped again on each save. The cockpit's own
+  // key (CLOCK_KEY) now keeps any clock a press or a gesture set across a
+  // reload, so this is the second copy, kept because it also survives a
+  // navigation within the tab while the prompter is on. A clock that has not
+  // started (tStart is Infinity) is not written: a reload finds it waiting
+  // again. sessionStorage, like the consent it sits beside - the clock of this
+  // talk in this tab.
   const SOUFF_CLOCK_KEY = 'psi-slides:souffleuse-clock';
   // And the moment the switch was thrown, on that clock. The opening quiet is
   // measured from the press, and the restore path used to stamp it afresh on
@@ -29082,7 +29123,8 @@ if (SOUFFLEUSE && window.psiWatch) {
     try {
       if (on) {
         sessionStorage.setItem(SOUFF_ON_KEY, 'on');
-        sessionStorage.setItem(SOUFF_CLOCK_KEY, String(tStart));
+        if (isFinite(tStart)) sessionStorage.setItem(SOUFF_CLOCK_KEY, String(tStart));
+        else sessionStorage.removeItem(SOUFF_CLOCK_KEY);
         if (souffOnAt != null) sessionStorage.setItem(SOUFF_ONAT_KEY, String(souffOnAt));
       } else {
         sessionStorage.removeItem(SOUFF_ON_KEY);
@@ -29107,8 +29149,28 @@ if (SOUFFLEUSE && window.psiWatch) {
   // of less than its tolerance from two messages out of order. A restart
   // sends nothing of the kind: the sidecar reads that one off the clock going
   // backwards, as it always did.
+  //
+  // The first press of the talk is the other kind of clock event: a clock that
+  // stood at 0:00 starts from 0:00, so nothing here moves (the switch-on stamp
+  // of a prompter thrown before the press is 0, which is now the start). The
+  // sidecar has been carrying its own reading forward on the wall clock all
+  // that while, so it is told in so many words (clockStart on a move): it
+  // takes the reading as a new clock whatever the gap, and its clock line -
+  // which the debrief reads as the talk beginning - lands on the moment the
+  // talk did.
   clockListeners.push((how, delta) => {
-    if (!souffOn || how === 'restart' || !delta) return;
+    if (souffOn && how === 'start') {
+      souffRemember(true);
+      const w = souffWhere();
+      if (!w) return;
+      souffLastSent = { idx: w.idx, beat: w.beat };
+      souffWatch.ask('souffleuse-move', {
+        chunkId: w.chunkId, idx: w.idx, beat: w.beat, beats: w.beats,
+        elapsed: souffClock(), clockStart: true,
+      });
+      return;
+    }
+    if (!souffOn || how === 'restart' || how === 'start' || !delta) return;
     if (souffOnAt != null) souffOnAt += delta;
     if (souffAskedAt != null) souffAskedAt += delta;
     if (souffStt.shift) souffStt.shift(delta);
@@ -30797,10 +30859,17 @@ async function createSouffleuse({
       // direction and however small, and everything moves with it; but nothing
       // is forgotten, because the talk did not start again: the count since
       // the last call stands, so a page cannot buy a call by moving its clock.
+      //
+      // And the first press of the talk (`clockStart`): the cockpit's clock
+      // stood at 0:00 until then while this reading ran on with the wall
+      // clock, so the reading sent is a new clock however small the drop -
+      // tolerance 0 - and the `clock` line is written even when nothing had
+      // to move, because that line is where the debrief says the talk began.
       const set = msg.clockDelta != null && isFinite(Number(msg.clockDelta)) && Number(msg.clockDelta) !== 0;
+      const start = !set && msg.clockStart === true;
       const jump = souff.rebaseClock({
         prev: nowElapsed(), next, onAt: onAtElapsed, lastTickAt, transcript,
-        startQuiet: souff.START_QUIET_S, set,
+        startQuiet: souff.START_QUIET_S, set, tolerance: start ? 0 : undefined,
       });
       if (jump) {
         onAtElapsed = jump.onAt;
@@ -30823,10 +30892,16 @@ async function createSouffleuse({
         // beginning: what stands before the last one is the room filling. A
         // clock the speaker moved mid-talk is not that, and gets its own.
         logLine(set ? 'clock-set' : 'clock', {
-          why: set ? 'the speaker set the clock' : 'the cockpit clock restarted',
+          why: set ? 'the speaker set the clock'
+            : start ? 'the cockpit clock started' : 'the cockpit clock restarted',
           delta: Math.round(jump.delta),
           was: Math.round(nowElapsed()), now: next,
           onAt: jump.onAt, dropped: jump.dropped,
+        });
+      } else if (start) {
+        logLine('clock', {
+          why: 'the cockpit clock started', delta: 0,
+          was: Math.round(nowElapsed()), now: next, onAt: onAtElapsed, dropped: 0,
         });
       }
       cursor.elapsed = next;

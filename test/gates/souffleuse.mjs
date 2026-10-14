@@ -846,7 +846,7 @@ export async function run({ report }) {
   ok(pol.judge(hint('fact', 'Der Vermerk lag im Postfach'), ctx({ now: 900 })).show === true,
      'policy: different words are a different hint');
 
-  // The cockpit's clock can restart under all of this - tStart is the page
+  // The cockpit's clock can restart under all of this - tStart was the page
   // load, a --watch rebuild reloads the page, and a second cockpit tab taking
   // the prompter twenty-five minutes into a talk has its own sessionStorage
   // and starts near 0:00. `rebaseClock` moved the switch-on stamp, the last

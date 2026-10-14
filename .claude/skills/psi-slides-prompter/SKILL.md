@@ -229,9 +229,9 @@ every `move`:
   a speech one because the slide is the newer fact about where the talk is.
 - The clock is the **cockpit's**, carried forward with the wall clock between
   messages (`nowElapsed`), which is what makes a cadence in seconds mean seconds.
-  **It can go backwards**, because `tStart` in the cockpit is the page load and
-  a `--watch` rebuild reloads the page on every save. The cockpit keeps its
-  origin now, and the sidecar does not rely on that: an `elapsed` that drops by
+  **It can go backwards**, because `tStart` in the cockpit was once the page
+  load and a `--watch` rebuild reloads the page on every save. The cockpit
+  keeps its origin now, and the sidecar does not rely on that: an `elapsed` that drops by
   more than `CLOCK_JUMP_S` (5 s) is a new clock, and `rebaseClock` moves the
   switch-on stamp, the last tick and the whole transcript onto it by one delta,
   dropping what is older than the new zero. A talk already past its opening
@@ -525,7 +525,7 @@ refuses both, by name. Every line carries `t` and `type`:
 | `dismiss` | `hintId`, `how` |
 | `prefs` | `cues`, `ceiling` – the cue checkbox changed in the cockpit |
 | `status`, `error` | every transition with the cockpit clock it happened on (`elapsed` – the replay measures the opening quiet from the `listening` the switch wrote, and nothing else in the log says when it was thrown), and every failure with its streak |
-| `clock` | the cockpit's clock went backwards and everything was moved onto the new one: `delta`, `was`, `now`, the new `onAt`, and how many transcript segments were older than the new zero |
+| `clock` | the cockpit's clock went backwards and everything was moved onto the new one: `delta`, `was`, `now`, the new `onAt`, and how many transcript segments were older than the new zero. **Also the press that started the clock** (`clockStart` on a `souffleuse-move`, `why: 'the cockpit clock started'`): the cockpit's clock waits at 0:00 until the first forward or back press while the sidecar's reading runs on with the wall clock, so that move is taken as a new clock at any drop (`rebaseClock` with `tolerance: 0`) and the line is written even with `delta: 0` – it is the moment the talk began, which is what the debrief reads a `clock` line as |
 | `clock-set` | the speaker moved the clock – a minute back or forward, or to the planned start (`clockDelta` on a `souffleuse-move`): the same fields as `clock`, either sign, nothing dropped. A type of its own because a `clock` line is read as the talk beginning; every `elapsed` before it is on the old reading and every one after it on the new. `replayAnswers` rebases its policy on both |
 | `warn` | something the sidecar carried on through and a person should know: today, only a slide index past the end of the deck |
 | `cue-dropped` | a card whose slide this build no longer has |
@@ -924,12 +924,17 @@ those, the log and a rehearsal.
   badge text. Reworded rather than the assertion weakened: a privacy check that
   has to allow exceptions is not one. Do not write the variable's name inside
   `SPEAKER_JS`, not even in a comment.
-- **The cockpit's clock is the page load, and the page reloads on every save.**
+- **The cockpit's clock was the page load, and the page reloads on every save.**
   `tStart` is a `let` in `SPEAKER_JS`, and a `--watch` rebuild reloads the
   cockpit – so a rehearsal's clock went back to 0:00 mid-talk and the sidecar
-  believed it. The origin is kept in `sessionStorage` **only while the prompter
-  is on**, because a cockpit opened while the room fills is meant to start at
-  0:00 and the clock button is how a speaker says the talk has begun. The
+  believed it. The clock now waits (`tStart = Infinity`) until the first forward
+  or back press and the cockpit's own key keeps any clock a press or a gesture
+  set across a reload; the prompter's copy (`psi-slides:souffleuse-clock`) is
+  written only for a started clock and **only while the prompter is on**.
+  **A prompter switched on before the first press stamps everything at 0:00**:
+  the opening words said on the title slide before any press are zero seconds
+  of speech, and the switch-on moment is the start. The `clockStart` move tells
+  the sidecar when that ends. The
   prompter's own click listener on `#psiINT-clock` is added after the cockpit's, so
   `tStart` is already the new one when it re-writes the key. Everything the
   sidecar does about it is in `rebaseClock`, and both halves are needed: the

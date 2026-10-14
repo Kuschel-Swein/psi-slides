@@ -9,6 +9,12 @@
  * that sets itself (a rehearsal at another hour must find 0:00), a clock
  * below zero, and a drift beside it that still answers to the old reading.
  *
+ * **And when it starts.** It waits at 0:00 until the first forward or back
+ * press - in the cockpit, or in the projection, which reports a press - and
+ * an autoplay figure cycling on the opening slide while the room fills must
+ * not start it. Only a clock nobody has set starts on a press: one holding
+ * for its planned start keeps holding.
+ *
  * **The time of day is given, not waited for.** `start:` is read against the
  * wall clock of the window, so every page here is opened under Playwright's
  * clock at a moment the case names: 14:25 for a 14:20 talk, 14:10 before it,
@@ -44,6 +50,37 @@ Two.
 > note: @2:00 **The second thing**, two minutes in.
 `;
 
+// A slide to open the cockpit from (the S that opens it is a key, and a key
+// retires the autoplay of the slide it is pressed on), then a figure that
+// plays itself in a cycle, which is what stands on the wall while the room
+// fills.
+const AUTO_DECK = `---
+title: Clock autoplay
+collapse: none
+---
+
+## free: Before {#before}
+
+Nothing here.
+
+## figure: Plays itself {#auto}
+
+::: draw 150x56 autoplay 260 cycle
+box a "A" at 0,0
+box b "B" right of a gap 1
+box c "C" right of b gap 1
+
+step two
+  show b
+step three
+  show c
+:::
+
+## free: After {#after}
+
+Words.
+`;
+
 function build(frontmatter) {
   const dir = tmpDir('psi-clock-');
   fs.writeFileSync(path.join(dir, 'source.md'), deck(frontmatter));
@@ -62,6 +99,12 @@ export async function run({ page, report }) {
   const { ok } = report;
   const planned = await serve(build('start: 14:20\n'));
   const plain = await serve(build(''));
+  const autoDir = tmpDir('psi-clock-auto-');
+  fs.writeFileSync(path.join(autoDir, 'source.md'), AUTO_DECK);
+  const autoBuild = spawnSync(process.execPath, [path.join(ROOT, 'build.js'), path.join(autoDir, 'source.md')],
+    { cwd: ROOT, encoding: 'utf8' });
+  if (autoBuild.status !== 0) throw new Error('fixture build failed:\n' + (autoBuild.stdout || '') + (autoBuild.stderr || ''));
+  const auto = await serve(autoDir);
   const errors = [];
 
   // A cockpit under a clock that says `at`. A new page each time: the fake
@@ -85,6 +128,8 @@ export async function run({ page, report }) {
   // A few seconds of slack: the page has been open for one or two of them,
   // and the digits are a second behind until the next tick repaints them.
   const near = (got, want) => got >= want - 1 && got <= want + 4;
+
+  const waitingOf = (p) => p.evaluate(() => document.getElementById('psiINT-clock-box').classList.contains('waiting'));
 
   // ── nothing sets the clock by itself ─────────────────────────────
   const at1425 = new Date(2026, 9, 12, 14, 25, 0);
@@ -186,12 +231,24 @@ export async function run({ page, report }) {
   real.on('pageerror', e => errors.push(String(e)));
   await real.goto('http://127.0.0.1:' + planned.port + '/speaker.html', { waitUntil: 'load' });
   await real.waitForTimeout(600);
+  await real.reload({ waitUntil: 'load' });
+  await real.waitForTimeout(1200);
+  ok((await secs(real)) === 0 && await waitingOf(real),
+     'a reload of a clock that has not started finds it waiting still - a --watch save must', await timer(real));
+  await real.keyboard.press('ArrowRight');
+  await real.waitForTimeout(1200);
+  ok(!(await waitingOf(real)) && near(await secs(real), 1),
+     'the first forward press starts it', await timer(real));
+  await real.reload({ waitUntil: 'load' });
+  await real.waitForTimeout(1200);
+  ok(!(await waitingOf(real)) && near(await secs(real), 2),
+     'and a reload comes back to the clock the press started', await timer(real));
   await real.keyboard.press('>');
   await real.keyboard.press('>');
   await real.waitForTimeout(200);
   await real.reload({ waitUntil: 'load' });
   await real.waitForTimeout(1200);
-  ok(near(await secs(real), 121), 'a reload comes back to the clock the speaker set', await timer(real));
+  ok(near(await secs(real), 123), 'a reload comes back to the clock the speaker set', await timer(real));
   await real.click('#psiINT-clock');
   await real.reload({ waitUntil: 'load' });
   await real.waitForTimeout(1200);
@@ -199,11 +256,41 @@ export async function run({ page, report }) {
   await real.keyboard.press('>');
   await real.goto('http://127.0.0.1:' + planned.port + '/speaker.html?again', { waitUntil: 'load' });
   await real.waitForTimeout(1200);
-  ok(near(await secs(real), 1), 'a cockpit navigated to afresh starts at 0:00', await timer(real));
+  ok((await secs(real)) === 0 && await waitingOf(real), 'a cockpit navigated to afresh waits at 0:00', await timer(real));
   await real.reload({ waitUntil: 'load' });
   await real.waitForTimeout(1200);
-  ok(near(await secs(real), 1), 'and has forgotten the old clock for good', await timer(real));
+  ok((await secs(real)) === 0 && await waitingOf(real), 'and has forgotten the old clock for good', await timer(real));
   await realContext.close();
+
+  // ── the projection: an autoplay figure does not start it, a press does ──
+  // The pair, on the real clock: the projection opens the cockpit with S.
+  const pairContext = await page.context().browser().newContext({ viewport: { width: 1440, height: 900 } });
+  const aud0 = await pairContext.newPage();
+  aud0.on('pageerror', e => errors.push('aud: ' + e));
+  await aud0.goto('http://127.0.0.1:' + auto.port + '/audience.html', { waitUntil: 'load' });
+  await aud0.waitForTimeout(600);
+  const [cockpit] = await Promise.all([pairContext.waitForEvent('page'), aud0.keyboard.press('s')]);
+  cockpit.on('pageerror', e => errors.push('spk: ' + e));
+  await cockpit.waitForLoadState();
+  await cockpit.waitForTimeout(900);
+  // Onto the figure by address, which is a jump, not a press; there it plays.
+  await aud0.bringToFront();
+  await aud0.evaluate(() => { location.hash = '#auto'; });
+  await aud0.waitForTimeout(500);
+  const seen = new Set();
+  for (let i = 0; i < 12; i++) {
+    seen.add(await cockpit.evaluate(() => (flatChunks[state.activeIdx] || {}).id + ':' + revealed.auto));
+    await aud0.waitForTimeout(130);
+  }
+  ok(await aud0.evaluate(() => autoplayTimer !== 0) && seen.size >= 2 && [...seen].every(v => v.startsWith('auto:')),
+     'the figure plays itself on the projection, and the cockpit follows its beats', [...seen].join(' '));
+  ok((await secs(cockpit)) === 0 && await waitingOf(cockpit),
+     'and none of its steps, nor the jump onto it, started the cockpit\'s clock', await timer(cockpit));
+  await aud0.keyboard.press('ArrowRight');
+  await aud0.waitForTimeout(1300);
+  ok(!(await waitingOf(cockpit)) && near(await secs(cockpit), 1),
+     'a press in the projection - a clicker aimed at it - starts the clock in the cockpit', await timer(cockpit));
+  await pairContext.close();
 
   // ── before the planned start the clock holds ─────────────────────
   const early = await open(planned.port, new Date(2026, 9, 12, 14, 10, 0));
@@ -211,6 +298,11 @@ export async function run({ page, report }) {
   const waiting = () => early.evaluate(() => document.getElementById('psiINT-clock-box').classList.contains('waiting'));
   ok((await secs(early)) === 0 && await waiting(), 'Z ten minutes early holds the clock at 0:00', await timer(early));
   ok(/until 14:20/.test(await toast(early)), 'and says until when', await toast(early));
+  await press(early, 'ArrowRight');
+  await early.clock.runFor(2000);
+  ok((await secs(early)) === 0 && await waiting(),
+     'a press does not override a clock holding for its planned start',
+     (await timer(early)) + ' · ' + (await early.evaluate(() => String(tStart - Date.now()))));
   await early.clock.runFor(5 * 60000);
   ok((await secs(early)) === 0 && await waiting(), 'where it still stands five minutes later', await timer(early));
   await early.clock.runFor(6 * 60000);
@@ -244,11 +336,22 @@ export async function run({ page, report }) {
   ok(await bare.evaluate(() => !document.getElementById('psiINT-clock-plan')
        && !!document.getElementById('psiINT-clock-back') && !!document.getElementById('psiINT-clock-fwd')),
      'without start: there is no button for it, and the two minute buttons are there all the same');
+  ok(await waitingOf(bare), 'and waits there, dimmed, for the first press');
+  await bare.clock.runFor(90000);
+  ok((await secs(bare)) === 0 && await waitingOf(bare),
+     'a minute and a half later it still stands at 0:00', await timer(bare));
+  // ── the first press starts it: here a back press on the first slide ──
+  await press(bare, 'ArrowLeft');
+  ok(!(await waitingOf(bare)) && await bare.evaluate(() => state.activeIdx) === 0,
+     'a back press on the first slide starts the clock and moves nothing');
+  ok(/clock started/.test(await toast(bare)), 'and says so', await toast(bare));
+  await bare.clock.runFor(5000);
+  ok(near(await secs(bare), 5), 'from 0:00, at the press', await timer(bare));
   await press(bare, 'z');
-  ok(near(await secs(bare), 0) && /start:/.test(await toast(bare)),
+  ok(near(await secs(bare), 5) && /start:/.test(await toast(bare)),
      'Z leaves the clock alone and names the key that is missing', (await timer(bare)) + ' · ' + (await toast(bare)));
   await press(bare, '>');
-  ok(near(await secs(bare), 60), 'and > still moves it', await timer(bare));
+  ok(near(await secs(bare), 65), 'and > still moves it', await timer(bare));
   // The panel lists all three, and runs them.
   const rows = await bare.evaluate(() => ['clock-back', 'clock-forward', 'clock-plan']
     .map(id => !!document.querySelector('#psiINT-help-overlay dt[data-cmd="' + id + '"]')).join());
@@ -270,4 +373,5 @@ export async function run({ page, report }) {
   ok(errors.length === 0, 'no page errors in any of the windows', errors.join(' | '));
   planned.server.close();
   plain.server.close();
+  auto.server.close();
 }

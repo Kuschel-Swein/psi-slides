@@ -214,8 +214,13 @@ function installFakeStt() {
     available: () => FakeSpeechRecognition.available(),
     // The cockpit's clock, moved rather than waited out. `tStart` is the
     // origin souffClock() measures from, so pushing it back is exactly a
-    // talk that has been running that much longer.
-    advance(seconds) { tStart -= seconds * 1000; return elapsedSeconds(); },
+    // talk that has been running that much longer. A clock that has not
+    // started (Infinity, until the first press) is started here first.
+    advance(seconds) {
+      if (!isFinite(tStart)) tStart = Date.now();
+      tStart -= seconds * 1000;
+      return elapsedSeconds();
+    },
     final(text, seconds) {
       if (seconds) window.__stt.advance(seconds);
       return fire(text, true);
@@ -527,6 +532,24 @@ export async function run({ page, report }) {
        'the switch says which language it is listening in, and where', sw.title);
     ok((await until(() => logLines(dir).some((l) => l.type === 'session' && l.via === 'hello'), 5000)) !== null,
        'the sidecar logged a session opened by the hello');
+
+    // ── the first press starts the clock, and the sidecar hears it ──
+    // The cockpit's clock waits at 0:00 until the first forward or back
+    // press, while the sidecar carries its own reading on with the wall
+    // clock. The press that starts it says so (clockStart on a move), and the
+    // sidecar writes the `clock` line the debrief reads as the talk beginning
+    // - here a back press on the first slide, which moves nothing else.
+    ok(await page.evaluate(() => !isFinite(tStart)
+       && document.getElementById('psiINT-clock-box').classList.contains('waiting')),
+       'with the prompter on and no press yet, the clock is still waiting');
+    await page.keyboard.press('ArrowLeft');
+    const started = await until(() => logLines(dir).find(
+      (l) => l.type === 'clock' && /clock started/.test(String(l.why))), 5000);
+    ok(!!started && await page.evaluate(() => isFinite(tStart) && state.activeIdx === 0),
+       'a back press on the first slide starts it, and the sidecar logs a clock line saying so',
+       JSON.stringify(started));
+    ok(!logLines(dir).some((l) => l.type === 'clock-set'),
+       'which is the talk beginning, not a clock the speaker set');
 
     // ── the opening minute shows what it hears, unasked ─────────────
     // For the first minute the prompter cannot say anything at all, and that
