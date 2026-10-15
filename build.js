@@ -16075,6 +16075,11 @@ body.aside-panned .chunk.active .marginalia { cursor: zoom-out; }
 .chunk[data-tag=figure] .chunk-body:has(.figure-diagram) { max-width: none; }
 .chunk[data-tag=figure] .chunk-body:has(.figure-diagram) > :not(.figure-diagram) > p,
 .chunk[data-tag=figure] .chunk-body:has(.figure-diagram) > p { max-width: 40em; }
+/* Under .center the caption block itself has to sit on the slide's axis, not
+   only its lines: a 40em block anchored left in a .full body set the centred
+   lines some 135 px left of the heading and the drawing above them. */
+.chunk[data-tag=figure][data-center] .chunk-body:has(.figure-diagram) > :not(.figure-diagram) > p,
+.chunk[data-tag=figure][data-center] .chunk-body:has(.figure-diagram) > p { margin-inline: auto; }
 .chunk[data-tag=figure] .chunk-heading { order: 2; }
 .chunk[data-tag=figure] .chunk-body pre { order: 1; font-size: 0.82em; }
 /* A figure chunk orders its .chunk-content children by hand, and an aside
