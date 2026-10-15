@@ -361,8 +361,17 @@ export const COMMANDS = [
     label: 'Blank the projection', reach: 'ungated', state: 'blanked',
     hint: 'blank the projection – the speaker window keeps working, frozen or not' },
   { id: 'demo', group: 'knobs', views: BOTH, keys: ['d'],
-    label: 'Show a live demo', reach: 'ungated', state: 'demo',
-    hint: 'live demo: a window or a screen of this machine on the projection, until D again – pressed in the cockpit, the picker opens on the laptop; the very first capture on a Mac fails while macOS asks for screen-recording rights, so try it once before the talk' },
+    label: 'Show or pause the live demo', reach: 'ungated', state: 'demo',
+    hint: 'live demo: a window or a screen of this machine on the projection – pressed in the cockpit, the picker opens on the laptop. <kbd>D</kbd> again pauses it and the room is back on the slides; <kbd>D</kbd> once more shows the same window again, without the picker. The very first capture on a Mac fails while macOS asks for screen-recording rights, so try it once before the talk' },
+  { id: 'demo-switch', group: 'knobs', views: BOTH, keys: ['shift+d'],
+    label: 'Share another window in the live demo', reach: 'ungated',
+    hint: 'the picker again, for another window or screen in place of the one shared – cancelled, the demo keeps the one it had' },
+  // No key: a paused demo is already off the wall, and the browser's own
+  // sharing bar stops a capture too. This is the clean way out, from either
+  // window, after which D opens the picker again.
+  { id: 'demo-end', group: 'knobs', views: BOTH, keys: [],
+    label: 'End the live demo', reach: 'ungated',
+    hint: 'end the live demo: the capture stops, and the next <kbd>D</kbd> opens the picker again – closing the shared window or the browser\'s “stop sharing” does the same' },
   { id: 'collapse-back', group: 'knobs', views: BOTH, keys: ['shift+c'],
     label: 'Cycle the collapse backwards', reach: 'broadcast',
     hint: 'the collapse, backwards' },

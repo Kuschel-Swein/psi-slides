@@ -96,7 +96,7 @@ footers carry `counter(page)` and no word (:5556–5560).
 | Overview badge: `overview · drag pans · wheel zooms · … selects · … lands · / search · Esc leaves` | build.js:6765 | Reader, after `O` |
 | Touch rail and palette aria-labels: `Slide controls`, `Shorten or expand the text`, `Change the font`, `Change the theme`, `Auto-fit: …`, `Search the lecture`, `Select text`, `Previous`, `Next`, `Overview`, `Zoom out`, `Zoom in`, `More controls` | build.js:6743–6758 | Reader on a touchscreen (assistive tech) |
 | Link overlay: aria `Link address`, hint `scan it, or click the address to open it · Esc closes` | build.js:6779–6787 | Reader, after Shift-click |
-| `BLANK · hit B to toggle`, `DEMO · hit D to end it` | build.js:6774, :6794; on the projection only when no cockpit is open (:10372–10384) | Reader, single-screen use |
+| `BLANK · hit B to toggle`, `DEMO · hit D to pause it`, `DEMO PAUSED · hit D to show it again` | build.js:6774, :6794; on the projection only when no cockpit is open (:10372–10384) | Reader, single-screen use |
 | Mode badges (`flashMode`): `slide numbers · …`, `font · …`, `theme · …`, `collapse: show everything` / `topic + bold` (`COLLAPSE_LABEL`, :13093), `zoom: 1.25× · limited by this slide`, `select text while Alt/option is held · Esc clears`, `select text by dragging · tap the button again to pan` | build.js:11359–11377, :13460, :13501, :14049, :14730 | Reader, after a knob key |
 | `Note… (Enter for newline, Esc to exit)` – annotation textarea placeholder | build.js:6585 | Speaker in practice (typed from the cockpit), but the markup is in both views |
 
@@ -314,7 +314,7 @@ German `?` sheet:
 | link overlay | Link address · scan it, or click the address to open it · Esc closes | Linkadresse · scannen oder Adresse anklicken · Esc schließt |
 | link mark aria | Show this address large, with a code to scan | Adresse groß anzeigen, mit Code zum Scannen |
 | QR aria / iframe title | QR code for this address / Embedded video | QR-Code für diese Adresse / Eingebettetes Video |
-| badges | BLANK · hit B to toggle / DEMO · hit D to end it | SCHWARZ · B schaltet um / DEMO · D beendet |
+| badges | BLANK · hit B to toggle / DEMO · hit D to pause it / DEMO PAUSED · hit D to show it again | SCHWARZ · B schaltet um / DEMO · D pausiert / DEMO PAUSIERT · D zeigt wieder |
 | collapse label | show everything / topic + bold | alles zeigen / Kernsatz + fett |
 | mode badges | slide numbers · / font · / theme · / zoom: … limited by this slide / select text while Alt/option is held · Esc clears | Foliennummern · / Schrift · / Farbschema · / Zoom: … durch diese Folie begrenzt / Text auswählen bei gehaltenem Alt/Option · Esc hebt auf |
 

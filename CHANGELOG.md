@@ -111,6 +111,17 @@ from building the same way is a major version.
 
 ### Changed
 
+- **`D` pauses a live demo instead of ending it.** On a running demo `D`
+  takes the picture off the projection and leaves the capture running, so
+  the room is back on the slides; `D` again shows the same window, with no
+  picker, as long as it is still open. The badge says `DEMO PAUSED` while it
+  waits. `Shift`-`D` opens the picker for another window in place of the one
+  shared (over loopback the new window goes into the running connection,
+  with no new handshake), and a cancelled picker keeps the old one. A demo
+  ends when the shared window closes, with the browser's “stop sharing”, or
+  with “End the live demo” in the `?` palette, a command with no key – a `D`
+  after that opens the picker again.
+
 - A figure that is alone on its slide may stand taller. A chunk whose heading
   is off the slide (`.bare`, or none) and whose on-screen body is one
   `::: draw` gets a canvas of 22 label-heights instead of 16, and its figure

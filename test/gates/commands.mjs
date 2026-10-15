@@ -96,6 +96,7 @@ const NOT_A_ROW = {
 // or a command with `keys: []` that is not here, fails.
 const NO_KEY_COMMANDS = {
   pitchblack: 'a switch for the room, set once per projector from the palette or the frontmatter; a free letter is worth more to something pressed mid-talk',
+  'demo-end': 'D already takes a demo off the wall and the browser\'s sharing bar stops a capture; ending it for good is rare enough for the palette',
 };
 
 // Every press the switch in AUDIENCE_JS answered when the table replaced it,
@@ -143,6 +144,8 @@ const ADDED = [
   ['<', null, 'clock-back'], ['Shift+<', null, 'clock-back'],
   ['>', null, 'clock-forward'], ['Shift+>', null, 'clock-forward'],
   ['z', null, 'clock-plan'], ['Shift+Z', null, 'clock-plan'],
+  // Another window for a running live demo; D itself pauses and resumes.
+  ['Shift+D', 'demo-switch', 'demo-switch'],
 ];
 
 function press(spec) {
@@ -351,7 +354,7 @@ export async function run({ report }) {
   const inMenu = src.replace("export const START_MENU = ['fullscreen',", "export const START_MENU = ['pitchblack',");
   ok(inMenu !== src && /the start menu names pitchblack/.test(loadError(inMenu)),
     'and so is a start menu that names one', loadError(inMenu) || 'not refused');
-  const notList = src.replace("views: BOTH, keys: [],", "views: BOTH, keys: '',");
+  const notList = src.replace("{ id: 'pitchblack', group: 'knobs', views: BOTH, keys: [],", "{ id: 'pitchblack', group: 'knobs', views: BOTH, keys: '',");
   ok(notList !== src && /pitchblack has keys that are not a list/.test(loadError(notList)),
     'and keys that are not a list', loadError(notList) || 'not refused');
   ok(loadError(src) === '', 'the table as written loads');

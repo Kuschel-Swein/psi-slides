@@ -14302,7 +14302,7 @@ const LINK_OVERLAY_HTML = `<div id="psiINT-link-overlay" class="hidden" role="di
 const DEMO_OVERLAY_HTML = `<div id="psiINT-demo-overlay" class="hidden" role="region" aria-label="Live demo">
   <video id="psiINT-demo-video" autoplay muted playsinline></video>
 </div>`;
-const DEMO_BADGE_HTML = `<div id="psiINT-demo-badge" class="cmd-badge hidden" role="status">DEMO<span> &middot; hit D to end it</span></div>`;
+const DEMO_BADGE_HTML = `<div id="psiINT-demo-badge" class="cmd-badge hidden" role="status">DEMO<span> &middot; hit D to pause it</span></div>`;
 
 const SEARCH_PANEL_HTML = `<div id="psiINT-search-panel" class="hidden" role="dialog" aria-label="Search slides">
   <input id="psiINT-search-input" type="text" placeholder="search the lecture..." autocomplete="off" spellcheck="false" aria-controls="psiINT-search-results">
@@ -20881,12 +20881,19 @@ window.addEventListener('message', (ev) => {
   // The live demo is a command to the projector like blank: outside the
   // snapshot, past the freeze gate. Four types, one for the state and three
   // that carry the WebRTC handshake when the windows are not one origin.
+  // 'live' says the sender holds a capture and whether it is paused;
+  // 'pause' and 'resume' come from either window, since D pauses a demo
+  // whichever of the two holds it.
   if (m.type === 'demo') {
     if (m.action === 'stop') {
       endDemoLocally();
     } else if (m.action === 'live') {
       demoRemoteLive = true;
-      applyDemoBadge();
+      demoPaused = !!m.paused;
+      applyDemoView();
+    } else if (m.action === 'pause' || m.action === 'resume') {
+      demoPaused = m.action === 'pause';
+      applyDemoView();
     }
     return;
   }
@@ -21171,14 +21178,15 @@ function applyBlankBadge() {
   blankBadge.classList.toggle('hidden', !(state.blanked && lecturerScreen()));
 }
 // Live demo (D): the capture this window holds, whether the other window
-// said it holds one, the loopback connection at either end, and the
-// promise that its remote description is in. Declared here, next to the
-// blank badge, because applyState reads them through applyDemoBadge before
-// the demo section further down has run. The functions are in the "live
-// demo" section.
+// said it holds one, whether the demo is paused, the loopback connection at
+// either end, and the promise that its remote description is in. Declared
+// here, next to the blank badge, because applyState reads them through
+// applyDemoBadge before the demo section further down has run. The
+// functions are in the "live demo" section.
 let demoStream = null;
 let demoPending = false;
 let demoRemoteLive = false;
+let demoPaused = false;
 let demoPc = null;
 let demoRemoteReady = null;
 const demoBadge = document.getElementById('psiINT-demo-badge');
@@ -21186,6 +21194,12 @@ function demoOn() { return !!demoStream || demoRemoteLive; }
 function applyDemoBadge() {
   if (!demoBadge) return;
   demoBadge.classList.toggle('hidden', !(demoOn() && lecturerScreen()));
+  // Paused, the capture still runs - the browser's sharing bar says so on
+  // the laptop - and the badge says it too, so the room's slides are not
+  // mistaken for the end of it.
+  const word = demoBadge.firstChild, hint = demoBadge.querySelector('span');
+  if (word && word.nodeType === 3) word.nodeValue = demoPaused ? 'DEMO PAUSED' : 'DEMO';
+  if (hint) hint.textContent = demoPaused ? ' \u00b7 hit D to show it again' : ' \u00b7 hit D to pause it';
 }
 
 function applyState() {
@@ -23989,10 +24003,14 @@ document.addEventListener('click', (e) => {
 // (measured), which is why the direct path is a call and not a transfer.
 //
 // A command to the projector, like blank: outside the snapshot, past the
-// freeze gate, and D again ends it from either window. Chrome's own "stop
-// sharing" bar ends the track, and that ends the demo the same way.
-// track.stop() fires no 'ended' on the other side, so the stop is always
-// also a message.
+// freeze gate. D again pauses it from either window and D once more shows
+// it again: the capture keeps running while it is paused, so there is no
+// second picker and the window chosen once comes back as it is now.
+// Shift-D picks another window in its place. It ends with "End the live
+// demo" in the palette, with Chrome's own "stop sharing" bar, or when the
+// shared window closes - the track ends, and that ends the demo, so a D
+// after that opens the picker again. track.stop() fires no 'ended' on the
+// other side, so the stop is always also a message.
 const DEMO_MAX_BITRATE = 40e6;
 // A capture is never larger than a projector shows; a Retina or 5K screen
 // captured at its own size is a copy per frame nobody sees the benefit of,
@@ -24005,39 +24023,60 @@ const DEMO_DIRECT = SELF_ORIGIN !== 'null';
 const demoOverlay = document.getElementById('psiINT-demo-overlay');
 const demoVideo = document.getElementById('psiINT-demo-video');
 // The showing side. The stream may belong to another realm (the direct
-// path) – srcObject takes it all the same.
+// path) – srcObject takes it all the same. A paused demo keeps its stream
+// on the video and only takes the overlay away, so showing it again is a
+// class and not a new connection.
+function applyDemoView() {
+  const show = !!(demoOverlay && demoVideo && demoVideo.srcObject) && !demoPaused;
+  if (demoOverlay) demoOverlay.classList.toggle('hidden', !show);
+  document.body.classList.toggle('demo-live', show);
+  applyDemoBadge();
+}
 function attachDemo(stream) {
   if (!demoOverlay || !demoVideo) return;
   demoVideo.srcObject = stream;
-  demoOverlay.classList.remove('hidden');
-  document.body.classList.add('demo-live');
+  applyDemoView();
   const p = demoVideo.play();
   if (p && p.catch) p.catch(() => {});
 }
 function detachDemo() {
   if (demoVideo) demoVideo.srcObject = null;
-  if (demoOverlay) demoOverlay.classList.add('hidden');
-  document.body.classList.remove('demo-live');
   if (demoPc) { demoPc.close(); demoPc = null; }
   demoRemoteReady = null;
+  applyDemoView();
 }
-// The direct path's entry point, called by a same-origin peer window.
-window.psiDemoAttach = function (stream) { attachDemo(stream); };
+// The direct path's entry point, called by a same-origin peer window. The
+// pause rides along, so a projection reloaded under a paused demo does not
+// show it for the moment before the message saying so arrives.
+window.psiDemoAttach = function (stream, paused) {
+  if (paused !== undefined) demoPaused = !!paused;
+  attachDemo(stream);
+};
 
 function endDemoLocally() {
   const s = demoStream;
   demoStream = null;
   demoRemoteLive = false;
+  demoPaused = false;
   if (s) s.getTracks().forEach(t => t.stop());
   detachDemo();
-  applyDemoBadge();
 }
 function stopDemo() {
   endDemoLocally();
   sendToPeer({ type: 'demo', source: VIEW, action: 'stop' });
   flashMode('demo ended');
 }
-async function startDemo() {
+// Either window, whichever holds the capture: the state is mirrored on
+// both sides by the message, as blank is.
+function setDemoPaused(paused) {
+  demoPaused = paused;
+  applyDemoView();
+  sendToPeer({ type: 'demo', source: VIEW, action: paused ? 'pause' : 'resume' });
+  flashMode(paused ? 'demo paused – D shows it again' : 'demo live');
+}
+// replace: a demo is running and Shift-D asked for another window. A
+// cancelled picker then keeps the one already shared.
+async function startDemo(replace) {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
     flashMode('no screen capture in this browser');
     return;
@@ -24068,6 +24107,7 @@ async function startDemo() {
     // screen-recording rights and the first attempt fails (seen in Chromium
     // and Safari alike), so on a Mac the toast says what to do next.
     demoPending = false;
+    if (replace && demoStream) { flashMode('demo: kept the window already shared'); return; }
     flashMode(/Mac/.test(navigator.platform || '')
       ? 'demo cancelled – the first capture on a Mac fails while macOS asks for screen-recording rights; allow it and press D again'
       : 'demo cancelled');
@@ -24077,36 +24117,67 @@ async function startDemo() {
   const track = stream.getVideoTracks()[0];
   // Text over motion: the encoder keeps resolution and drops frames.
   track.contentHint = 'detail';
+  const old = demoStream;
   demoStream = stream;
-  // Chrome's own "stop sharing" bar ends the track; that ends the demo too.
+  // A window picked in place of another is shown, paused or not.
+  demoPaused = false;
+  // Chrome's own "stop sharing" bar ends the track, and so does closing the
+  // shared window; that ends the demo too.
   track.addEventListener('ended', () => { if (demoStream === stream) stopDemo(); }, { once: true });
-  applyDemoBadge();
-  if (VIEW === 'speaker') deliverDemo(stream);
+  if (VIEW === 'speaker') deliverDemo(stream, old);
   else attachDemo(stream);
-  sendToPeer({ type: 'demo', source: VIEW, action: 'live' });
-  flashMode('demo live');
+  if (old) old.getTracks().forEach(t => t.stop());
+  applyDemoBadge();
+  sendToPeer({ type: 'demo', source: VIEW, action: 'live', paused: false });
+  flashMode(old ? 'demo: another window' : 'demo live');
 }
-// D while the picker is still open is neither a start nor a stop.
+// D while the picker is still open is neither a start nor a stop. A demo
+// that exists is paused or shown again, from whichever window; only with
+// none does D open the picker.
 function toggleDemo() {
   if (demoPending) return;
-  if (demoOn()) stopDemo();
+  if (demoOn()) setDemoPaused(!demoPaused);
   else startDemo();
 }
+// Shift-D: another window in place of the one shared. The picker opens in
+// the window that holds the capture, so the projection hands the press on
+// rather than putting a picker on the wall.
+function switchDemo() {
+  if (demoPending) return;
+  if (demoStream) startDemo(true);
+  else if (demoRemoteLive) flashMode('the cockpit holds the demo – Shift-D there picks another window');
+  else startDemo();
+}
+// The palette's way out, from either window: the capture stops and the
+// next D opens the picker again.
+function endDemo() {
+  if (demoOn()) stopDemo();
+  else flashMode('no live demo running');
+}
 // A peer that has just appeared – a cockpit opened with S, a projection
-// back from a reload – is handed the running demo again. Called on hello.
+// back from a reload – is handed the running demo again, paused or not.
+// Called on hello.
 function demoAnnounce() {
   if (!demoStream) return;
   if (VIEW === 'speaker') deliverDemo(demoStream);
-  sendToPeer({ type: 'demo', source: VIEW, action: 'live' });
+  sendToPeer({ type: 'demo', source: VIEW, action: 'live', paused: demoPaused });
 }
 // Same origin: hand the stream over as an object. Otherwise the loopback
-// connection. A same-origin peer without the hook is a projection built
-// before the demo existed, and that is said rather than silently
-// re-routed to an offer it would never answer.
-function deliverDemo(stream) {
+// connection - and when a running connection carries the window being
+// replaced, the new track goes into its sender, with no new handshake and
+// the bitrate already negotiated. A same-origin peer without the hook is a
+// projection built before the demo existed, and that is said rather than
+// silently re-routed to an offer it would never answer.
+function deliverDemo(stream, replacing) {
   if (DEMO_DIRECT) {
-    if (peer && typeof peer.psiDemoAttach === 'function') peer.psiDemoAttach(stream);
+    if (peer && typeof peer.psiDemoAttach === 'function') peer.psiDemoAttach(stream, demoPaused);
     else { endDemoLocally(); flashMode('demo: the projection window did not answer – rebuild it'); }
+    return;
+  }
+  const sender = replacing && demoPc && demoPc.connectionState === 'connected' && demoPc.getSenders()[0];
+  if (sender) {
+    sender.replaceTrack(stream.getVideoTracks()[0])
+      .catch(() => { if (demoStream === stream) demoSendOffer(stream); });
     return;
   }
   demoSendOffer(stream);
@@ -24115,6 +24186,9 @@ function demoNewPc() {
   // No ICE servers, deliberately: both ends are this machine, and a STUN
   // server here would make every D press reach the internet.
   const pc = new RTCPeerConnection();
+  // A window picked in place of another over a connection that was not up
+  // yet: the older one is dropped rather than left running beside it.
+  if (demoPc) demoPc.close();
   demoPc = pc;
   demoRemoteReady = new Promise((resolve) => { pc.psiRemoteReady = resolve; });
   pc.onicecandidate = (ev) => {
@@ -24678,9 +24752,13 @@ const COMMAND_RUN = {
   },
   // Live demo: a window or a screen of this machine on the projection.
   // Pressed in the cockpit, the picker opens on the laptop and the room
-  // sees the picture; pressed again anywhere, it ends on both screens.
-  // No overview guard, as on B: the stop half is the urgent one.
+  // sees the picture; pressed again anywhere, the room is back on the
+  // slides while the capture waits, and once more brings it back without a
+  // picker. No overview guard, as on B: taking it off the wall is the
+  // urgent half. Shift-D picks another window; the palette ends it.
   'demo': (e) => { toggleDemo(); e.preventDefault(); },
+  'demo-switch': (e) => { switchDemo(); e.preventDefault(); },
+  'demo-end': (e) => { endDemo(); if (e) e.preventDefault(); },
   // Shift-E copies live annotation drafts to the clipboard for paste-back
   // into source.md. Plain E is unbound; the cockpit replaces this entry with
   // its own export.
