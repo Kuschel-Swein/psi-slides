@@ -27318,8 +27318,10 @@ notesContent.addEventListener('input', () => {
   const entry = flatChunks[state.activeIdx];
   if (entry) {
     try { localStorage.setItem(noteOverrideKey(entry.id), notesContent.value); } catch (e) {}
-    // The override replaces this chunk's cards, marks and all.
+    // The override replaces this chunk's cards, marks and all, and a mark
+    // typed here moves the drift beside the clock at once.
     cueMarks = null;
+    cueSync();
   }
   autoSizeNotes();
 });
@@ -27730,6 +27732,10 @@ let cueLast = { idx: -1, pos: 0 };
 // the mark the talk is heading for and ahead against the one it has passed.
 // null when the deck carries no mark at all.
 let cueDriftMarks = null;
+// Whether the drift's own bindings below exist yet. The classic cockpit has
+// no cueRender to set the marks, so cueSync sets them itself - and a hook
+// that fired before driftEl was declared would run into its dead zone.
+let cueDriftReady = false;
 
 function cueOn() { return document.body.classList.contains('cue-cards'); }
 // The mirror goes where the current thumbnail would have been, and CSS hides
@@ -27954,6 +27960,12 @@ function cueSync() {
   if (!entry) return;
   cueBind(entry);
   if (cueOn()) cueRender();
+  else if (cueDriftReady) {
+    // The clock stands over the stage here and the drift beside it: the
+    // question "am I late" is not one only a speaker reading cards asks.
+    cueDriftMarks = cueDriftRefs(cuePosition(entry).consumed);
+    renderDrift();
+  }
 }
 viewHooks.consumeForward = () => {
   if (!cueOn() || overview) return false;
@@ -28065,7 +28077,7 @@ function cueDriftValue() {
 const driftEl = document.getElementById('psiINT-drift');
 function renderDrift() {
   const d = cueDriftValue();
-  if (d == null || !cueOn()) { driftEl.hidden = true; return; }
+  if (d == null) { driftEl.hidden = true; return; }
   const shown = Math.round(d / 10) * 10;
   driftEl.hidden = false;
   driftEl.textContent = (shown > 0 ? '+' : shown < 0 ? '\u2212' : '\u00b1') + PSI_CARDS.formatClock(Math.abs(shown));
@@ -28147,6 +28159,8 @@ function cueRender() {
 let cueModeSaved = null;
 try { cueModeSaved = localStorage.getItem(CUE_MODE_KEY); } catch (e) {}
 if (cueModeSaved === 'on') applyCueMode(true);
+cueDriftReady = true;
+cueSync();
 
 // Preview orientation (horizontal along bottom vs vertical along the
 // right edge). Persisted globally – user preference follows them

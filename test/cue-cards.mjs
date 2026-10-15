@@ -574,6 +574,12 @@ export async function run({ page, report }) {
      'Shift-N leaves the cards and lands in the notes textarea');
   ok(await spk.evaluate(() => document.getElementById('psiINT-clock').closest('#psiINT-stage-cell') !== null), 'the clock is back over the stage');
   await spk.keyboard.press('Escape');
+  // The drift went with the cards once: renderDrift answered nothing outside
+  // cue-card mode, and only cueRender set the marks it measures against.
+  await press('ArrowDown', 300);
+  const classicDrift = await spk.evaluate(() => ({ hidden: document.getElementById('psiINT-drift').hidden, text: document.getElementById('psiINT-drift').textContent }));
+  ok(!classicDrift.hidden && /^[+±−]\d+:\d\d$/.test(classicDrift.text), 'and the drift stands beside it in the classic cockpit too', JSON.stringify(classicDrift));
+  await press('ArrowUp', 300);
   await press('k', 300);
   ok(await spk.evaluate(() => document.body.classList.contains('cue-cards')), 'and K brings the cards back');
 
