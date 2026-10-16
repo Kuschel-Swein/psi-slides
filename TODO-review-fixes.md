@@ -1,0 +1,82 @@
+# TODO – review fixes
+
+Working list for the fixes chosen from `REVIEW-engine.md` (the ranking) and
+`review-engine/*.md` (file:line, scenario and fix per finding). Numbers in
+brackets are the review's.
+
+Work happens on the branch `review-fixes` in the worktree
+`../psi-slides-review-fixes`, one slice at a time, because every slice touches
+`build.js`. Each slice: fix, `lint.js` mirror where the change is a rule, a gate
+or a spec that fails before and passes after, `npm run gate`, the specs the
+slice touches, docs that describe the behaviour (CLAUDE.md, SECURITY.md,
+speaker.md, the skills, CHANGELOG.md), one commit. Tracked views are rebuilt
+once at the end, after the rebase onto `main`.
+
+Status: `[ ]` open · `[~]` in progress · `[x]` done · `[-]` dropped (with reason)
+
+## Slice A – parser: constructs that lose or leak content
+
+- [ ] **A1** [1.1] `<!-- … -->` around a chunk: headings and `---` inside an HTML comment are not structure; the comment survives intact. Build and lint.
+- [ ] **A2** [1.2] `> note:` inside `::: cards` / `::: rows` becomes a speaker note of the chunk, never a blockquote on the slide. Build and lint.
+- [ ] **A3** [7] Matrix gate: every container × every line type (`> note:`, `---`, `#`/`##`, `<!--`, unknown `:::`), build against lint. Catches the next A1/A2.
+
+## Slice B – the cockpit's notes field
+
+- [ ] **B1** [1.3] A click into the notes field must not take the clicker: navigation keys (PageDown/PageUp/arrows/space) leave the field and act; `B` and `.` do not type into it unless the author is really editing. No silent localStorage override from a stray key.
+- [ ] **B2** [1.4] Long notes: visible sign that more follows, and scrollable without focusing.
+- [ ] **B3** [5.2] `autoSizeNotes` without the write–read–write layout (one of three forced layouts per slide change in the cockpit).
+
+## Slice C – a cockpit with no projection
+
+- [ ] **C1** [1.6] “● LIVE” only when a projection answers (`hasLivePeer()`); otherwise a “no projection” state.
+- [ ] **C2** [1.6] A command to open the projection from the cockpit; reopening a closed projection re-attaches to *this* cockpit rather than opening a second one.
+- [ ] **C3** [1.6] `B` with no projection says so instead of “projection blanked”.
+
+## Slice D – the authoring loop under `--watch`
+
+- [ ] **D1** [2.1] A rebuild reload keeps chunk id and beat, not an index.
+- [ ] **D2** [2.2] A failed rebuild shows in the page: a banner in the cockpit, in the projection only when no cockpit is attached; it clears on the next good build.
+
+## Slice E – the command line
+
+- [ ] **E1** [2.3] Unknown flags refused with “did you mean”; one table of known flags.
+- [ ] **E2** [2.3] `-h` works; `--help` to stdout with exit 0; a folder as input resolves to its `source.md` or says so; `--port` out of range and a busy port as one plain sentence.
+
+## Slice F – `--present`: starting a talk without a wrapper script
+
+- [ ] **F1** Cockpit and projection URLs printed after the first build, not before.
+- [ ] **F2** A stable port per lecture (derived from its path) when `--port` is not given, so a restart keeps the origin and with it position, theme and annotations.
+- [ ] **F3** A tab left open across a restart reloads itself instead of retrying a dead socket forever.
+- [ ] **F4** `--open`: open the cockpit once the server answers (Chrome under `--prompter`).
+- [ ] **F5** No key → the prompter runs dry automatically and says so in one line, naming the fix.
+- [ ] **F6** The key from one user-owned file when the environment has none; never a `.env` from the lecture folder.
+- [ ] **F7** On Ctrl-C: where the prompter log is.
+- [ ] **F8** `--present` as the one flag that means `--watch --serve --open` (plus `--prompter` when configured), with a line on `Shift`-`S` and Chrome.
+
+## Slice G – the debrief in the engine
+
+- [ ] **G1** `--prompter-debrief [LOG]` (and `--transcript`): clock, time table against `@mm:ss` marks via `parseTimeMark`, what was said and held back, then the replay.
+- [ ] **G2** Log names carry seconds and a `-dry` suffix; the session record carries `dryRun`.
+
+## Slice H – security
+
+- [ ] **H1** [1.8] Desktop PDF export: `file:` confined to what the build may read.
+- [ ] **H2** [4.1] CLI PDF exports and `openAudienceProbe` (`--frames`, `--check-fit`, `--squint`): abort `file:` requests outside the asset root. SECURITY.md says a page opened from disk can show local files.
+- [ ] **H3** [4.2] `lint.js` output through a `consoleSafe` copy.
+- [ ] **H4** [4.3] `ws` lockfile bump within `^8.20.0`; js-yaml if gray-matter allows.
+- [ ] **H5** [4.4] A lecture folder that *is* the home folder or a disk top: assets only from `assets/`, with a warning. Build and lint.
+- [ ] **H6** [4.5] `--serve` headers: `frame-ancestors 'self'`, `nosniff`, `Cross-Origin-Resource-Policy: same-origin`.
+
+## Slice I – performance
+
+- [ ] **I1** [5.1] A zoom change on a slide change must not restyle every chunk.
+- [ ] **I2** [5.3] Comments stripped from the modules and CSS spliced into the live views.
+- [ ] **I3** [5.4] Raster transcodes concurrent and/or cached on disk by content hash; output bytes unchanged.
+- [ ] **I4** [5.6] The editor's asset table without the second copy of figure images; step frames as diffs.
+- [ ] **I5** [5.5] Browser suite: parallel specs, runtime signals instead of fixed sleeps.
+
+## Not in this round
+
+From the review, left for later: 1.5 (projection reload desync), 1.7 (single-beat tall chunk), 2.4–2.10 (author-loop diagnostics, asset watching, lint after build, `--review`), section 6 (polish).
+
+## Log
