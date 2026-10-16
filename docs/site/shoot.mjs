@@ -198,7 +198,11 @@ const SHOTS = [
       await p.fill('#psiINT-search-input', 'async');
       await p.waitForTimeout(500);
     } },
-  { name: 'cockpit', src: 'speaker.html', w: 1440, h: 900, dsf: 1.5, frag: true },
+  // `projection`: the cockpit is shot with its projection window open, the
+  // way a lecturer sees it. Alone it would say "○ no projection" in its
+  // footer, which is true of a cockpit nobody attached and wrong for a
+  // picture of one in use.
+  { name: 'cockpit', src: 'speaker.html', w: 1440, h: 900, dsf: 1.5, frag: true, projection: true },
   // The cockpit while a live demo runs, for the demo section on "In the
   // room". What the lecturer sees of a demo is not the picture - that is on
   // the wall, and the real window is on the laptop - but the badge and its
@@ -206,10 +210,10 @@ const SHOTS = [
   // where it stands (`rect`, in CSS px of the viewport): the speaker note
   // above it - which on this chunk happens to be a note about a demo - the
   // strip it stands on, and the footer. The state is set
-  // rather than captured: headless Chromium has no screen to pick from and
-  // this speaker.html has no projection window, and the cockpit draws
-  // nothing of the stream, only the badge, so a canvas stream stands in.
-  { name: 'demo', src: 'speaker.html', w: 1440, h: 900, dsf: 1.5, frag: true,
+  // rather than captured: headless Chromium has no screen to pick from, and
+  // the cockpit draws nothing of the stream, only the badge, so a canvas
+  // stream stands in. The projection window is open, as for 'cockpit'.
+  { name: 'demo', src: 'speaker.html', w: 1440, h: 900, dsf: 1.5, frag: true, projection: true,
     rect: { x: 0, y: 505, width: 1000, height: 395 },
     act: async (p) => {
       await p.evaluate(() => {
@@ -295,7 +299,7 @@ const SHOTS = [
   // need the rail's own model, and the count is asserted below instead.
   ...[0, 1, 2, 3].map((presses, i) => ({
     name: `cue-beat-${i}`, src: 'speaker.html', w: 1440, h: 900, dsf: 1.5,
-    lecture: 'spoken-talk', target: 'second-time', frag: true,
+    lecture: 'spoken-talk', target: 'second-time', frag: true, projection: true,
     act: (p) => cueFrame(p, presses),
   })),
   // ── four pages of slides.pdf ────────────────────────────────────────────
@@ -571,6 +575,23 @@ function buildRig(shots) {
       err.userFacing = true;
       throw err;
     }
+    if (s.projection) {
+      // A folder of its own holding the cockpit under its real name and the
+      // projection beside it, because the cockpit opens audience.html
+      // relative to itself, and the shots come from more than one lecture.
+      const sub = path.join(dir, s.name);
+      const proj = path.join(lecture, 'audience.html');
+      if (!fs.existsSync(proj)) {
+        const err = new Error(`${path.relative(ROOT, proj)} is missing.\n` +
+          `Build the lecture first: node build.js ${path.relative(ROOT, path.join(lecture, 'source.md'))}`);
+        err.userFacing = true;
+        throw err;
+      }
+      fs.mkdirSync(sub);
+      fs.writeFileSync(path.join(sub, s.src), fs.readFileSync(abs, 'utf8') + (s.rig || ''));
+      fs.copyFileSync(proj, path.join(sub, 'audience.html'));
+      continue;
+    }
     fs.writeFileSync(path.join(dir, s.name + '.html'),
                      fs.readFileSync(abs, 'utf8') + (s.rig || ''));
   }
@@ -578,6 +599,25 @@ function buildRig(shots) {
 }
 
 // ── driving the deck ─────────────────────────────────────────────────────
+// S in the cockpit opens the projection as a window of its own; the cockpit
+// stays the page that is photographed. Waits for the footer to say the
+// projection answers, and fails the shot rather than photograph a cockpit
+// that says it drives nothing.
+async function openProjection(ctx, page, name) {
+  const [proj] = await Promise.all([ctx.waitForEvent('page'), page.keyboard.press('s')]);
+  await proj.waitForLoadState('load');
+  try {
+    await page.waitForFunction(() => {
+      const b = document.getElementById('psiINT-freeze-btn');
+      return b && b.textContent.includes('live');
+    }, null, { timeout: 5000 });
+  } catch {
+    throw new Error(`${name}: the projection opened, but the cockpit never said it was live`);
+  }
+  await page.bringToFront();
+  await page.waitForTimeout(400);
+}
+
 const activeId = (p) => p.evaluate(() => {
   const a = document.querySelector('.chunk.active');
   return a ? a.id : null;
@@ -715,9 +755,11 @@ try {
     // The python-intro rows keep the ? circle they were composed with, so
     // LIVE_RIG, which hides that as well, is not theirs.
     if (s.quiet) await page.addInitScript(() => { window.PSI_NO_START_MENU = true; });
-    await page.goto(`http://127.0.0.1:${port}/${s.name}.html` + (s.frag ? `#${target}` : ''),
+    const at = s.projection ? `${s.name}/${s.src}` : `${s.name}.html`;
+    await page.goto(`http://127.0.0.1:${port}/${at}` + (s.frag ? `#${target}` : ''),
       { waitUntil: 'networkidle' });
     await page.waitForTimeout(1000);
+    if (s.projection) await openProjection(ctx, page, s.name);
     if (s.live) { await walkTo(page, target); await page.waitForTimeout(700); }
     // Checked before the state change: overview and search deliberately
     // cover or shrink the stage, so the assertion belongs to the landing.

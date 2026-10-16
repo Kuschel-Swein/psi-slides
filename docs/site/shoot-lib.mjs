@@ -24,8 +24,13 @@ export { findChrome };
 
 export function serve(dir) {
   const server = http.createServer((req, res) => {
-    const file = path.join(dir, path.basename(req.url.split('?')[0]));
-    if (!fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
+    // A path below the rig folder, so a shot can keep the cockpit and its
+    // projection side by side in a folder of its own; nothing above it.
+    let rel;
+    try { rel = decodeURIComponent(req.url.split(/[?#]/)[0]); } catch { rel = ''; }
+    const file = path.resolve(dir, '.' + path.posix.normalize('/' + rel));
+    if (!file.startsWith(path.resolve(dir) + path.sep) || !fs.existsSync(file)
+        || !fs.statSync(file).isFile()) { res.writeHead(404); res.end(); return; }
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     res.end(fs.readFileSync(file));
   });
