@@ -708,111 +708,33 @@ footer .paths b { color: var(--ink); font-weight: 500; }
 .psi-diagram {
   --dg-sans: var(--sans-font, var(--sans));
   --dg-mono: var(--mono-font, var(--mono));
-  /* the serif FAMILY, not the reading voice: --body-font is what the F
-     toggle rewrites, so naming it here made .serif and .hand follow the
-     reader's font choice and collapse onto the sans the diagram already
-     defaults to. Print was never affected - it defines no --body-font and
-     fell through to --serif. Parallel to --dg-sans / --dg-mono above. */
   --dg-serif: var(--serif-stack, var(--serif));
   display: block; overflow: visible;
-  /* Deliberately the same numbers as figure.figure-img svg. A diagram is a
-     figure, and figures in this project are sized in viewport space, not
-     em space: the drawing has a natural size (its viewBox in px, so the
-     unit option is also the nominal on-slide scale), max-width shrinks it
-     when it is wider, and the vh cap keeps a tall one from overflowing the
-     slide. Diverging here would have made diagrams the one figure kind that
-     responds to the zoom key, which reads as a bug rather than a feature. */
   max-width: 100%;
-  /* A little taller than figure.figure-img's 50vh. A photo shares the slide
-     with a caption and often arrives in portrait; a diagram is landscape and
-     is usually the whole point of the chunk, and at 50vh a wide one was
-     height-capped hard enough to leave a third of the measure empty beside
-     it.
-     Off --slide-h rather than off vh, for the reason every other slide-
-     internal size is: the cockpit lays the mirror out at the AUDIENCE window's
-     dimensions and then transforms it into its cell, so a raw vh there is the
-     cockpit window's and the same figure was capped at a different height in
-     the two windows. Print defines no --slide-h and falls back to the number
-     this rule has always had; it overrides the cap anyway (PRINT_CSS). */
-  /* --fig-cap is the tier's share of the slide height (FIG_CAP in build.js):
-     unset on an ordinary chunk, 0.79 on a picture slide, 0.72 on a stacked
-     divider. The fallback is the ordinary chunk's. */
   max-height: calc(var(--slide-h, 100vh) * var(--fig-cap, 0.62));
   height: auto;
 }
 @media print {
-  /* How tall a diagram may be on paper is not answered here. This block used
-     to say max-height: none, on the reasoning that a vh cap is a slide
-     proportion and a sheet of paper is not a slide - true, and it left the
-     document with no cap at all, so a portrait diagram resolved to the
-     measure times its ratio and came out taller than the page. The answer
-     now lives beside every other figure kind in PRINT_CSS, under a selector
-     specific enough to beat the cap above in both media. Do not re-add a
-     .psi-diagram max-height here without reading that rule. */
-  /* A diagram is one picture; splitting it across a page break makes it
-     two useless halves. */
   .figure-diagram { break-inside: avoid; page-break-inside: avoid; }
 }
 .psi-diagram .dg-el { transition: opacity 200ms ease; }
-/* Direct children of an element group, never descendants. A rect or a
-   circle deeper than that belongs to an embedded asset, and this rule would
-   paint it the canvas colour over the file's own answer - CSS beats a
-   presentation attribute, so a style-free line drawing came out white on
-   white. The tone rules below always used the child combinator; this one and
-   the text rule did not, which is why the two of them were the leak. */
 .psi-diagram .dg-el > rect, .psi-diagram .dg-el > circle, .psi-diagram .dg-el > .dg-shape {
   fill: var(--paper); stroke: var(--ink); --dg-sw: 1.4px; stroke-width: var(--dg-sw); rx: 4px;
 }
-/* A box whose outline is not a rectangle is a <path>, so every rule below
-   that paints a box has to name it too. They do it through :is(), which is
-   also why those selectors read shorter than they used to: the alternative
-   was a third copy of each one. The join is rounded so a chevron's nose is a
-   point rather than a miter spike. */
 .psi-diagram .dg-shape { stroke-linejoin: round; }
 .psi-diagram .dg-stroke { stroke: var(--ink); --dg-sw: 1.4px; stroke-width: var(--dg-sw); fill: none; stroke-linejoin: round; }
 .psi-diagram .dg-head { fill: var(--ink); stroke: none; }
-/* Same reason: a diagram's own labels live inside a .dg-lbl wrapper, and
-   type inside an embedded drawing is the drawing's business. */
 .psi-diagram .dg-lbl text { fill: var(--ink); font-family: var(--dg-sans); font-weight: 400; }
-/* .dg-mono sits on the <text> itself, so this rule is (0,2,0) while the
-   .dg-lbl text rule above it is (0,2,1) - the label rule won and .mono
-   resolved, emitted its class and changed nothing. Measured before the fix:
-   eight i's and eight W's in a .mono label came out 22.8px and 109.1px wide,
-   which is the sans. The family classes are now all written the same way,
-   matching on the wrapper and reaching the text, so they tie with the label
-   rule and win on source order like .serif and .hand always did. */
 .psi-diagram .mono text, .psi-diagram .dg-mono {
   font-family: var(--dg-mono);
-  /* A .mono label is a token – a header field, a flag, an arrow – so it
-     is spelled out for the same reason a listing is. Only the mono
-     channel: the sans and serif labels keep their fi and fl. */
   font-variant-ligatures: none;
 }
-/* inline *accent* / ~muted~ inside a label */
 .psi-diagram tspan.dg-em { fill: var(--emph); }
 .psi-diagram tspan.dg-mu { fill: var(--ink-soft); }
 .psi-diagram .dg-off { display: none; }
-
-/* containers are a frame around their members, never a filled panel */
-/* --rule is the hairline between two cells of a table; a container is a
-   trust boundary, a segment, a machine - it has to read as a statement.
-   Dashed at that weight it was barely visible on a shaded ground, which
-   is exactly where these are usually drawn. */
 .psi-diagram .dg-container > :is(rect, circle, .dg-shape) { fill: none; stroke: color-mix(in oklab, var(--ink) 42%, var(--dg-ground, var(--paper))); --dg-sw: 1.3px; stroke-width: var(--dg-sw); }
 .psi-diagram .dg-caption text { fill: var(--ink-soft); }
-
-/* braces have no fill and no head */
 .psi-diagram .dg-brace .dg-stroke { stroke: var(--rule); }
-
-/* ── tones ── four theme-safe fills, mixed from the page's own inks ── */
-/* Over --dg-ground, which is --paper wherever nobody says otherwise - every
-   document, every theme. The one thing that sets it is pitchblack in the
-   live views, where the paper is black and a mix over it would be a few per
-   cent above nothing: there the ground is the dark theme's own paper, so the
-   three tones are the colours they always were. The same holds for every
-   other mix against the paper in this sheet and in dgBarFillCss; .paper and
-   the label on a .tone-4 stay on --paper itself, because they mean the
-   canvas. */
 .psi-diagram .tone-1 > :is(rect, circle, .dg-shape) {
   fill: color-mix(in oklab, var(--emph) 13%, var(--dg-ground, var(--paper)));
   stroke: color-mix(in oklab, var(--emph) 60%, var(--ink));
@@ -826,107 +748,25 @@ footer .paths b { color: var(--ink); font-weight: 500; }
 .psi-diagram .tone-4 > :is(rect, circle, .dg-shape) {
   fill: var(--emph); stroke: var(--emph);
 }
-/* .clear is a see-through interior. .bare removes the *stroke*, so without
-   this there was no way to draw a frame you can read through – which is
-   what an outline over an image or another element wants. */
 .psi-diagram .clear > :is(rect, circle, .dg-shape) { fill: none; }
-/* The canvas colour, named. A box already defaults to it, but a box under a
-   tinted default block had no way back, and a free text could not have one at
-   all. A label with a ground is how it knocks out a line running behind it. */
 .psi-diagram .paper > :is(rect, circle, .dg-shape) { fill: var(--paper); }
-
 .psi-diagram .accent > :is(rect, circle, .dg-shape) { stroke: var(--emph); }
 .psi-diagram .accent .dg-stroke { stroke: var(--emph); }
 .psi-diagram .accent .dg-head { fill: var(--emph); }
 .psi-diagram .accent text { fill: var(--emph); }
-/* .muted and .dim answer different questions and were hard to tell apart,
-   because a lighter grey alone reads as "slightly faint" rather than as a
-   different kind of thing. .muted is scaffolding - an axis, a leader, a zone
-   outline - and scaffolding is drawn thinner as well as lighter. .dim is the
-   other axis entirely: full colour at a third of the strength, which is what
-   the dim step operation reaches for when a beat moves on.
-
-   A muted *line* is --ink-soft and a muted *word* is not, and that split is
-   the correction. --ink-soft is picked against the paper, and a caption is
-   very often standing on something else: measured at 1600x900 on the default
-   theme, --ink-soft type reads 3.44:1 on the paper, 2.76:1 on a .tone-1 area
-   and 2.11:1 on a .tone-3 one, against the 3:1 anything on a projector has
-   to clear. A line has no such floor - an axis is followed, not read - so it
-   keeps the token and the 1.05 weight that say scaffolding. The words are
-   mixed straight out of the two inks instead, dark enough to hold on the
-   three light tints and still visibly quieter than --ink.
-
-   Two grounds it cannot answer for, and both are the ground being wrong
-   rather than the type: a .tone-4 area is the accent at full strength, where
-   this mix reads worse than --ink-soft did and only the inverted label two
-   rules down is legible; and a dark theme's paper, where the mix follows
-   --ink and --paper and so inverts with them. */
 .psi-diagram .muted > :is(rect, circle, .dg-shape) { stroke: var(--ink-soft); --dg-sw: 1.05px; stroke-width: var(--dg-sw); }
 .psi-diagram .muted .dg-stroke { stroke: var(--ink-soft); --dg-sw: 1.05px; stroke-width: var(--dg-sw); }
 .psi-diagram .muted .dg-head { fill: var(--ink-soft); }
 .psi-diagram .muted text { fill: color-mix(in oklab, var(--ink) 60%, var(--dg-ground, var(--paper))); }
-
-/* .tone-4 inverts its own label, and that has to win over .accent text:
-   accent ink on an accent fill is invisible, legal, and would otherwise be
-   decided by which rule was written later. lint.js warns on the pair. */
 .psi-diagram .tone-4 text, .psi-diagram .tone-4 tspan { fill: var(--paper); }
-
-/* A free text element draws a ground only where the author gave it a tone.
-   The rect is always the same drawable; these two rules are what make "a
-   box defaults to paper, a text defaults to see-through" one mechanism rather
-   than two. No stroke either way – a bordered label is a box, and there is
-   a statement for that. */
 .psi-diagram .dg-text:not(.tone-1):not(.tone-2):not(.tone-3):not(.tone-4):not(.paper) > :is(rect, circle, .dg-shape) { fill: none; }
-
-/* An edge's label gets the same ground on the same terms: a fill class draws
-   it, no fill class draws nothing. No stroke - a bordered label on a line is
-   a box, and there is a statement for that - and no dash, which the .dashed
-   rule above would otherwise put around the ground of a dashed edge's label.
-   Written after the tone rules on purpose: they set a stroke at the same
-   specificity, so source order is what decides. */
-/* And no fill unless a tone asked for one. An SVG rect with no fill property
-   is black, and this one is emitted in every frame of any edge that is ever
-   given a tone - so without this rule an edge whose label gains a ground in
-   beat 3 draws a black slab across its own line in beats 1 and 2. Exactly the
-   rule the free text's ground already needs, for exactly the same reason. */
 .psi-diagram .dg-edge:not(.tone-1):not(.tone-2):not(.tone-3):not(.tone-4):not(.paper) > rect { fill: none; }
-
-/* The two stroke patterns, stated as multiples of the line they pattern
-   rather than as pixels. --dg-sw is set beside every stroke-width above, on
-   the same element and by the same selector, so a .thick outline gets a
-   longer dash instead of the same dash on a fatter line - which is what 6 4
-   was: 4.3 line-widths of ink and 2.9 of paper at the normal weight, and a
-   dashed box then drew the eye harder than the solid one beside it. It also
-   stumbled at the corners: on a 13px .round corner a 10px period puts one or
-   two dashes on the whole arc, so a gap landing on the apex reads as a
-   chipped box. 2.2 and 1.5 halve the period, which does not divide a
-   perimeter evenly either - nothing does, in general - but a small dash with
-   a small gap hides the seam instead of announcing it.
-   Butt caps, deliberately: a round cap adds half a line-width of ink at each
-   end and would put the dash back where it started. */
 .psi-diagram .dashed > :is(rect, circle, .dg-shape), .psi-diagram .dashed .dg-stroke {
   stroke-dasharray: calc(var(--dg-sw, 1.4px) * 2.2) calc(var(--dg-sw, 1.4px) * 1.5);
 }
-/* Dots, and they have to be round dots or the word means nothing: a zero-
-   length dash under a round cap draws a disc one line-width across, and the
-   gap is 2.5 of those. It used to be 1.5 3.5 with the round cap on top, which
-   is a 2.9px dash at the normal weight - a fine dashed line under another
-   name - and at .thick a 4.1px dash with 0.9px of paper between, so the
-   dotted box in the class catalogue was very nearly solid. */
 .psi-diagram .dotted > :is(rect, circle, .dg-shape), .psi-diagram .dotted .dg-stroke {
   stroke-dasharray: 0 calc(var(--dg-sw, 1.4px) * 2.5); stroke-linecap: round;
 }
-/* A muted dot is a plain dot in the muted ink, never a smaller one. .muted
-   thins a line to 1.05 so that scaffolding reads as scaffolding, and a dot
-   is one line-width across - so .dotted .muted drew discs of 1.9px at a
-   typical figure scale, anti-aliased below their own colour: the peak pixel
-   reached 2.56:1 on the light themes where a solid muted line reaches 2.76,
-   and a band across the line carried a quarter of a muted line's ink or
-   less on all seven themes. The floor is the plain weight, so the pattern
-   is exactly .dotted's and only the ink is quieter, and the gap is stated
-   against the floored width so the dots keep their 2.5 line-widths of
-   paper. max() rather than a fixed 1.4: a .thick or .emph line keeps the
-   2.6 it set. A plot's grid is this pair, written by the compiler. */
 .psi-diagram .muted.dotted > :is(rect, circle, .dg-shape), .psi-diagram .muted.dotted .dg-stroke {
   stroke-width: max(var(--dg-sw), 1.4px);
   stroke-dasharray: 0 calc(max(var(--dg-sw), 1.4px) * 2.5);
@@ -936,134 +776,35 @@ footer .paths b { color: var(--ink); font-weight: 500; }
 .psi-diagram .round > rect { rx: 13px; }
 .psi-diagram .sharp > rect { rx: 0; }
 .psi-diagram .bold text { font-weight: 600; }
-/* the upright serif, for a label that wants the reading voice rather than
-   the diagram's. .hand is the same family forced italic and accented, which
-   is the annotation voice and a different thing – until .serif existed the
-   family was reachable only through it. */
 .psi-diagram .serif text { font-family: var(--dg-serif); }
-/* no handwriting face is bundled, so the annotation voice is the serif in
-   italic – close enough to read as "written in beside the diagram", and it
-   costs no extra font payload. */
 .psi-diagram .hand text { font-family: var(--dg-serif); font-style: italic; fill: var(--emph); }
-
-/* .ghost and .dim deliberately do NOT set opacity on the group here.
-   Visibility and the two softening classes share one channel, and author CSS
-   beats a presentation attribute – so an element pinned at 0.45 by this
-   stylesheet could never be hidden, and its show step did nothing at all.
-   Both the emitter and the runtime resolve that channel once, in
-   dgOpacity().
-
-   What the two rules below touch is a *child* of the group, which is a
-   different thing and safe for the same reason: the alphas multiply, so a
-   hide still takes the whole element to zero. They exist because one alpha
-   over a whole group fades the words as hard as the box, and a word at 0.3
-   is not quiet but unreadable – 1.95:1 against its own fill on the paper,
-   1.88:1 standing on a .tone-3 area. dgOpacity() now returns the *ink*
-   number and these put the ground back where it was: 0.6 x 0.5 is the 0.3
-   that was there before, 0.75 x 0.6 the 0.45, so every existing figure's
-   outline, fill, stroke, arrowhead and picture are unmoved to the pixel and
-   only the type gains. The factors come from DG_SOFT_GROUND rather than
-   being typed here twice.
-
-   Type is what is deliberately NOT in the selector lists. Everything else a
-   softened element can draw is. */
 .psi-diagram .dim > :is(rect, circle, .dg-shape, image),
 .psi-diagram .dim .dg-stroke,
 .psi-diagram .dim .dg-head { opacity: 0.5000; }
 .psi-diagram .ghost > :is(rect, circle, .dg-shape, image),
 .psi-diagram .ghost .dg-stroke,
 .psi-diagram .ghost .dg-head { opacity: 0.6000; }
-/* emph / dim are what a step reaches for; both stay inside the palette */
 .psi-diagram .emph > :is(rect, circle, .dg-shape) { stroke: var(--emph); --dg-sw: 2.6px; stroke-width: var(--dg-sw); }
 .psi-diagram .emph .dg-stroke { stroke: var(--emph); --dg-sw: 2.6px; stroke-width: var(--dg-sw); }
 .psi-diagram .emph .dg-head { fill: var(--emph); }
-/* A chart's column: what it is filled with, and what emph does to it. A
-   column draws no outline, so paper would make it vanish and there is nothing
-   but its fill to emphasise; the rules come from DG_BAR_FILLS in
-   diagram-core, which is also what the linter reads when it says a column is
-   too pale for a theme - one table, so the warning is about the colour that
-   is drawn. The block sits after the box tones on purpose: a column's tone
-   rule is one class more specific and has to win. */
 .psi-diagram .dg-bar > rect { fill: color-mix(in oklab, var(--ink) 55%, var(--dg-ground, var(--paper))); }
 .psi-diagram .dg-bar.tone-1 > rect { fill: color-mix(in oklab, var(--emph) 70%, var(--dg-ground, var(--paper))); }
 .psi-diagram .dg-bar.tone-2 > rect { fill: color-mix(in oklab, var(--ink) 45%, var(--dg-ground, var(--paper))); }
 .psi-diagram .dg-bar.tone-3 > rect { fill: color-mix(in oklab, var(--ink) 68%, var(--dg-ground, var(--paper))); }
 .psi-diagram .dg-bar.emph > rect { fill: var(--emph); stroke: none; }
 .psi-diagram .dg-bar.tone-4.emph > rect { stroke: none; }
-/* Words are the third thing emphasis can act on, and leaving them out left the
-   emph verb on a text accepted and completely inert - the ground rule at the
-   foot of this stylesheet refuses to stroke a label's rect, deliberately and
-   for good reason, so on a text the two rules above have nothing to reach.
-   That is not a corner case: the per-message tag a sequence generates is
-   documented as the way to address one message, and it holds the arrow *and*
-   its number *and* its second line, so the commonest emphasis in a protocol
-   figure is a mixed set by construction. The .accent text rule two blocks up
-   is the same act on the same channel and was already written this way.
-   .tone-4 inverts its own label, and has to keep winning here exactly as it
-   does over .accent text; one class more in the selector settles it rather
-   than source order, which is the guard the stroke case below already uses.
-   (No backticks in here: this whole stylesheet is a template literal.) */
 .psi-diagram .emph text { fill: var(--emph); font-weight: 600; }
 .psi-diagram .tone-4.emph text, .psi-diagram .tone-4.emph tspan { fill: var(--paper); }
-/* .tone-4 fills with the accent, so an emphasis stroke in the accent lands
-   invisibly on it: emph on such a box resolved, set its width and changed
-   nothing on screen - the silent no-op again, arriving through the stylesheet
-   rather than through the grammar. Inverted the way .tone-4's own label
-   already is, and for the same reason. Higher specificity than the rule above,
-   so source order does not decide it. (No backticks in here: this whole
-   stylesheet is a template literal, and one would end it.) */
 .psi-diagram .tone-4.emph > :is(rect, circle, .dg-shape) { stroke: var(--ink); }
-/* emph acts in the prominence slot and .bare in the stroke-weight slot, so
-   neither may overwrite the other - and until this rule the emphasis stroke
-   two blocks up put the outline back on an element that had just taken it
-   off, at the same specificity and later in source order. On a table of type
-   on the paper (.bare .clear cells are the spelling for that) a lit row came
-   out as a row of red empty rectangles that the room reads as a form. So on
-   a .bare element emph emphasises the *ink* - the accent fill and the weight
-   the .emph text rule above already give a free text - and draws no outline.
-   That is the same correction DG_BAR_FILLS makes one channel along, where
-   emph on a column is a solid accent fill rather than the accent outline it
-   is on every other shape: emphasis has to act on whatever the element
-   actually draws. Three classes in the selector, and written after the
-   .tone-4.emph rule, so it wins where an element carries both. */
 .psi-diagram .bare.emph > :is(rect, circle, .dg-shape) { stroke: none; }
-
-/* A label's ground is never stroked, and this is where that has to be said.
-   It was written up with the two rules that create the ground, above the
-   tone rules that stroke - and .emph and .accent both set a stroke on the
-   same child selector at the very same specificity, so source order decided
-   it and they won. The result was a box drawn around a label the moment a step
-   emphasised it: on a sequence, where every message label now carries a
-   ground, emph @wa-msg-8 framed the words instead of thickening the arrow.
-   A bordered label is a box, and there is a statement for that. */
 .psi-diagram .dg-text > :is(rect, circle, .dg-shape) { stroke: none; }
 .psi-diagram .dg-edge > :is(rect, circle, .dg-shape) { stroke: none; }
-
-/* An edge label its own line runs through. The compiler decides it from the
-   routed geometry and writes dg-halo into the beat's class string; this is
-   what the word means. The offset that lifts a label off its line clears it
-   at the *midpoint*, and an elbow's two outer runs, a doubled-back via route
-   and a curve that comes back on itself are all somewhere else on the same
-   path - so a label can be correctly beside the line it labels and still have
-   another stretch of that same line drawn through the middle of it, which the
-   room reads as struck through.
-
-   paint-order and not a rect, because a rect is as wide as the whole run
-   where the crossing is one word long, and on a curve that erases the arc the
-   label belongs to. The stroke is the paper, so it knocks out the glyph
-   shapes and nothing else. Written after every rule that sets a text fill, so
-   a muted or accented label keeps its own colour and only gains the knockout.
-
-   3.2px against a 1.4 line: the stroke is centred on the glyph outline, so
-   half of it is inside the letters and the gap the line sees is about 1.6px
-   each side. Less and a 1.4 stroke still touches the serifs. */
 .psi-diagram .dg-halo text {
   paint-order: stroke fill;
   stroke: var(--paper);
   stroke-width: 3.2px;
   stroke-linejoin: round;
 }
-
 .dg-hint { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .psi-diagram .dg-el { transition: none; }
@@ -3672,32 +3413,11 @@ section > h3 + .versus { margin-top: 0; }
 const DG_LIST = [];
 const DG_REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const DG_DUR = 380;
-
-// The one text that draws the non-rectangular outlines, lifted straight out
-// of diagram-core.mjs rather than transcribed. The build emits the opening
-// beat with this function and the runtime redraws every later beat with it,
-// so the two cannot drift; a hand copy here would be a second vocabulary
-// nobody would think to keep in step.
-// Keyed by the outline alone; a drawable kind may carry a direction after a
-// colon (`chevron:up`), which dgShapeD reads and this lookup must not.
-// Interpolated from DG_SHAPE_CLASSES rather than spelled out – a fifth
-// outline added to the table would otherwise draw at build time and be
-// unknown to the very runtime that has to move it.
 const DG_SHAPES = {"hex":1,"diamond":1,"chevron":1,"wedge":1,"cross":1};
 function dgShapeD(shape, x, y, w, h) {
-  // The direction rides on the shape name (`chevron:up`), so the drawable
-  // still carries four numbers and the runtime still looks a shape up by one
-  // string. Rotating the finished points would have been the obvious move and
-  // is the wrong one: a w-by-h box turned ninety degrees is an h-by-w box, and
-  // the footprint the layout computed has to stay exactly what it was. Each
-  // direction is drawn inside the box it was given.
   const [kind, dir] = String(shape).split(':');
   const n = (v) => Math.round(v * 100) / 100;
   const poly = (pts) => pts.map((p, i) => (i ? 'L' : 'M') + n(p[0]) + ' ' + n(p[1])).join('') + 'Z';
-  // How far the point eats into the box along the axis it points down. Tied to
-  // the cross-axis so a row of boxes of one height gets one consistent nose,
-  // and capped by its own axis so a very short box degenerates to a triangle
-  // rather than folding through itself.
   const noseX = Math.min(h * 0.5, w * 0.42);
   const noseY = Math.min(w * 0.5, h * 0.42);
   const bevel = Math.min(h * 0.28, w * 0.34);
@@ -3716,16 +3436,11 @@ function dgShapeD(shape, x, y, w, h) {
     return poly([[x, y], [r - noseX, y], [r, my], [r - noseX, b], [x, b]]);
   }
   if (kind === 'cross') {
-    // A plus rather than a saltire. At marker size a saltire reads as two
-    // gridlines crossing; the arms of a plus stay on the axes the reader is
-    // already following.
     const t = Math.min(w, h) * 0.34, hx = t / 2;
     return poly([[mx - hx, y], [mx + hx, y], [mx + hx, my - hx], [r, my - hx],
       [r, my + hx], [mx + hx, my + hx], [mx + hx, b], [mx - hx, b],
       [mx - hx, my + hx], [x, my + hx], [x, my - hx], [mx - hx, my - hx]]);
   }
-  // wedge: a triangle standing on its point, which is how a size comparison
-  // reads – the area is the quantity and the tip is where it lands.
   if (dir === 'up') return poly([[x, b], [r, b], [mx, y]]);
   if (dir === 'left') return poly([[r, y], [r, b], [x, my]]);
   if (dir === 'right') return poly([[x, y], [x, b], [r, my]]);
@@ -3746,8 +3461,6 @@ function dgSplineD(v) {
   const r = (x) => Math.round(x * 100) / 100;
   let d = 'M' + r(px(0)) + ' ' + r(py(0));
   for (let i = 0; i < n - 1; i++) {
-    // The classic uniform Catmull-Rom to Bézier conversion: the control
-    // points sit a sixth of the way along the neighbours' chord.
     const c1x = px(i) + (px(i + 1) - px(i - 1)) / 6;
     const c1y = py(i) + (py(i + 1) - py(i - 1)) / 6;
     const c2x = px(i + 1) - (px(i + 2) - px(i)) / 6;
@@ -3757,36 +3470,17 @@ function dgSplineD(v) {
   }
   return d;
 }
-
-// A live view shows the box that holds every beat, and - on an ordinary
-// figure chunk - the canvas the slide reserves for a drawing, which is wider
-// and taller than the picture inside it. Neither is the box the documents
-// show, which is tight around the finished drawing.
-//
-// Two things move together when that box is swapped in, and only two: the
-// viewBox and the intrinsic height that keeps its proportion. Both are
-// ATTRIBUTES, which is the whole reason a runtime is involved - the three
-// numbers a stylesheet needs (--dg-live-type-w, --dg-live-ar,
-// --dg-live-ink-x) are emitted beside the print ones and picked with a
-// var() fallback, so nothing about a figure's SIZE waits for this function.
-// It used to set --dg-ink-x here and the first version left the property
-// behind in the editor's path, so a figure jumped sideways the moment it was
-// edited; a value the compiler writes into the markup cannot be left behind.
 function dgUseLiveViewBox(svg) {
   svg.setAttribute('viewBox', svg.dataset.liveViewbox);
   const w = Number(svg.getAttribute('width'));
   const r = Number(svg.dataset.liveRatio);
   if (w && r) svg.setAttribute('height', String(Math.round(w * r)));
 }
-
 function dgApplyVec(el, kind, v) {
   if (kind === 'rect') {
     el.setAttribute('x', v[0]); el.setAttribute('y', v[1]);
     el.setAttribute('width', Math.max(0, v[2])); el.setAttribute('height', Math.max(0, v[3]));
   } else if (DG_SHAPES[String(kind).split(':')[0]]) {
-    // Same four numbers a rect carries, joined into a different outline. That
-    // is the whole reason a hexagon costs nothing here: it tweens as a rect
-    // does, and only the last step – turning the vector into a path – differs.
     el.setAttribute('d', dgShapeD(kind, v[0], v[1], Math.max(0, v[2]), Math.max(0, v[3])));
   } else if (kind === 'circle') {
     el.setAttribute('cx', v[0]); el.setAttribute('cy', v[1]); el.setAttribute('r', Math.max(0, v[2]));
@@ -3797,29 +3491,18 @@ function dgApplyVec(el, kind, v) {
     for (let i = 0; i < v.length; i += 2) d += (i ? 'L' : 'M') + v[i] + ' ' + v[i + 1];
     el.setAttribute('d', d + (el.classList.contains('dg-head') ? 'Z' : ''));
   } else {
-    // A label. The optional third number is the turn, so a rotated one is
-    // carried, interpolated and applied by the very same machinery that moves
-    // an upright one - no class lookup at step time, no second code path.
     el.setAttribute('transform', 'translate(' + v[0] + ',' + v[1] + ')'
       + (v[2] ? ' rotate(' + v[2] + ')' : ''));
   }
 }
-
 function dgTargets(d, key) {
   if (d.cache[key]) return d.cache[key];
-  // Label wrappers are addressed by data-lab, not by id, because one
-  // element can carry several pre-rendered label variants. The attribute
-  // holds the full geometry key.
   const list = key.endsWith('--l')
     ? [...d.svg.querySelectorAll('[data-lab="' + key + '"]')]
     : [document.getElementById(d.data.p + key)].filter(Boolean);
   d.cache[key] = list;
   return list;
 }
-
-// Discrete state – visibility, classes, which label variant is on – lands
-// at once. Only geometry is worth interpolating; a class that fades is a
-// class that is wrong for half the transition.
 function dgApplyDiscrete(d, frame) {
   for (const id in frame.vis) {
     const g = document.getElementById(d.data.p + id);
@@ -3835,7 +3518,6 @@ function dgApplyDiscrete(d, frame) {
     }
   }
 }
-
 function dgApplyGeom(d, from, to, f) {
   const now = {};
   for (const key in to) {
@@ -3852,11 +3534,6 @@ function dgApplyGeom(d, from, to, f) {
   }
   return now;
 }
-
-// Paint a frame into a copy of the diagram that is not the live one - the
-// speaker's preview thumbnails. Resolves ids inside the given root rather
-// than through getElementById, because a clone carries duplicate ids and
-// the document would hand back the original every time.
 function dgRenderInto(root, d, step) {
   const frame = d.data.frames[Math.max(0, Math.min(d.data.n - 1, step))];
   if (!frame) return;
@@ -3880,17 +3557,12 @@ function dgRenderInto(root, d, step) {
     for (const el of els) dgApplyVec(el, d.data.kinds[key], frame.geom[key]);
   }
 }
-
 function dgStep(d, step, instant) {
   step = Math.max(0, Math.min(d.data.n - 1, step | 0));
   const frame = d.data.frames[step];
   const same = d.step === step && d.cur;
   d.step = step;
   dgApplyDiscrete(d, frame);
-  // The focus card is a *clone* of the figure, ids and all, so every
-  // getElementById above reaches the hidden original and the card - the only
-  // thing the room can see - never moves. Paint it the same way the
-  // speaker's preview thumbnails are painted, by resolving inside that root.
   dgMirrorIntoFocus(d, step);
   if (d.hint) {
     const next = d.data.names[step];
@@ -3909,17 +3581,6 @@ function dgStep(d, step, instant) {
   };
   d.raf = requestAnimationFrame(tick);
 }
-
-// What may stand in a figure that arrives as markup. An allow-list, because
-// the list of what can run inside an SVG is longer than anyone keeps up to
-// date: a blocklist of on* and javascript: let a <foreignObject> through, and
-// an <iframe srcdoc> inside it ran its script on the projection. The first
-// row is what the compiler and the build's image leaf emit (measured over
-// every figure in the repository and in the content decks); the rest is the
-// static drawing vocabulary a vector asset spliced into a figure may carry -
-// shapes, gradients, clips, masks, markers, filters. Nothing that runs,
-// fetches a document, animates or links: no script, foreignObject, iframe,
-// a, animate, animateMotion, animateTransform, set, feImage.
 const DG_SAFE_EL = new Set(('svg g path rect circle text tspan image title symbol use style '
   + 'defs desc line polyline polygon ellipse textPath linearGradient radialGradient stop '
   + 'pattern clipPath mask marker filter feBlend feColorMatrix feComponentTransfer '
@@ -3927,9 +3588,6 @@ const DG_SAFE_EL = new Set(('svg g path rect circle text tspan image title symbo
   + 'feDropShadow feFlood feFuncA feFuncB feFuncG feFuncR feGaussianBlur feMerge '
   + 'feMergeNode feMorphology feOffset fePointLight feSpecularLighting feSpotLight '
   + 'feTile feTurbulence').split(' '));
-// Attributes: geometry, presentation and structure. data-* and aria-* are
-// allowed by prefix; an on* handler is simply not on the list. The two href
-// spellings are judged by value in dgSafeHref.
 const DG_SAFE_ATTR = new Set(('id class style role transform xmlns xmlns:xlink xml:space '
   + 'x y x1 y1 x2 y2 cx cy r rx ry fx fy fr width height d points dx dy rotate '
   + 'textLength lengthAdjust startOffset method spacing side viewBox preserveAspectRatio '
@@ -3953,22 +3611,11 @@ const DG_SAFE_ATTR = new Set(('id class style role transform xmlns xmlns:xlink x
   + 'unicode-bidi flood-color flood-opacity lighting-color isolation mix-blend-mode '
   + 'pointer-events transform-origin').split(' '));
 function dgSafeHref(tag, v) {
-  // Browsers drop control characters and spaces from a URL before reading
-  // its scheme, so the test does too.
   const s = String(v || '').replace(/[\u0000-\u0020]/g, '');
   if (s.charAt(0) === '#') return tag !== 'image';
   if (tag !== 'image') return false;
-  // A picture: inlined, beside the page, or on the web. An <image> is drawn
-  // in a mode that runs no script, so the scheme is the whole question.
   return /^data:image\//i.test(s) || /^https?:\/\//i.test(s) || !/^[a-z][a-z0-9+.-]*:/i.test(s);
 }
-// A spliced asset's <style> is wrapped by the build in an @scope on the
-// asset's own root (inlineSvg), with @font-face hoisted beside it. That is
-// the shape kept: every top-level block that is an @scope on an svg inside
-// this figure, or an @font-face. Anything else - a bare rule, an @import, a
-// scope on some other element - would style the page around the figure,
-// and is dropped. Returns null when nothing had to go, so a stylesheet that
-// passes keeps its text byte for byte.
 function dgScopedCss(css, ids) {
   const n = css.length;
   const keep = [];
@@ -4035,20 +3682,7 @@ function dgCleanSvg(root) {
   }
   return true;
 }
-
-// Swap one diagram for a freshly compiled copy of itself – the DOM half of
-// an applied edit. Shared: the editor calls it after compiling in this
-// window, and the diagram-edit receiver in a view that ships no editor
-// (editor: speaker) calls it with the markup the cockpit sent along. One
-// text, or the two swap paths would drift.
 function dgSwapFigure(oldSvg, html) {
-  // Parsed into a template, never into a div: a detached div still belongs
-  // to this document, and an <img onerror> in it fires without ever being
-  // attached. A template's content has no window, so nothing in it loads or
-  // runs. Only two things are taken out of it, the drawing and its frames
-  // payload, and both are cut down to what a figure is made of before either
-  // reaches the page (dgCleanSvg). The payload is data - a script element
-  // that is not JSON is not one.
   const holder = document.createElement('template');
   holder.innerHTML = html;
   const next = holder.content.querySelector('svg.psi-diagram');
@@ -4064,10 +3698,6 @@ function dgSwapFigure(oldSvg, html) {
   if (next.dataset.liveViewbox) dgUseLiveViewBox(next);
   const figure = oldSvg.closest('.figure-diagram');
   oldSvg.replaceWith(next);
-  // The frames payload is what the step runtime reads. Replace it alongside
-  // the drawing, or a figure that just gained steps has none the runtime can
-  // see, while one that lost them keeps applying geometry from a picture
-  // that no longer exists.
   const oldPayload = figure ? figure.querySelector('script.psi-diagram-frames') : null;
   if (payload) {
     payload.dataset.for = next.id;
@@ -4091,14 +3721,8 @@ function dgSwapFigure(oldSvg, html) {
       dgStep(d, Math.min(d.step, data.n - 1), true);
     } catch (e) { d = null; }
   } else if (live) {
-    // No steps any more: nothing left to tween, and the static attributes
-    // the emitter wrote are already the finished picture.
     next.psiDiagram = null;
   }
-  // The focus card holds a clone, ids and all, and it is what the room is
-  // actually looking at while a figure is zoomed – the very state an edit
-  // is usually made in. dgMirrorIntoFocus can only repaint ids that
-  // survived the edit, so a structural change replaces the clone whole.
   const card = document.querySelector('#psiINT-figure-overlay .figure-focus-target');
   if (card) {
     const shown = card.querySelector('svg.psi-diagram');
@@ -4110,9 +3734,6 @@ function dgSwapFigure(oldSvg, html) {
   }
   return next;
 }
-
-// Repaint whatever diagram is currently zoomed into the focus card. Cheap and
-// unconditional: one querySelector when nothing is focused.
 function dgMirrorIntoFocus(d, step) {
   const card = document.querySelector('#psiINT-figure-overlay .figure-focus-target');
   if (!card) return;
@@ -4120,14 +3741,7 @@ function dgMirrorIntoFocus(d, step) {
   if (!svg || svg.id !== d.svg.id) return;
   dgRenderInto(svg, d, step);
 }
-
 function initDiagrams() {
-  // Every figure that has a live box, stepped or not. It used to be done
-  // inside the loop below, which walks the FRAMES payloads - so a figure with
-  // no steps never got one, and the day a still figure acquired a live box
-  // (the slide's canvas) it was laid out at the canvas's proportion and drawn
-  // at its own: the picture sat in the middle of the reserved rectangle at
-  // whatever scale the two aspect ratios happened to differ by.
   document.querySelectorAll('svg.psi-diagram[data-live-viewbox]')
     .forEach(svg => dgUseLiveViewBox(svg));
   document.querySelectorAll('script.psi-diagram-frames').forEach(sc => {
@@ -4135,11 +3749,6 @@ function initDiagrams() {
     if (!svg) return;
     let data;
     try { data = JSON.parse(sc.textContent); } catch (e) { return; }
-    // The static viewBox is the print one – tight around the finished
-    // picture. A live view has to hold every frame instead, or an element
-    // that walks in from outside is clipped for the whole of its journey.
-    // Swapped above rather than emitted, so a view with no JavaScript keeps
-    // the still it is going to show.
     const fig = svg.closest('.figure-diagram');
     const d = {
       svg, data, step: -1, raf: 0, cur: null, cache: {},
@@ -4147,13 +3756,6 @@ function initDiagrams() {
     };
     svg.psiDiagram = d;
     DG_LIST.push(d);
-    // A diagram inside an expansion consumes no beats – chunkBeats skips
-    // expansion bodies, or Space would advance a counter while the room
-    // sees nothing move – so nothing ever steps it. Rewinding it to its
-    // opening beat therefore left it half-drawn for good, while print, with
-    // no JavaScript at all, showed the finished picture. Where no beat can
-    // reach, the finished picture is the one to show. Same selector as
-    // chunkBeats, so the two answers cannot disagree.
     const beatless = svg.closest('.exp-body, .chunk-expansion');
     dgStep(d, beatless ? d.data.n - 1 : 0, true);
   });

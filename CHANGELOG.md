@@ -153,6 +153,18 @@ from building the same way is a major version.
 
 ### Changed
 
+- **A live view is about 0.9 MB lighter: the comments stay in the source.**
+  The runtime, the diagram compiler, the editor and the stylesheets carried
+  their documentation into every view – a third of a small deck's
+  `audience.html` (2.68 → 1.77 MB on `lectures/tutorial`, 2.15 → 1.24 MB on a
+  `--new` scaffold, 4.10 → 3.19 MB on a 77-slide course deck with 37
+  figures); the documents lose about 80 KB each. A tokenizer
+  (`strip-comments.mjs`, no dependencies) takes them out on the way into the
+  output and nothing else – every script still reads token for token as
+  before, every stylesheet rule as before. Third-party text (the QR encoder,
+  the Pulse client, KaTeX) ships as it came. `PSI_KEEP_COMMENTS=1` keeps
+  them, for reading a built page in the debugger.
+
 - **A slide change that moves the zoom no longer restyles the whole deck.**
   Under auto-fit nearly every slide change moves the zoom, and writing it on
   `<html>` restyled and relaid every slide inside the press: 45 ms on

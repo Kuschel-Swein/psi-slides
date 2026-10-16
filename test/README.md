@@ -4,7 +4,7 @@ Two suites, split by one question: **can this be decided without a browser?**
 
 - **`test/gates/`** – everything that can, which is no longer only the figure
   language and the `{…}` tail grammar: a gate is the right home for any
-  hand-mirrored list one file keeps of another's. Twenty-four gates, about three seconds,
+  hand-mirrored list one file keeps of another's. Twenty-five gates, about three seconds,
   no browser and no `npm install`. Run by `gates.yml` on push and pull
   request.
 - **`test/`** – the things that only break in a built page. 57 specs, about 2,080
@@ -111,11 +111,11 @@ npm run containers                  # every container × every line type, build 
 npm run cli                         # the command line: refusals, help, folders, ports
 ```
 
-## The gates: twenty-four contracts
+## The gates: twenty-five contracts
 
 `diagram-core.mjs`, `tails.mjs`, `cue-cards.mjs`, `souffleuse.mjs`, `pdf-core.mjs`,
-`commands.mjs` and `lint.js` are all zero-dependency, which is what makes this suite runnable
-with nothing installed. Twenty-four gates, about 1,800 assertions, about three
+`commands.mjs`, `strip-comments.mjs` and `lint.js` are all zero-dependency, which is what makes this suite runnable
+with nothing installed. Twenty-five gates, about 1,800 assertions, about three
 seconds.
 
 | gate | the contract |
@@ -144,6 +144,7 @@ seconds.
 | `skills` | the Claude skills the site offers for download, built by `docs/site/skills.mjs` (zero-dep): every `SKILL.md` within the published limits – `name` matching its folder, `description` up to 1,024 characters with nothing read as an XML tag – and written so a strict YAML parser reads it, which a plain value with `: ` in it is not; a packaged skill carries the note on what a repository path means, the address of each tracked path it names and the bundled `figure-design.md`; and the ZIP has the skill's folder at its top level, reads back CRC-checked and comes out as the same bytes twice. The site build repeats the frontmatter check through gray-matter on the bytes it writes |
 | `cli` | the command line's one flag table, `CLI_FLAGS` in build.js, read out of the file as text between its `cli-flags:` markers: well formed (no name twice, a known value kind, a `need` for every value read from the next word, a `why` for every flag refused without its partner, a mode that lists its company), every flag `main()` reads – `flags.has`, `values.get`, `argv.indexOf`, `pdfFlagValue`, the PDF export table, the `--*-only` and slide-option lists – has a row, because a flag without one is refused as unknown, every row is read, and CLAUDE.md's commands block names every flag that is not hidden, plus `-h`. The `--help` text is generated from the rows; that it lists them is `test/cli.mjs` |
 | `zoom-scope` | every CSS rule that reads `var(--zoom)` sits on a slide: its selector names `.chunk` / `.chunk-…`, or its subject is on `IN_CHUNK`, the reviewed list of classes the renderers only emit inside a chunk article. The auto-fit walk writes its trial zooms on the chunk it measures rather than on `<html>` (a change there restyles every slide, 90 ms a step on `lectures/diagrams`), which is exact only while nothing outside the chunk reads the property. The same holds for `showZoom`, which puts a new zoom inline on the slides that can be on screen and on `<html>` only at the catch-up: a reader outside a chunk would lag behind the slide. That the live slide shows the zoom at once, and that after the catch-up no chunk keeps a zoom of its own, is `test/auto-fit.mjs` |
+| `strip` | the comments `strip-comments.mjs` takes out of what a view is handed, and nothing else. Hand-written cases for each place a regex strip goes wrong – `//` and `/*` in a string, a template literal with `${…}` nested in `${…}`, a regex holding `/*`, division against regex after `)`, `if (…)`, `]`, `a++` and a keyword, a comment that is the only thing between two tokens, a comment spanning lines (automatic semicolon insertion), the load-bearing `/*!`, `@license` and `//# sourceURL=` – plus snippets evaluated before and after. Then the modules spliced in as text: each stripped one compiles, a second strip changes nothing, and every exported value that is not a function (the vocabulary tables, the command table, regexes by source) is equal before and after – a check on strings and regexes that does not go through the tokenizer. Last, build.js read as text: every runtime and stylesheet literal reaches a view only through `shipJs` / `shipCss`. During development the strip was held against acorn's tokenizer and Chromium's CSSOM over eight decks; neither is a dependency |
 
 **`frontmatter` is the one gate that is not about figures**, and it is here
 because the shape is the one this suite exists for: a closed list in one file

@@ -1,0 +1,187 @@
+/*
+ * The comments go on the way into a view, and nothing else does.
+ *
+ * strip-comments.mjs takes the comments out of the runtime, the compiler, the
+ * editor and the stylesheets as build.js splices them into a view – about
+ * 740 KB of every live view. A strip that takes one character too many ships
+ * a page that does something else, and nothing in a build says so; one that
+ * takes too few only costs bytes. So the gate holds the dangerous direction
+ * three ways:
+ *
+ *   1. hand-written cases, each a place a regex strip goes wrong: '//' in a
+ *      string, a template literal with ${…} nested in ${…}, a regex holding
+ *      /* or //, division against regex after ) ] } ++ and a keyword, a
+ *      comment that is the only thing between two tokens, automatic
+ *      semicolon insertion across a comment that spans lines, and the
+ *      comments that are load-bearing (/*!, @license, //# sourceURL=);
+ *   2. the real modules spliced in as text – each stripped one still
+ *      compiles, a second strip changes nothing, and every value it exports
+ *      that is not a function (the vocabulary tables, the command table, the
+ *      regexes by their source) is equal before and after, which is a check
+ *      on strings and regexes that does not go through the tokenizer;
+ *   3. build.js hands every runtime and stylesheet literal through shipJs /
+ *      shipCss, read as text: a renderer that splices one bare ships its
+ *      comments again, which is only bytes, but it is also how the two
+ *      paths come to differ.
+ *
+ * During development the strip was also checked against acorn's tokenizer
+ * (every script in every view of eight decks, token streams equal, no comment
+ * left) and the stylesheets against Chromium's CSSOM (32 views, every rule's
+ * cssText equal). Neither is a dependency, so neither is run here.
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { ROOT } from './harness.mjs';
+import { stripJs, stripCss } from '../../strip-comments.mjs';
+
+export const name = 'strip: comments out of what a view is handed, and nothing else';
+
+// The value a snippet evaluates to, by expression. Comparing values rather
+// than texts is the point: two texts that differ only where comments were
+// must compute the same thing.
+const value = (src) => vm.runInNewContext(src, {});
+
+const JS_CASES = [
+  // [what, source, expected output or null to only compare values]
+  ['a line comment goes, its line end stays', 'a = 1; // one\nb = 2;\n', 'a = 1;\nb = 2;\n'],
+  ['a line that is only a comment goes', 'a = 1;\n  // gone\nb = 2;\n', 'a = 1;\nb = 2;\n'],
+  ['a block comment goes', 'a = /* x */ 1;\n', 'a = 1;\n'],
+  ['indentation stays', 'if (a) {\n    b(); // c\n}\n', 'if (a) {\n    b();\n}\n'],
+  ['// in a string is a string', 'x = "http://a.b/c"; // d\n', 'x = "http://a.b/c";\n'],
+  ["/* in a string is a string", "x = '/* not */';\n", "x = '/* not */';\n"],
+  ['a comment between two words keeps them apart', 'return/**/x;\n', 'return x;\n'],
+  ['between + and + too', 'y = a+/**/+b;\n', 'y = a+ +b;\n'],
+  ['a comment spanning lines is a line end (ASI)', 'a = b/*\n*/c()\n', 'a = b\nc()\n'],
+  ['a regex holding /* and //', 'r = /[/*]\\/\\//g; // c\n', 'r = /[/*]\\/\\//g;\n'],
+  ['a regex with a slash in a class', 'r = /[/]x/; // c\n', 'r = /[/]x/;\n'],
+  ['after ) a slash divides', 'x = (a) / 2 / 1; // c\n', 'x = (a) / 2 / 1;\n'],
+  ['after if (…) a slash starts a regex', 'if (a) /x\\/\\/y/.test(s); // c\n', 'if (a) /x\\/\\/y/.test(s);\n'],
+  ['after a name a slash divides', 'x = a / b; y = c / d; // e\n', 'x = a / b; y = c / d;\n'],
+  ['after a++ a slash divides', 'x = a++ / 2; s = "//"; // c\n', 'x = a++ / 2; s = "//";\n'],
+  ['after return a slash starts a regex', 'function f(){ return /\\/\\//; } // c\n', 'function f(){ return /\\/\\//; }\n'],
+  ['x.return is a name, so a slash after it divides', 'x = o.return / 2; // c\n', 'x = o.return / 2;\n'],
+  ['a template literal keeps its text, comments and all',
+    'x = `a // b\n /* c */ ${1 /* d */ + 1}`; // e\n', 'x = `a // b\n /* c */ ${1 + 1}`;\n'],
+  ['a template keeps its blank lines and trailing blanks',
+    'x = `a  \n\n  b`;\n', 'x = `a  \n\n  b`;\n'],
+  ['templates nest inside substitutions',
+    'x = `${`${"}" /* a */}` + "//"}`; // b\n', 'x = `${`${"}" }` + "//"}`;\n'],
+  ['an object literal inside a substitution', 'x = `${ {a: 1}.a }/2`;\n', 'x = `${ {a: 1}.a }/2`;\n'],
+  ['/*! stays', '/*! keep */\nx = 1;\n', '/*! keep */\nx = 1;\n'],
+  ['@license stays', '/* @license MIT */ x = 1;\n', '/* @license MIT */ x = 1;\n'],
+  ['//# sourceURL= stays', 'x = 1;\n//# sourceURL=a.js\n', 'x = 1;\n//# sourceURL=a.js\n'],
+  ['a string escape that looks like a quote', "x = 'a\\'//b'; // c\n", "x = 'a\\'//b';\n"],
+  ['a division that would read as an unclosed regex', '}\nx = a\n/ 2 // c\n', '}\nx = a\n/ 2\n'],
+  ['blank lines between statements go', 'a = 1;\n\n\nb = 2;\n', 'a = 1;\nb = 2;\n'],
+];
+
+const VALUE_CASES = [
+  // Each one evaluated before and after; equal values or the strip changed code.
+  '(function(){ var a = 6 /* x */ / 2 /* y */ / 1; return a; })()',
+  '(function(){ var s = "//" + \'/*\' + `*/${"//"}`; return s; })()',
+  '(function(){ var r = /\\/\\*[^*]*\\*\\// ; return r.source; })()',
+  '(function(){ var a = 1\n/* no semicolon */\nvar b = 2; return a + b; })()',
+  '(function(){ var i = 4; var x = i++ / 2; return [x, i].join(); })()',
+  '(function(){ return `${ {"a": "}"}.a }`; })()',
+  '(function(){ var t = 0; if (t) /x/.test("x"); else t = 3; return t; })()',
+  '(function(){ return [1,2].map(x => x / 1 /* c */ ).join(); })()',
+];
+
+const CSS_CASES = [
+  ['a comment goes', 'a { color: red; /* x */ }\n', 'a { color: red; }\n'],
+  ['a line that is only a comment goes', '/* head */\na { b: c; }\n', 'a { b: c; }\n'],
+  ['/* in a string stays', 'a::after { content: "/* no */"; }\n', 'a::after { content: "/* no */"; }\n'],
+  ['/* in an unquoted url() stays', 'a { b: url(data:x/*y); }\n', 'a { b: url(data:x/*y); }\n'],
+  ['two words a comment kept apart stay apart', 'a/**/b { c: d; }\n', 'a/**/b { c: d; }\n'],
+  ['a comment beside a combinator leaves no space', '.a/* x */.b { c: d; }\n', '.a.b { c: d; }\n'],
+  ['/*! stays', '/*! keep */\na { b: c; }\n', '/*! keep */\na { b: c; }\n'],
+];
+
+// The modules spliced into a view as text, as build.js splices them: the
+// export keyword dropped, the names collected and returned.
+const MODULES = ['diagram-core.mjs', 'editor.mjs', 'commands.mjs', 'cue-cards.mjs'];
+const asScript = (text) => {
+  const names = [...text.matchAll(/^export\s+(?:function|const|let)\s+([A-Za-z_$][\w$]*)/gm)].map(m => m[1]);
+  return { names, body: text.replace(/^export\s+(function|const|let)\s/gm, '$1 ') };
+};
+// Every value an export holds that is not code, as text: tables, strings,
+// regexes (by source and flags), Sets and Maps by their entries.
+function shape(v, seen = new Set()) {
+  if (typeof v === 'function') return 'fn';
+  if (v instanceof RegExp) return `/${v.source}/${v.flags}`;
+  if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? String(v);
+  if (seen.has(v)) return 'cycle';
+  seen.add(v);
+  if (v instanceof Set) return `Set[${[...v].map(x => shape(x, seen)).join(',')}]`;
+  if (v instanceof Map) return `Map[${[...v].map(([k, x]) => shape(k, seen) + ':' + shape(x, seen)).join(',')}]`;
+  if (Array.isArray(v)) return `[${v.map(x => shape(x, seen)).join(',')}]`;
+  return `{${Object.keys(v).map(k => JSON.stringify(k) + ':' + shape(v[k], seen)).join(',')}}`;
+}
+
+export async function run({ report }) {
+  const { ok } = report;
+
+  for (const [what, src, want] of JS_CASES) {
+    let got;
+    try { got = stripJs(src); } catch (e) { got = 'threw: ' + e.message; }
+    ok(got === want, `js: ${what}`, `got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
+  }
+  for (const src of VALUE_CASES) {
+    let a, b;
+    try { a = value(src); b = value(stripJs(src)); } catch (e) { b = 'threw: ' + e.message; }
+    ok(a === b, `js value unchanged: ${src.slice(0, 60).replace(/\n/g, '⏎')}`, `${a} vs ${b}`);
+  }
+  for (const [what, src, want] of CSS_CASES) {
+    let got;
+    try { got = stripCss(src); } catch (e) { got = 'threw: ' + e.message; }
+    ok(got === want, `css: ${what}`, `got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
+  }
+
+  // ── the real modules ──
+  for (const file of MODULES) {
+    const text = fs.readFileSync(path.join(ROOT, file), 'utf8');
+    const stripped = stripJs(text);
+    ok(stripJs(stripped) === stripped, `${file}: a second strip changes nothing`);
+    ok(stripped.length < text.length * 0.9, `${file}: the strip took something (${text.length} → ${stripped.length} bytes)`);
+    const before = asScript(text), after = asScript(stripped);
+    ok(before.names.join() === after.names.join(), `${file}: the same exports are found after the strip (${before.names.length})`);
+    if (!before.names.length) {
+      // editor.mjs exports nothing and runs against a document: compiled only.
+      let err = '';
+      try { new vm.Script(after.body); } catch (e) { err = e.message; }
+      ok(!err, `${file}: the stripped text compiles`, err);
+      continue;
+    }
+    const load = (s) => vm.runInNewContext(`(function(){ ${s.body}\nreturn { ${s.names.join(', ')} }; })()`,
+      { window: {}, document: undefined, console });
+    let a = null, b = null;
+    try { a = load(before); } catch (e) { ok(false, `${file}: the original loads in a vm`, e.message); }
+    try { b = load(after); } catch (e) { ok(false, `${file}: the stripped text loads in a vm`, e.message); }
+    if (a && b) {
+      const diff = before.names.filter(k => shape(a[k]) !== shape(b[k]));
+      ok(diff.length === 0, `${file}: every exported table, string and regex is equal after the strip`, diff.join(', '));
+    }
+  }
+  const css = fs.readFileSync(path.join(ROOT, 'editor.css'), 'utf8');
+  const strippedCss = stripCss(css);
+  ok(stripCss(strippedCss) === strippedCss, 'editor.css: a second strip changes nothing');
+  ok(!/\/\*/.test(strippedCss), 'editor.css: no comment is left');
+
+  // ── build.js hands every runtime and stylesheet literal through ship* ──
+  const build = fs.readFileSync(path.join(ROOT, 'build.js'), 'utf8');
+  const LITERALS = ['AUDIENCE_JS', 'SPEAKER_JS', 'DIAGRAM_JS', 'PRINT_JS', 'PRINT_READER_JS',
+    'PRINT_HIGHLIGHTS_JS', 'AUDIENCE_CSS', 'SPEAKER_CSS', 'DIAGRAM_CSS', 'PRINT_CSS', 'PULSE_PRINT_CSS'];
+  for (const lit of LITERALS) {
+    const bare = [...build.matchAll(new RegExp('\\$\\{(?:[^}]*\\? )?' + lit + '\\b', 'g'))].length;
+    const shipped = [...build.matchAll(new RegExp('ship(?:Js|Css)\\(' + lit + '\\)', 'g'))].length;
+    ok(bare === 0 && shipped > 0, `${lit} reaches a view only through shipJs / shipCss`,
+      `${bare} bare, ${shipped} shipped`);
+  }
+  for (const fn of ['diagramCoreScript', 'cueCardsScript', 'commandsScript']) {
+    const body = build.slice(build.indexOf(`function ${fn}()`), build.indexOf(`function ${fn}()`) + 200);
+    ok(/shipJs\(fs\.readFileSync/.test(body), `${fn} strips the module it reads`);
+  }
+  ok(/editorJsCache \?\?= shipJs\(/.test(build), 'editor.mjs is stripped on its way in');
+  ok(/shipCss\(editorCss\(\)\)/.test(build), 'editor.css is stripped on its way in');
+}

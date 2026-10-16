@@ -9,7 +9,7 @@
  * two agree – in seconds, on a bare checkout, with no `npm install` and no
  * Chromium, because both of those files are zero-dependency by design.
  *
- * Twenty-four gates, and they prove twenty-four different things – which is
+ * Twenty-five gates, and they prove twenty-five different things – which is
  * worth stating because a green run summarised as one number hid a wrong
  * drawing behind a passing parse:
  *
@@ -89,6 +89,10 @@
  *   cli        the command line's one flag table: every flag main() reads
  *              has a row (a flag without one is refused as unknown), every
  *              row is read, and CLAUDE.md's commands block names them all
+ *   strip      the comments taken out of what a view is handed, and nothing
+ *              else: the cases a regex strip gets wrong, the spliced modules'
+ *              exported tables equal before and after, and every runtime
+ *              and stylesheet literal routed through the strip
  *
  * `test/run.mjs` is the other half and stays separate: it builds and serves
  * the lectures, launches a browser and takes about four minutes. Splitting
@@ -124,6 +128,7 @@ const GATES = [
   './skills.mjs',
   './zoom-scope.mjs',
   './cli.mjs',
+  './strip.mjs',
 ];
 
 const filter = process.argv.slice(2).filter(a => !a.startsWith('-'));

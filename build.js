@@ -58,6 +58,10 @@ import {
 // live views as window.PSI_COMMANDS, where the key map dispatches from it -
 // see the header of commands.mjs.
 import { helpGroups, COMMANDS, START_MENU, keyText } from './commands.mjs';
+// Comments out of the runtime and the stylesheets on their way into a view;
+// they stay in the source, where they are the documentation. A tokenizer,
+// zero dependencies - see the header of strip-comments.mjs.
+import { stripJs, stripCss } from './strip-comments.mjs';
 
 // KaTeX ships its stylesheet and fonts as plain files next to the module.
 // They are not importable as ESM, so resolve them the CommonJS way.
@@ -3592,9 +3596,35 @@ function dgAssetMarkup(node, id, geo, opts = {}) {
 //   `export` keyword rather than listed by hand. A hand-written list is a
 //   second copy of the module's interface, and it would go stale the first
 //   time someone exports something new.
+//
+// Every one of these texts, and the runtime and stylesheet literals the
+// renderers splice in (AUDIENCE_JS, AUDIENCE_CSS, PRINT_JS, ...), goes
+// through shipJs / shipCss on the way: their comments are the project's
+// documentation and about 740 KB of every live view, so they stay in the
+// source and out of the output (strip-comments.mjs). Third-party text - the
+// QR encoder, pulse-embed.js, KaTeX's sheet - ships as it came, licence
+// header and all. PSI_KEEP_COMMENTS=1 ships the comments too, for reading a
+// built page in the browser's debugger; nothing else about the output moves.
+// Memoised per text: the literals are the same string on every build of a
+// --watch run, so the strip is paid once per process.
+const KEEP_COMMENTS = process.env.PSI_KEEP_COMMENTS === '1';
+const shippedJs = new Map();
+const shippedCss = new Map();
+function shipJs(text) {
+  if (KEEP_COMMENTS || !text) return text;
+  let out = shippedJs.get(text);
+  if (out === undefined) shippedJs.set(text, out = stripJs(text));
+  return out;
+}
+function shipCss(text) {
+  if (KEEP_COMMENTS || !text) return text;
+  let out = shippedCss.get(text);
+  if (out === undefined) shippedCss.set(text, out = stripCss(text));
+  return out;
+}
 const DIAGRAM_CORE_PATH = new URL('./diagram-core.mjs', import.meta.url);
 function diagramCoreScript() {
-  const text = fs.readFileSync(DIAGRAM_CORE_PATH, 'utf8');
+  const text = shipJs(fs.readFileSync(DIAGRAM_CORE_PATH, 'utf8'));
   const names = [...text.matchAll(/^export\s+(?:function|const|let)\s+([A-Za-z_$][\w$]*)/gm)]
     .map(m => m[1]);
   const plain = text
@@ -3612,7 +3642,7 @@ const diagramCoreJs = () => (diagramCoreCache ??= diagramCoreScript());
 // regexes stay out of every template literal that way.
 const CUE_CARDS_PATH = new URL('./cue-cards.mjs', import.meta.url);
 function cueCardsScript() {
-  const text = fs.readFileSync(CUE_CARDS_PATH, 'utf8');
+  const text = shipJs(fs.readFileSync(CUE_CARDS_PATH, 'utf8'));
   const names = [...text.matchAll(/^export\s+(?:function|const|let)\s+([A-Za-z_$][\w$]*)/gm)]
     .map(m => m[1]);
   const plain = text
@@ -3629,7 +3659,7 @@ const cueCardsJs = () => (cueCardsCache ??= cueCardsScript());
 // views, in a script element of its own ahead of the runtime.
 const COMMANDS_PATH = new URL('./commands.mjs', import.meta.url);
 function commandsScript() {
-  const text = fs.readFileSync(COMMANDS_PATH, 'utf8');
+  const text = shipJs(fs.readFileSync(COMMANDS_PATH, 'utf8'));
   const names = [...text.matchAll(/^export\s+(?:function|const|let)\s+([A-Za-z_$][\w$]*)/gm)]
     .map(m => m[1]);
   const plain = text
@@ -3656,10 +3686,13 @@ const pulseEmbedJs = () => (pulseEmbedCache ??= fs.readFileSync(PULSE_EMBED_PATH
 const EDITOR_JS_PATH = new URL('./editor.mjs', import.meta.url);
 const EDITOR_CSS_PATH = new URL('./editor.css', import.meta.url);
 let editorJsCache = null;
-const editorJs = () => (editorJsCache ??= fs.readFileSync(EDITOR_JS_PATH, 'utf8')
+const editorJs = () => (editorJsCache ??= shipJs(fs.readFileSync(EDITOR_JS_PATH, 'utf8'))
   .replace(/<\/(script)/gi, '<\\/$1'));
 let editorCssCache = null;
 const editorCss = () => (editorCssCache ??= fs.readFileSync(EDITOR_CSS_PATH, 'utf8'));
+// What a view is handed; editorCss() stays the source, which the stylesheet
+// check reads.
+const editorCssShipped = () => shipCss(editorCss());
 
 // The QR encoder, for the live annotation. Build-time codes (qrSvg) stay as
 // they are - a lecture's links are known when it is built. The one address
@@ -9639,9 +9672,9 @@ function renderDocument(lecture, opts = {}) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(title)} – ${escapeHtml(titleSuffix)}</title>
 <style>
-${PRINT_CSS}
-${DIAGRAM_CSS}
-${hasPulse ? PULSE_PRINT_CSS : ''}</style>
+${shipCss(PRINT_CSS)}
+${shipCss(DIAGRAM_CSS)}
+${hasPulse ? shipCss(PULSE_PRINT_CSS) : ''}</style>
 ${fontStyleTag(opts.fontEmbed, 'print')}
 ${styleBlockCss(styleOpts)}
 ${codeTag(styleOpts, opts.codeSizing, 'print')}
@@ -9654,8 +9687,8 @@ ${anonHtml}
 ${toc}
 ${pulseTop}${namedHtml}
 ${pulseEnd}</main>
-<script>${PRINT_JS}</script>
-${pulseScript}${readerOn ? `${readerData}<script>${PRINT_READER_JS}${PRINT_HIGHLIGHTS_JS}</script>\n` : ''}</body>
+<script>${shipJs(PRINT_JS)}</script>
+${pulseScript}${readerOn ? `${readerData}<script>${shipJs(PRINT_READER_JS)}${shipJs(PRINT_HIGHLIGHTS_JS)}</script>\n` : ''}</body>
 </html>
 `;
 }
@@ -14630,7 +14663,7 @@ function editorPayload(frontmatter, columnsHtml, view, lectureKey) {
   // compiler, and only then does an edit have to travel as compiled markup
   // as well as source – see the diagram-edit receiver's fallback.
   const peerNeedsHtml = want === 'speaker' && view === 'speaker';
-  return `<style>\n${editorCss()}\n</style>\n`
+  return `<style>\n${editorCssShipped()}\n</style>\n`
     + `<script>\n${diagramCoreJs()}\n`
     + `window.PSI_DG_DEFAULTS = ${jsonForScript(base)};\n`
     + `window.PSI_DG_EDIT_HTML = ${peerNeedsHtml};\n`
@@ -14656,8 +14689,8 @@ function renderAudience(lecture, opts = {}) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(title)} – ${escapeHtml(S['title-lecture'])}</title>
 <style>
-${AUDIENCE_CSS}
-${DIAGRAM_CSS}
+${shipCss(AUDIENCE_CSS)}
+${shipCss(DIAGRAM_CSS)}
 </style>
 ${fontStyleTag(opts.fontEmbed, 'live')}
 ${styleBlockCss(styleOpts, S)}
@@ -14703,8 +14736,8 @@ ${commandsJs()}
 const LECTURE_TITLE = ${titleJson};
 const VIEW_DEFAULTS = ${jsonForScript(defaults)};
 const LINK_QR = ${jsonForScript(linkQrMap(columnsHtml))};
-${DIAGRAM_JS}
-${AUDIENCE_JS}
+${shipJs(DIAGRAM_JS)}
+${shipJs(AUDIENCE_JS)}
 </script>
 ${editorPayload(frontmatter, columnsHtml, 'audience', opts.readerKey || opts.lectureKey)}
 </body>
@@ -26367,9 +26400,9 @@ function renderSpeaker(lecture, opts = {}) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(title)} – ${escapeHtml(S['title-speaker'])}</title>
 <style>
-${AUDIENCE_CSS}
-${DIAGRAM_CSS}
-${SPEAKER_CSS}${souffleuseCss}
+${shipCss(AUDIENCE_CSS)}
+${shipCss(DIAGRAM_CSS)}
+${shipCss(SPEAKER_CSS)}${shipCss(souffleuseCss)}
 </style>
 ${styleBlockCss(styleOpts, S)}
 ${fontStyleTag(opts.fontEmbed, 'live')}
@@ -26456,9 +26489,9 @@ const LECTURE_TITLE = ${titleJson};
 const VIEW_DEFAULTS = ${jsonForScript(defaults)};
 const LINK_QR = ${jsonForScript(linkQrMap(columnsHtml))};
 const SOUFFLEUSE = ${souffleuseJs};
-${DIAGRAM_JS}
-${AUDIENCE_JS}
-${SPEAKER_JS}${souffleuseRuntime}
+${shipJs(DIAGRAM_JS)}
+${shipJs(AUDIENCE_JS)}
+${shipJs(SPEAKER_JS)}${shipJs(souffleuseRuntime)}
 </script>
 ${editorPayload(frontmatter, columnsHtml, 'speaker', opts.readerKey || opts.lectureKey)}
 </body>

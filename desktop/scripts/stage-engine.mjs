@@ -7,9 +7,11 @@
 // What is copied is what the engine reads about itself: build.js, the six
 // files it splices in at run time over import.meta.url (diagram-core.mjs,
 // cue-cards.mjs, commands.mjs, pulse-embed.js, editor.mjs, editor.css), the
-// three it only imports statically (tails.mjs, pdf-core.mjs for the PDF
-// option checks, and local-files.mjs, the rule for which local files a
-// lecture may reach – which the app's own PDF export loads as well) –
+// four it only imports statically (tails.mjs, pdf-core.mjs for the PDF
+// option checks, local-files.mjs, the rule for which local files a
+// lecture may reach – which the app's own PDF export loads as well – and
+// strip-comments.mjs, which takes the comments out of what a view is
+// handed) –
 // commands.mjs is both – and the package.json and lockfile that decide the dependency
 // tree. Everything else in the repository – the lectures, the tests, the site
 // – is not the engine.
@@ -42,6 +44,7 @@ const FILES = [
   'commands.mjs',
   'pdf-core.mjs',
   'local-files.mjs',
+  'strip-comments.mjs',
   'pulse-embed.js',
   'editor.mjs',
   'editor.css',
