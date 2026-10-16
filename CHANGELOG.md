@@ -141,6 +141,27 @@ from building the same way is a major version.
 
 ### Fixed
 
+- **A click into the cockpit's notes no longer takes the presenter remote.**
+  The key map stands back for a text field, so after one click into the notes
+  `PageDown` and `PageUp` did nothing, and `B` and `.` were typed into the note
+  and stored in the browser as an override of the source. The field is now
+  read-only until an edit is asked for – `Shift`-`N`, the `+ note` button, or
+  a double-click – and a single click does not focus it. During an edit,
+  `PageDown` and `PageUp` end it and turn the page; `Esc` ends it and does
+  nothing else. The `?` panel lists the double-click.
+- **A note longer than the cockpit's field says so, and scrolls without a
+  click.** The field was cut at three lines with no sign of more, and only
+  focus made it scrollable. It now scrolls with the wheel, unfocused, and its
+  last line fades while more is below. The automatic height is still one to
+  three lines – measured now without the field's padding, so a note of one or
+  two lines no longer stands about 28 px taller than its text – and the bar
+  above the notes sets a fixed one.
+- **A slide change in the cockpit forces fewer layouts.** Where the browser
+  has `field-sizing: content`, the stylesheet sizes the notes field; elsewhere
+  the measurement runs once per frame instead of inside the press. The
+  preview strip's smooth scroll to the current slot starts a frame later as
+  well. On a 39-chunk deck with a note on every slide, the forced layouts
+  inside a press went from 2.0 to 1.3.
 - **A slide commented out with `<!-- … -->` no longer takes every later slide
   with it.** A heading inside a multi-line HTML comment opened a chunk, the
   `-->` landed in the next slide's paragraph as `--&gt;`, and the browser's

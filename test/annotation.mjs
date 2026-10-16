@@ -217,7 +217,10 @@ export async function run({ page, report, press, walkTo }) {
         qr: !!document.querySelector('.chunk.annot-visible .annot-qr svg'),
       };
     });
-    ok(c.box.join() === c.stage.join(), 'in the cockpit the layer is the stage', JSON.stringify(c));
+    // Within a pixel, not equal after rounding: the chunk stands a fraction
+    // of a pixel off the scaled stage's edge, and which way that rounds
+    // depends on the stage's scale - which the notes pane's height decides.
+    ok(c.box.every((v, i) => Math.abs(v - c.stage[i]) <= 1), 'in the cockpit the layer is the stage', JSON.stringify(c));
     ok(c.qr, 'and the code is drawn there too');
     ok(cockpit.errors.length === 0, 'no page errors in the cockpit', cockpit.errors.join(' | '));
   } finally {

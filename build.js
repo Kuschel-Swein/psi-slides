@@ -24906,6 +24906,12 @@ function openCockpit() {
   ask.timer = setTimeout(() => ask.settle(false), COCKPIT_ASK_MS);
   try { w.postMessage({ type: 'whois', source: VIEW }, '*'); } catch (err) { ask.settle(false); }
 }
+// A field a key types into stands outside the key map. The cockpit's notes
+// field is the exception while it is read-only: it is focusable but not being
+// edited, and a presenter remote's keys have to reach the deck through it.
+function typingIn(el) {
+  return el.matches('input,textarea,select') && !el.matches('#psiINT-notes-content[readonly]');
+}
 document.addEventListener('keydown', (e) => {
   if (e.target.matches('.annot-textarea')) return;
   // Cmd-K / Ctrl-K: the ? panel as a command palette. Ahead of the guard
@@ -24913,7 +24919,7 @@ document.addEventListener('keydown', (e) => {
   // nowhere a person is typing - except the panel's own field, where it
   // closes the panel again.
   if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && (e.key === 'k' || e.key === 'K')) {
-    if (e.target !== helpSearch && (e.target.matches('input,textarea,select') || e.target.isContentEditable)) return;
+    if (e.target !== helpSearch && (typingIn(e.target) || e.target.isContentEditable)) return;
     openPalette();
     e.preventDefault();
     return;
@@ -24949,7 +24955,7 @@ document.addEventListener('keydown', (e) => {
     // typing is handled by the 'input' event listener on the input
     return;
   }
-  if (e.target.matches('input,textarea')) {
+  if (typingIn(e.target)) {
     if (e.key === 'Escape') { e.target.blur(); e.preventDefault(); }
     return;
   }
@@ -25965,7 +25971,7 @@ ${columnsHtml}
 </section>
 <aside id="psiINT-notes-pane">
   <div id="psiINT-notes-resizer" role="separator" aria-orientation="horizontal" title="Drag to resize notes · double-click to reset"></div>
-  <textarea id="psiINT-notes-content" rows="1" spellcheck="false" placeholder=""></textarea>
+  <textarea id="psiINT-notes-content" rows="1" spellcheck="false" placeholder="" readonly></textarea>
   <div id="psiINT-notes-zoom">
     <button id="psiINT-notes-zoom-out" type="button" title="Smaller notes text" aria-label="Smaller notes text">&minus;</button>
     <button id="psiINT-notes-zoom-in" type="button" title="Larger notes text" aria-label="Larger notes text">+</button>
@@ -26108,8 +26114,8 @@ body[data-view=speaker] #psiINT-stage-viewport {
   box-shadow: 0 0 0 1px var(--rule);
 }
 /* row 3: speaker notes below the slide. Collapses to 0 when empty
-   (body lacks .has-notes). Auto-sizes 1→3 lines based on content,
-   sans-serif for projector legibility at a glance. */
+   (body lacks .has-notes). Sizes itself 1→3 lines to its content and
+   scrolls beyond, sans-serif for projector legibility at a glance. */
 #psiINT-notes-pane {
   grid-row: 3;
   border-top: 1px solid var(--rule);
@@ -26184,11 +26190,11 @@ body[data-view=speaker].notes-sized {
 body[data-view=speaker].notes-sized #psiINT-notes-content {
   height: 100% !important;
   box-sizing: border-box;
-  overflow: auto;
 }
 #psiINT-notes-content {
   flex: 1;
   width: 100%;
+  min-width: 0;
   border: 0;
   outline: 0;
   resize: none;
@@ -26204,13 +26210,50 @@ body[data-view=speaker].notes-sized #psiINT-notes-content {
   line-height: 1.35;
   /* Box-sizing content so the textarea's scrollHeight calc is stable. */
   box-sizing: content-box;
-  overflow: hidden;
+  /* Scrolls with the wheel without focus: reading the rest of a long note
+     must not need a click into the field. */
+  overflow-x: hidden;
+  overflow-y: auto;
   height: 1.35em;
 }
-#psiINT-notes-content:focus {
+/* Where the browser can size a field to its content, the stylesheet does
+   what autoSizeNotes otherwise does in script – one line at least, three
+   at most – and a slide change costs no forced layout for it. A dragged
+   pane (notes-sized) keeps its fixed row. */
+@supports (field-sizing: content) {
+  body[data-view=speaker]:not(.notes-sized) #psiINT-notes-content {
+    field-sizing: content;
+    height: auto;
+    min-height: 1lh;
+    max-height: 3lh;
+  }
+}
+/* Read-only until an edit is asked for (Shift-N, a double-click, the
+   + note button): one click must not take a presenter remote's keys. */
+#psiINT-notes-content[readonly] { cursor: default; }
+#psiINT-notes-content:not([readonly]):focus {
   outline: 2px solid oklch(0.55 0.12 220);
   outline-offset: -2px;
-  overflow: auto; /* allow scroll while editing if overflowing 3 lines */
+}
+/* More below: the last visible line fades out while the note goes on
+   past the foot of the field, and comes back in full once it is scrolled
+   to the end. A scroll timeline needs no script and no layout: the
+   animation holds the fade over the whole scroll range bar its last 2px
+   and fills backwards only, so a field with nothing to scroll (an
+   inactive timeline) and one scrolled to the end both stand unmasked.
+   Where a browser has no scroll timeline, the script sets .notes-more. */
+#psiINT-notes-content.notes-more {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 0.6rem - 1.35em), rgb(0 0 0 / 0.18) 100%);
+}
+@keyframes psi-notes-more {
+  from, to { mask-image: linear-gradient(to bottom, #000 calc(100% - 0.6rem - 1.35em), rgb(0 0 0 / 0.18) 100%); }
+}
+@supports (animation-timeline: scroll()) {
+  #psiINT-notes-content {
+    animation: psi-notes-more linear backwards;
+    animation-timeline: scroll(self block);
+    animation-range: 0 calc(100% - 2px);
+  }
 }
 #psiINT-notes-content::placeholder {
   color: var(--ink-soft);
@@ -27446,39 +27489,59 @@ function loadNotesFor(id) {
 // beyond. Also toggles body.has-notes so CSS can collapse the row
 // entirely when there are no notes – reclaims vertical space for the
 // slide preview above. Line-height is 1.35 (matching CSS).
+//
+// Where the browser has field-sizing: content, the stylesheet sizes the
+// field and this only toggles a class: a slide change used to write the
+// height, read it back and write it again, one forced layout of a document
+// that holds every slide twice. Elsewhere the measurement runs once per
+// frame, after whatever else the press changed.
 const NOTES_MIN_LINES = 1;
 const NOTES_MAX_LINES = 3;
+const NOTES_CSS_SIZED = !!(window.CSS && CSS.supports && CSS.supports('field-sizing', 'content'));
+const NOTES_CSS_MORE = !!(window.CSS && CSS.supports && CSS.supports('animation-timeline', 'scroll()'));
+let notesFrame = 0;
+let notesTopFrame = 0;
 function autoSizeNotes() {
   const hasText = notesContent.value.trim().length > 0;
-  const sized = document.body.classList.contains('notes-sized');
-  // Pane stays open while the textarea is focused so the author can
+  // Pane stays open while the note is being edited so the author can
   // type into an empty pane (Shift-N / + note btn). On blur the class
   // drops back to hasText and an untouched pane collapses again.
   // A manually-sized pane stays open unconditionally.
-  const keepOpen = sized || hasText || document.activeElement === notesContent;
-  document.body.classList.toggle('has-notes', keepOpen);
-  if (sized) {
-    // Manually-sized: textarea fills the row; height comes from grid.
-    notesContent.style.height = '100%';
-    return;
-  }
-  if (!hasText) {
-    notesContent.style.height = '1.35em';
-    return;
-  }
-  // Measure content height by resetting then reading scrollHeight.
-  notesContent.style.height = '1.35em';
-  const lineHeight = 1.35 * parseFloat(getComputedStyle(notesContent).fontSize);
-  const max = lineHeight * NOTES_MAX_LINES;
-  const wanted = Math.min(notesContent.scrollHeight, max);
-  const min = lineHeight * NOTES_MIN_LINES;
-  notesContent.style.height = Math.max(min, wanted) + 'px';
+  const sized = document.body.classList.contains('notes-sized');
+  const editing = !notesContent.readOnly || document.activeElement === notesContent;
+  document.body.classList.toggle('has-notes', sized || hasText || editing);
+  if (NOTES_CSS_SIZED && NOTES_CSS_MORE) return;
+  if (!notesFrame) notesFrame = requestAnimationFrame(measureNotes);
 }
+function measureNotes() {
+  notesFrame = 0;
+  if (!NOTES_CSS_SIZED && !document.body.classList.contains('notes-sized')) {
+    // Measure content height by resetting then reading scrollHeight.
+    notesContent.style.height = '1.35em';
+    if (notesContent.value.trim()) {
+      const lineHeight = 1.35 * parseFloat(getComputedStyle(notesContent).fontSize);
+      const wanted = Math.min(notesContent.scrollHeight, lineHeight * NOTES_MAX_LINES);
+      notesContent.style.height = Math.max(lineHeight * NOTES_MIN_LINES, wanted) + 'px';
+    }
+  }
+  if (!NOTES_CSS_MORE) markNotesMore();
+}
+function markNotesMore() {
+  const t = notesContent;
+  t.classList.toggle('notes-more', t.scrollTop + t.clientHeight < t.scrollHeight - 1);
+}
+if (!NOTES_CSS_MORE) notesContent.addEventListener('scroll', markNotesMore, { passive: true });
 
 function populateNotesPane() {
   const entry = flatChunks[state.activeIdx];
   notesContent.value = entry ? loadNotesFor(entry.id) : '';
   autoSizeNotes();
+  // Back to the head of the new note a frame later: writing scrollTop inside
+  // the press would be a forced layout of its own.
+  if (!notesTopFrame) notesTopFrame = requestAnimationFrame(() => {
+    notesTopFrame = 0;
+    notesContent.scrollTop = 0;
+  });
 }
 notesContent.addEventListener('input', () => {
   const entry = flatChunks[state.activeIdx];
@@ -27491,11 +27554,38 @@ notesContent.addEventListener('input', () => {
   }
   autoSizeNotes();
 });
-notesContent.addEventListener('keydown', (e) => {
-  // Esc blurs back to the slide so global hotkeys (arrows, space) work again.
-  if (e.key === 'Escape') { notesContent.blur(); e.preventDefault(); }
+
+// The field is read-only until an edit is asked for. One click into it used
+// to take the presenter remote: the key map stands back for a text field, so
+// PageDown and PageUp did nothing, and B and . were typed into the note and
+// kept in localStorage as an override of the source. Now a single click does
+// not focus it at all (the wheel scrolls it without), and the key map's
+// text-field guard lets a read-only notes field through. An edit is Shift-N,
+// the + note button, or a double-click, which goes on to place the caret and
+// pick the word the way a double-click in any text does.
+function beginNotesEdit() { notesContent.readOnly = false; }
+notesContent.addEventListener('mousedown', (e) => {
+  if (!notesContent.readOnly) return;
+  if (e.detail >= 2) { beginNotesEdit(); return; }
+  e.preventDefault();
 });
-notesContent.addEventListener('blur', autoSizeNotes);
+notesContent.addEventListener('keydown', (e) => {
+  if (notesContent.readOnly) return;
+  // Esc ends the edit and is spent on that alone.
+  if (e.key === 'Escape') {
+    notesContent.blur(); e.preventDefault(); e.stopPropagation();
+    return;
+  }
+  // PageDown and PageUp are what a remote sends, and nobody edits a note
+  // with them: they end the edit and go on to the key map as a page turn.
+  if ((e.key === 'PageDown' || e.key === 'PageUp') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    notesContent.blur();
+  }
+});
+notesContent.addEventListener('blur', () => {
+  notesContent.readOnly = true;
+  autoSizeNotes();
+});
 
 // Shift-N entry point: force-show the notes row and focus the textarea
 // even when currently collapsed (body lacks .has-notes). The class
@@ -27505,6 +27595,7 @@ notesContent.addEventListener('blur', autoSizeNotes);
 function focusNotesPane() {
   if (cueOn()) applyCueMode(false);
   document.body.classList.add('has-notes');
+  beginNotesEdit();
   requestAnimationFrame(() => {
     notesContent.focus();
     autoSizeNotes();
@@ -27643,6 +27734,7 @@ function scrollPreviewToActive(smooth) {
 }
 
 // Light-touch "current" marker update without rebuilding the whole strip.
+let previewScrollFrame = 0;
 function markPreviewCurrent() {
   previewStrip.querySelectorAll('.preview-slot').forEach(el => {
     const idx = parseInt(el.dataset.idx, 10);
@@ -27654,7 +27746,13 @@ function markPreviewCurrent() {
     }
   });
   cuePlaceStage();
-  scrollPreviewToActive(true);
+  // A frame later rather than inside the press: the two rects it reads were
+  // one forced layout of a document that holds every slide twice, and the
+  // scroll is a smooth one, so a frame's delay is not seen.
+  if (!previewScrollFrame) previewScrollFrame = requestAnimationFrame(() => {
+    previewScrollFrame = 0;
+    scrollPreviewToActive(true);
+  });
 }
 
 // Pointer drag to pan. Tracks whether the pointer actually moved enough
@@ -28369,7 +28467,7 @@ function applyNotesHeight(px) {
   document.documentElement.style.setProperty('--notes-height', px + 'px');
   document.body.classList.add('notes-sized');
   document.body.classList.add('has-notes');
-  notesContent.style.height = '100%';
+  autoSizeNotes();
 }
 function clearNotesHeight() {
   document.documentElement.style.removeProperty('--notes-height');

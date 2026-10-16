@@ -7,7 +7,7 @@ Two suites, split by one question: **can this be decided without a browser?**
   hand-mirrored list one file keeps of another's. Twenty-three gates, about three seconds,
   no browser and no `npm install`. Run by `gates.yml` on push and pull
   request.
-- **`test/`** – the things that only break in a built page. 53 specs, about 1,650
+- **`test/`** – the things that only break in a built page. 54 specs, about 1,670
   assertions, about twelve minutes, one Chromium for the whole run. One of
   them, `souffleuse`, starts an engine of its own beside that browser – see
   below.
@@ -168,7 +168,7 @@ fixture is compiled *and* linted.
 ## The browser suite: four families
 
 **Navigation** – `nav`, `nav-cockpit`, `nav-goto`, `nav-fullscreen`, `help-search`, `palette`, `transition`, `pitchblack`,
-`cue-cards`, `clock`, `autoplay`, `live-sync`. The navigation
+`cue-cards`, `cockpit-notes`, `clock`, `autoplay`, `live-sync`. The navigation
 model, and what a slide change looks like under `transition: pan | cut | fade` –
 the one spec here that samples per animation frame rather than after a settle,
 because its whole subject is what happens between two states.
@@ -321,7 +321,7 @@ is fine. **They assert the property and never a coordinate.**
 context the bar is not in the document and a measurement of it reports no
 overlaps among no buttons.
 
-### The twenty-two specs that build a deck of their own
+### The twenty-three specs that build a deck of their own
 
 Four different reasons, and the last is the one to remember.
 
@@ -351,6 +351,13 @@ starting when the cockpit drives onto the figure, a figure step inside an
 overlay held to `from 2` waiting for the card, a figure focused from the
 cockpit surviving a knob there, leaving the overview through the landing
 path, and two presses inside one fade acting on the slide being arrived at.
+`cockpit-notes` is the presenter remote against the cockpit's notes field, on
+a fixture with a long note and a short one: a click into the field does not
+focus it, and with the field focused anyway `B`, `.`, `PageDown` and `PageUp`
+reach the projection and nothing is stored; a double-click and `Shift`-`N`
+still open an edit, `PageDown` mid-edit leaves it and turns the page, `Esc`
+leaves it and does nothing else; and the long note fades at its foot, scrolls
+with the wheel unfocused, and stands in full once scrolled to the end.
 
 **Because nothing that ships can reach the case** – `palette` (the start menu
 lives on the first slide and its first beat of a page load, so the spec needs
