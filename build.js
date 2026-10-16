@@ -14302,7 +14302,9 @@ const LINK_OVERLAY_HTML = `<div id="psiINT-link-overlay" class="hidden" role="di
 const DEMO_OVERLAY_HTML = `<div id="psiINT-demo-overlay" class="hidden" role="region" aria-label="Live demo">
   <video id="psiINT-demo-video" autoplay muted playsinline></video>
 </div>`;
-const DEMO_BADGE_HTML = `<div id="psiINT-demo-badge" class="cmd-badge hidden" role="status">DEMO<span> &middot; hit D to pause it</span></div>`;
+// The badge carries the two demo commands a hand does not find by key:
+// Shift-D is easy to forget mid-talk, and the end has no key at all.
+const DEMO_BADGE_HTML = `<div id="psiINT-demo-badge" class="cmd-badge hidden" role="status">DEMO<span> &middot; hit D to pause it</span><button type="button" class="demo-btn" data-demo="switch" title="pick another window (Shift-D)">other window</button><button type="button" class="demo-btn" data-demo="end" title="stop the capture">end</button></div>`;
 
 const SEARCH_PANEL_HTML = `<div id="psiINT-search-panel" class="hidden" role="dialog" aria-label="Search slides">
   <input id="psiINT-search-input" type="text" placeholder="search the lecture..." autocomplete="off" spellcheck="false" aria-controls="psiINT-search-results">
@@ -19080,6 +19082,22 @@ body:not([data-view=speaker]).blanked #psiINT-stage { opacity: 0; }
    sitting on top of the push indicator and the hotkey legend. */
 body[data-view=speaker] .cmd-badge { bottom: 3.4rem; }
 .cmd-badge span { font-weight: 400; opacity: 0.72; }
+/* The badge lets the pointer through; its two buttons take it back. */
+.cmd-badge .demo-btn {
+  pointer-events: auto;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid oklch(0.97 0 0 / 0.35);
+  border-radius: 3px;
+  padding: 0.02rem 0.45rem;
+  margin-left: 0.6rem;
+  cursor: pointer;
+}
+.cmd-badge .demo-btn + .demo-btn { margin-left: 0.3rem; }
+.cmd-badge .demo-btn:hover { border-color: oklch(0.97 0 0 / 0.8); }
+.cmd-badge .demo-btn[hidden] { display: none; }
 /* Both up at once: the demo is still running behind a blanked projection. */
 body.blanked #psiINT-demo-badge { bottom: 3.1rem; }
 body[data-view=speaker].blanked #psiINT-demo-badge { bottom: 5.3rem; }
@@ -21200,6 +21218,10 @@ function applyDemoBadge() {
   const word = demoBadge.firstChild, hint = demoBadge.querySelector('span');
   if (word && word.nodeType === 3) word.nodeValue = demoPaused ? 'DEMO PAUSED' : 'DEMO';
   if (hint) hint.textContent = demoPaused ? ' \u00b7 hit D to show it again' : ' \u00b7 hit D to pause it';
+  // Another window is picked where the capture is held; a window that only
+  // shows the demo has nothing to offer the button.
+  const sw = demoBadge.querySelector('[data-demo=switch]');
+  if (sw) sw.hidden = !demoStream;
 }
 
 function applyState() {
@@ -24154,6 +24176,19 @@ function endDemo() {
   if (demoOn()) stopDemo();
   else flashMode('no live demo running');
 }
+// The badge's buttons: the same two commands, for the hand that does not
+// remember Shift-D. A click is a gesture, so the picker opens from it as it
+// does from a key. Blurred after a pointer activation, as the link mark is,
+// or the focused button would take the lecturer's next Space.
+if (demoBadge) demoBadge.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('.demo-btn');
+  if (!b) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.detail > 0) b.blur();
+  if (b.dataset.demo === 'switch') switchDemo();
+  else endDemo();
+});
 // A peer that has just appeared – a cockpit opened with S, a projection
 // back from a reload – is handed the running demo again, paused or not.
 // Called on hello.

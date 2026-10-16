@@ -120,7 +120,9 @@ from building the same way is a major version.
   with no new handshake), and a cancelled picker keeps the old one. A demo
   ends when the shared window closes, with the browser's “stop sharing”, or
   with “End the live demo” in the `?` palette, a command with no key – a `D`
-  after that opens the picker again.
+  after that opens the picker again. The `DEMO` badge in the cockpit carries
+  both as buttons, `other window` and `end`, for a hand that does not
+  remember `Shift`-`D` mid-talk.
 
 - A figure that is alone on its slide may stand taller. A chunk whose heading
   is off the slide (`.bare`, or none) and whose on-screen body is one

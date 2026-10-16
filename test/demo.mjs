@@ -154,11 +154,17 @@ export async function run({ page, report, press }) {
   await aud.waitForTimeout(900);
   a = await showing(aud); s = await cockpit(spk);
   ok(a.overlay && a.width === 960 && !s.paused, 'Shift-D on a paused demo shows the new window', JSON.stringify(a));
+  await spk.click('#psiINT-demo-badge .demo-btn[data-demo=switch]');
+  await aud.waitForTimeout(900);
+  a = await showing(aud); s = await cockpit(spk);
+  const focusAfter = await spk.evaluate(() => document.activeElement && document.activeElement.className);
+  ok(a.overlay && a.width === 1120 && s.captures === 4, 'the badge\'s "other window" button does what Shift-D does', JSON.stringify(a));
+  ok(focusAfter !== 'demo-btn', 'and leaves no focus on itself for the next Space', String(focusAfter));
   await spk.evaluate(() => { navigator.mediaDevices.getDisplayMedia = () => Promise.reject(new DOMException('cancelled', 'NotAllowedError')); });
   await spk.keyboard.press('Shift+D');
   await aud.waitForTimeout(500);
   a = await showing(aud); s = await cockpit(spk);
-  ok(a.overlay && a.width === 960 && s.stream && /kept/.test(s.toast), 'a cancelled picker keeps the window already shared', JSON.stringify(s));
+  ok(a.overlay && a.width === 1120 && s.stream && /kept/.test(s.toast), 'a cancelled picker keeps the window already shared', JSON.stringify(s));
 
   // ── the shared window closes: the demo ends, and D asks again ──
   await stubCapture(spk);
@@ -186,7 +192,10 @@ export async function run({ page, report, press }) {
   await aud.waitForTimeout(1300);
   s = await cockpit(spk); a = await showing(aud);
   ok(s.captures === 1 && s.stream && a.overlay, 'D while the picker is open is ignored, not a second capture', JSON.stringify(s));
-  await spk.evaluate(() => runCommand('demo-end'));
+  await spk.click('#psiINT-demo-badge .demo-btn[data-demo=end]');
+  await aud.waitForTimeout(500);
+  s = await cockpit(spk); a = await showing(aud);
+  ok(!a.overlay && !s.stream && !s.badge, 'the badge\'s "end" button ends the demo on both screens', JSON.stringify(s));
   await aud.waitForTimeout(400);
   await spk.close();
 
