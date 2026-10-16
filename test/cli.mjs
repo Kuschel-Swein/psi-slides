@@ -101,7 +101,7 @@ await refused([src, '--check-fit', '--viewport', 'big'], /--viewport takes WIDTH
   'a viewport is checked before the build it would measure');
 
 // ── an option without the flag that reads it ─────────────────────────
-await refused([src, '--port', '8080'], /^Error: --port without --serve\.\n.*\n {2}node build\.js <source\.md> --serve --port 8080/,
+await refused([src, '--port', '8080'], /^Error: --port without --serve or --present\.\n.*\n {2}node build\.js <source\.md> --serve --port 8080/,
   '--port without --serve');
 await refused([src, '--viewport', '1600x900'], /^Error: --viewport without --check-fit, --squint or --frames\./,
   '--viewport alone');

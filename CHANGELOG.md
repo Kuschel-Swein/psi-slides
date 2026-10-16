@@ -9,6 +9,32 @@ from building the same way is a major version.
 
 ### Added
 
+- **`--present` starts a talk in one flag.** It means `--watch --serve
+  --open`, plus `--prompter` when the lecture has a `prompter:` block or the
+  line names `--prompter`, `--prompter-dry-run` or `--prompter-model`; a key
+  on the machine alone starts no prompter. `--port` still names the port.
+  Beside a `--*-only` flag, `--check-fit`, `--squint`, `--frames` or a PDF
+  flag it is refused, because each of those builds one view or exits. The
+  addresses come after the first build – cockpit, projection, document, the
+  document with notes – with one line saying the prompter needs Chrome and
+  that `Shift`-`S` in the cockpit switches it on. This is what the content
+  repository's `rehearse.sh` did, and most of what its `Start.command` did.
+
+- **`--open` opens the cockpit** once it is built and served: in Google
+  Chrome under `--prompter` (its speech recognition is the prompter's ear),
+  in the default browser otherwise; with `--watch` alone, as a file. A
+  browser that does not start costs one line saying what to open by hand,
+  never the run.
+
+- **The prompter's key can live in a file of its own**:
+  `~/.config/psi-slides/openrouter.key` (under `$XDG_CONFIG_HOME` when that is
+  set), holding the key alone or an `OPENROUTER_API_KEY=…` line. It is read
+  only when the environment has no `OPENROUTER_API_KEY`, refused – as ssh
+  refuses a private key – when another account owns it or may read it, and
+  nothing else in it is read: not `OPENROUTER_BASE_URL`, and no `.env`
+  anywhere, least of all one beside a lecture someone sent. The start says
+  where the key came from.
+
 - **The cockpit's clock can be moved without being restarted, and set to
   the planned start.** A talk planned for 14:20 that begins at 14:25 is five
   minutes behind every `@mm:ss` mark on its cue cards from the first word,
@@ -110,6 +136,29 @@ from building the same way is a major version.
   write them.
 
 ### Changed
+
+- **A lecture is served on a port of its own.** Without `--port`, `--serve`
+  takes a port derived from where the lecture's `source.md` is (41000–44999),
+  and the watch socket one at the same offset (45000–48999), where both were
+  a free port per run. A restart is therefore the same address, and the
+  browser keeps what it stores per address: the slide, the theme and live
+  annotations not yet exported, all of which a restart used to lose. A port
+  that is taken – the same lecture in another terminal, or another program –
+  moves to the next free of the next ten, and the start says so. A tab left
+  open across a restart reloads itself onto the new build, once; it used to
+  retry a closed port every half second for as long as it stayed open, and
+  now retries every half second to five.
+
+- **No key under `--prompter` is a dry run, not a prompter that is off.**
+  The start says so in one line and names the file the key goes in. A key
+  that is not printable ASCII, or a key file that is refused, is the same
+  dry run with its reason. `--prompter-dry-run` stays the way to ask for one.
+  A key the endpoint refuses, or five failures in a row, still switch it off.
+
+- Under `--watch --serve` the addresses are printed after the first build,
+  cockpit first. On a fresh folder none used to be printed at all, and a
+  second run listed the files of the first. The prompter's start is shorter,
+  and Ctrl-C names this run's log and prompt file in one line.
 
 - **`build.js` refuses a flag it does not know, and names the nearest one.**
   `--wacth`, `--serv`, `--check-fitt` and `--check-fit=true` used to build

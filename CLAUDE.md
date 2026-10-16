@@ -14,6 +14,18 @@ Status: released, 2.0.0, one maintainer. **From 1.0.0 the source format is the i
 # install deps (required once, also before running lectures from sibling content repos)
 npm install
 
+# give or rehearse a talk: --watch --serve --open in one, plus --prompter when
+# the lecture has a `prompter:` block or the line names --prompter,
+# --prompter-dry-run or --prompter-model (a key on the machine alone does not
+# start one). The addresses are printed after the first build, cockpit first,
+# with one line on Chrome and Shift-S when the prompter runs; --open then
+# opens the cockpit (Chrome under --prompter; PSI_OPEN=print says what it
+# would open instead, which is how test/present.mjs asks). Refused beside a
+# --*-only flag, --check-fit/--squint/--frames and the PDF flags. Ctrl-C under
+# the prompter names this run's log and prompt file in one line.
+node build.js <source.md> --present
+node build.js <source.md> --present --prompter-dry-run --port 8080
+
 # build all four views next to source.md (or name the folder that holds it)
 node build.js lectures/tutorial/source.md
 node build.js lectures/tutorial
@@ -129,12 +141,19 @@ node build.js <source.md> --integrate-annotations
 # serve the built lecture over http on loopback. Everything works from
 # file:// except third-party embeds: a file:// page has the origin `null`
 # and YouTube's player refuses it (Error 153). Serve, and it plays.
-# A --port outside 0-65535, or one already in use, is refused in one
-# sentence before anything is built (assertPortFree); the watch socket
-# takes a free port of its own and cannot collide.
+# Without --port the port is the lecture's own (lecturePorts: a hash of
+# source.md's real path into 41000-44999; the watch socket's into
+# 45000-48999 at the same offset), so a restart is the same origin and keeps
+# localStorage – position, theme, unexported annotations. Taken, the next
+# free of the next ten is used and the start says so. A page of an earlier
+# run hears the new run's id on connect (`run`) and reloads itself, once per
+# run; its retry backs off from 0.5 to 5 s. A --port outside 0-65535, or one
+# already in use, is refused in one sentence before anything is built
+# (assertPortFree). --open opens the cockpit once it is built.
 node build.js <source.md> --serve                 # build once, then serve
-node build.js <source.md> --serve --port 8080     # fixed port (default: free one)
+node build.js <source.md> --serve --port 8080     # fixed port (default: the lecture's own)
 node build.js <source.md> --watch --serve         # live reload over http
+node build.js <source.md> --watch --serve --open  # …and open the cockpit
 
 # a PDF slide deck – one page per presentation state, printed from the
 # audience view by a headless Chromium. The fallback for a room where the
@@ -190,8 +209,12 @@ node build.js <source.md> --slides-pdf --print-pdf --print-notes-pdf   # one bro
 # room, a sidecar in Node sends the transcript plus the deck (speaker notes
 # included) to one model through OpenRouter, and at most twelve words come
 # back onto a strip in speaker.html - usually nothing. Shift-S in the cockpit
-# is the switch. OPENROUTER_API_KEY is required; without it the sidecar
-# starts disabled and only logs what it heard. OPENROUTER_BASE_URL points it
+# is the switch. The key is OPENROUTER_API_KEY, or when the environment has
+# none ~/.config/psi-slides/openrouter.key ($XDG_CONFIG_HOME if set; the key
+# alone or OPENROUTER_API_KEY=…, refused unless it is the user's own and mode
+# 600, nothing else read from it, and never a .env – resolvePrompterKey).
+# Without a usable key the run is a dry run and says so in one line naming
+# the file. OPENROUTER_BASE_URL points it
 # at another OpenAI-compatible endpoint (and is how the spec's fake is
 # reached). Cockpit-local throughout: no field of the sync snapshot moves and
 # the projection learns nothing of it. Chrome only (Web Speech). One log per
@@ -202,8 +225,8 @@ node build.js <source.md> --slides-pdf --print-pdf --print-notes-pdf   # one bro
 # repository's .gitignore covers both and nothing else, so a lecture living
 # in a content repo of its own needs the two patterns in that repo's
 # .gitignore; the sidecar prints the path and says so on start.
-# --prompter-model and --prompter-dry-run without --prompter are usage
-# errors, like --prompter without --watch: on their own they would build an
+# --prompter-model and --prompter-dry-run without --prompter (or --present)
+# are usage errors, like --prompter without --watch: on their own they would build an
 # ordinary deck and say nothing. For the same reason a pre-rename
 # --souffleuse* flag is refused with its new name rather than ignored.
 # Vocabulary, protocol and failure modes: the `psi-slides-prompter` skill.
@@ -440,7 +463,7 @@ document's pagination. The plan and its decisions per stage are in
 
 **`souffleuse.mjs` is the fourth zero-dep module, and the one that never reaches a page** (`pdf-core.mjs`, the fifth, reaches one only as functions a driver hands to the browser). The other three (`diagram-core.mjs`, `tails.mjs`, `cue-cards.mjs`) are spliced into an output as text because one text has to run in Node *and* in the browser. The live prompter's pure half runs in Node alone – the deck payload, the system prefix, the tick message, the answer parser, the drift arithmetic and the restraint policy – and `build.js` imports it **dynamically, inside `createSouffleuse`**, so a build without `--prompter` never reads the file and nothing here has to survive a template literal. It is kept zero-import and zero-Node-API anyway, for the reason the gates are fast: `test/gates/souffleuse.mjs` decides every row of the policy – twelve words, one hint at a time, the cool-downs, the opening quiet – in milliseconds, without a key, a socket or a microphone, and restraint is the one requirement no rehearsal can show you. `notesToCards` is injected rather than imported (`deckPayload(lecture, {notesToCards})`), the way `createDiagramCompiler({…})` takes its Node leaves. **The desktop app is untouched in v1** – `desktop/scripts/stage-engine.mjs`'s file list is unchanged, because the packaged app has no network entitlement and never passes the flag. If it ever grows the feature, three things move in one commit: `souffleuse.mjs` onto that list, a reducer arm for the `prompter` `--events` type in `desktop/main/builder.js`, and the entitlement plus a rewrite of the three published sentences promising that nothing leaves the machine.
 
-**The sidecar is one socket and nothing else.** `createSouffleuse` (section `// ── souffleuse (--prompter) ──`) holds the deck, the cockpit's clock and the transcript, calls one model when there is an occasion, and whispers back; the cockpit reaches it over the **existing** nonce-guarded watch socket, so the `souffleuse-*` family rides the same `<type>-result` pairing a patch does. One direction is new – the server may speak first, through `psiWatch.on(type, fn)`, the listener map consulted *after* the pairing, never instead of it. Hints and the prompter's cards are cockpit-local exactly like the cue cards: not one field of `snapshot()` moves, so a full `applyRemoteState` cannot drag them across and the projection stays ignorant. The key is read from `OPENROUTER_API_KEY` in Node and stays there – `test/souffleuse.mjs` asserts that a built `speaker.html` never contains the string `OPENROUTER`, an assertion that has already caught a *comment* inside `SPEAKER_JS` quoting a badge text. `--prompter` without `--watch` is a usage error, because that socket is the only channel there is, and `--prompter-model` without `--prompter` is one too. **The cockpit's half is `SOUFFLEUSE_CSS` and `SOUFFLEUSE_JS`, two literals spliced into `speaker.html` only under the flag** – into the *same* `<style>` and `<script>` the cockpit's own CSS and JS are in, because the runtime lives in `SPEAKER_JS`'s lexical scope. They used to be part of those two constants, which put 36 KB of prompter into every cockpit ever built; what an ordinary `speaker.html` still carries is one `const SOUFFLEUSE = null`, the `souffleuseCues` Map the cue rail is drawn from, the `viewHooks.escapePrompter` default the projection has as well, and a `prompter` entry in the command table with no run function behind it, so `Shift`-`S` is spent on nothing.
+**The sidecar is one socket and nothing else.** `createSouffleuse` (section `// ── souffleuse (--prompter) ──`) holds the deck, the cockpit's clock and the transcript, calls one model when there is an occasion, and whispers back; the cockpit reaches it over the **existing** nonce-guarded watch socket, so the `souffleuse-*` family rides the same `<type>-result` pairing a patch does. One direction is new – the server may speak first, through `psiWatch.on(type, fn)`, the listener map consulted *after* the pairing, never instead of it. Hints and the prompter's cards are cockpit-local exactly like the cue cards: not one field of `snapshot()` moves, so a full `applyRemoteState` cannot drag them across and the projection stays ignorant. The key is read in Node (`resolvePrompterKey`: `OPENROUTER_API_KEY`, else the user's own key file) and stays there – `test/souffleuse.mjs` asserts that a built `speaker.html` never contains the string `OPENROUTER`, an assertion that has already caught a *comment* inside `SPEAKER_JS` quoting a badge text. `--prompter` without `--watch` is a usage error, because that socket is the only channel there is, and `--prompter-model` without `--prompter` is one too. **The cockpit's half is `SOUFFLEUSE_CSS` and `SOUFFLEUSE_JS`, two literals spliced into `speaker.html` only under the flag** – into the *same* `<style>` and `<script>` the cockpit's own CSS and JS are in, because the runtime lives in `SPEAKER_JS`'s lexical scope. They used to be part of those two constants, which put 36 KB of prompter into every cockpit ever built; what an ordinary `speaker.html` still carries is one `const SOUFFLEUSE = null`, the `souffleuseCues` Map the cue rail is drawn from, the `viewHooks.escapePrompter` default the projection has as well, and a `prompter` entry in the command table with no run function behind it, so `Shift`-`S` is spent on nothing.
 
 **`commands.mjs` is the sixth zero-dep module, and the one place a key is bound.** One entry per row of the `?` panel: a *command* has `keys` and is dispatched – **`keys: []` is a command with no key**, run from the palette alone, with `NO_KEY` and no `kbd` in its row (`isCommand`, `hasKey`; `pitchblack` is the first, and the gate's `NO_KEY_COMMANDS` is the reviewed list) – a *doc row* has none (a mouse gesture, or a key answered by a guard before the lookup – the overview board, the search field, a focused figure, the editor). `helpGroups` lists a view's commands first, section by section, and every doc row (and `?` itself) after them as a muted reference, so the palette's arrows, which walk the runnable rows, never pass over one they cannot select; there is no shared row any more (`Shift`-`C F A L` is four lines). `renderHelpOverlay` renders its rows through `helpGroups(view, {editor, prompter})`; the same text is spliced into both live views as `window.PSI_COMMANDS`, the `cue-cards.mjs` treatment, and the keydown listener in `AUDIENCE_JS` ends in `commandFor(keyMap(VIEW), e)` → `COMMAND_RUN[id](e)`. Each run function is the body of the `case` it replaced; `SPEAKER_JS` and `SOUFFLEUSE_JS` add the cockpit's commands by assigning into `COMMAND_RUN`, the way they set `viewHooks`. **The listener's head stays code** – text fields (`typingIn`, which lets the cockpit's notes field through while it is read-only, so a stray click into it cannot take a presenter remote), the panel's and the search's own keys, the link mark, any Cmd/Ctrl/Alt chord, the go-to prompt, the overview board's arrows – because those are rules about *where* a key is pressed, not about what a command is; so does the editor's `E` and everything under `dgeKeydown`, a modal that runs in capture ahead of the map. **A shifted press with no binding of its own falls back to the plain key**, which is what the switch's `case 'b': case 'B':` meant: `Shift`-`B` blanks, and `?` and `#`, which arrive with Shift held, reach their commands. The module asserts at load that no key is bound twice in one view; the `commands` gate holds a fixture of every press the switch answered, a run function for every command a view answers, and a row for every key – see `test/README.md`. **The `?` panel is also the command palette in both views**: `Cmd`/`Ctrl`-`K` is answered at the listener's head, ahead of the chord guard, and a row `runsFromPanel` allows runs through `runCommand(id)` – `COMMAND_RUN[id]` with an event shaped like its first key, never a second code path. With text in the field the panel shows a ranked list instead (`paletteScore`), in which a row that lists several commands is one runnable line per command. The same helper runs the projection's start menu (`START_MENU`, `renderStartMenu`, audience only, opening by itself only before the talk starts and folding to a `›` beside the `?` circle that opens it again; probes set `window.PSI_NO_START_MENU`).
 
@@ -631,7 +654,11 @@ browser, on loopback**, so they carry rules of their own (`runServe`,
   and is never accepted where the nonce is asked for). Every other socket
   hears the bare string `build-failed`, also on connect while the last build
   is broken. **The documents' `reloadScript` is `receiveOnly` with no listen
-  key**: no nonce, no `psiWatch`, nothing sent.
+  key**: no nonce, no `psiWatch`, nothing sent. Every socket is also told
+  `{type: 'run', id}` on connect once the run has built – a per-run id that
+  is not a secret, because all it can make a page do is reload itself, and a
+  page of another run does (`watchRunJs`, once per run). That and the
+  lecture's own port are how a tab left open across a restart comes back.
 - **The page side of a watch build lives in `reloadScript` and ships nowhere
   else**: the failed-build banner (`WATCH_BANNER_CSS` / `WATCH_BANNER_JS`,
   `#psiINT-build-failed`, text only through `textContent`; shown in the

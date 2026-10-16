@@ -15,6 +15,10 @@
  * puts a banner in the cockpit – in the projection only while no cockpit
  * answers – which the next good build's reload takes away.
  *
+ * And a restart of the watcher under open windows: the reload socket is on
+ * the lecture's own port, so the windows of the first run reach the second,
+ * hear that it is another run and reload onto its build, once each.
+ *
  * A fixture deck and an engine of its own, from file://, which is how an
  * author runs --watch.
  */
@@ -123,7 +127,7 @@ export async function run({ page, report }) {
   const src = path.join(dir, 'source.md');
   let body = HEAD + ONE + TWO + THREE;
   fs.writeFileSync(src, body);
-  const eng = startWatch(src);
+  let eng = startWatch(src);
   const ctx = await page.context().browser().newContext({ viewport: { width: 1280, height: 800 } });
   const errors = [];
   const watch = (p, who) => p.on('pageerror', e => errors.push(who + ': ' + e));
@@ -246,6 +250,30 @@ export async function run({ page, report }) {
     await settle(aud, 1500);
     const ga = await where(aud), gs = await where(spk);
     ok(ga.id === gs.id && ga.n === 5, 'a deleted chunk: both windows land on one slide of the new deck', JSON.stringify([ga, gs]));
+
+    // ── 7. the watcher restarted under open windows ──
+    // The reload socket is on the lecture's own port, so the windows of the
+    // first run find the second where the first was; it tells them it is
+    // another run, and each reloads onto the new build – once.
+    const before = await where(aud);
+    let loadsA = 0, loadsS = 0;
+    aud.on('load', () => { loadsA++; });
+    spk.on('load', () => { loadsS++; });
+    const gone = new Promise(res => eng.child.once('exit', res));
+    eng.child.kill('SIGTERM');
+    await gone;
+    await aud.waitForTimeout(800);
+    const reloaded = [aud, spk].map(p => p.waitForEvent('load', { timeout: 20000 }).then(() => true, () => false));
+    eng = startWatch(src);
+    ok(!!(await eng.next('watching')), 'a second run of the watcher starts');
+    ok((await Promise.all(reloaded)).every(Boolean), 'both windows of the first run reload themselves');
+    await settle(aud, 1500);
+    await aud.waitForTimeout(3000);
+    ok(loadsA === 1 && loadsS === 1, 'once each, not in a loop', `${loadsA} ${loadsS}`);
+    const after = await where(aud);
+    ok(after.id === before.id && after.n === before.n, 'on the slide they were on', JSON.stringify([before, after]));
+    ok(await until(spk, () => document.getElementById('psiINT-freeze-btn').textContent === '● live'),
+      'and the cockpit finds its projection again');
   } finally {
     await ctx.close();
     try { eng.child.kill('SIGTERM'); } catch {}

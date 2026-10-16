@@ -124,10 +124,12 @@
    <div>
     <p><strong>Internet und einen OpenRouter-Schlüssel.</strong> Das Modell
     wird über openrouter.ai erreicht. Den API-Schlüssel legt man in einem
-    OpenRouter-Konto an, über das auch die Anfragen bezahlt werden, und setzt
-    ihn vor dem Start in die Umgebungsvariable <code>OPENROUTER_API_KEY</code>.
-    Ohne Schlüssel fragt der Prompter kein Modell und schreibt nur ins
-    Protokoll, was er hört.</p>
+    OpenRouter-Konto an, über das auch die Anfragen bezahlt werden, und legt
+    ihn in die Datei <code>~/.config/psi-slides/openrouter.key</code>, die nur
+    man selbst lesen darf, oder in die Umgebungsvariable
+    <code>OPENROUTER_API_KEY</code>. Ohne Schlüssel läuft der Prompter als
+    Probe: Er fragt kein Modell und schreibt nur ins Protokoll, was er
+    hört.</p>
    </div>
    <div>
     <p><strong>Geld.</strong> Eine Keynote samt allen Proben und Testläufen
@@ -162,11 +164,12 @@
 <span class="t-dir">prompter:</span>
   <span class="t-dir">cooldown:</span> 60
 
-<span class="t-cmt"># der Vortrag, mit OPENROUTER_API_KEY in der Umgebung</span>
-<span class="t-cmd">node</span> <span class="t-path">build.js</span> <span class="t-path">lectures/my-lecture/source.md</span> <span class="t-flag">--watch --prompter</span>
+<span class="t-cmt"># der Vortrag: neu gebaut, ausgeliefert, das Cockpit in Chrome offen</span>
+<span class="t-cmt"># und der Prompter an, wegen des prompter:-Blocks oben</span>
+<span class="t-cmd">node</span> <span class="t-path">build.js</span> <span class="t-path">lectures/my-lecture/source.md</span> <span class="t-flag">--present</span>
 
 <span class="t-cmt"># eine Probe: nichts geht an das Modell, kein Schlüssel nötig</span>
-<span class="t-cmd">node</span> <span class="t-path">build.js</span> <span class="t-path">lectures/my-lecture/source.md</span> <span class="t-flag">--watch --prompter --prompter-dry-run</span></code></pre>
+<span class="t-cmd">node</span> <span class="t-path">build.js</span> <span class="t-path">lectures/my-lecture/source.md</span> <span class="t-flag">--present --prompter-dry-run</span></code></pre>
   </div>
  </div>
 </section>

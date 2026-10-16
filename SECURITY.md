@@ -183,7 +183,9 @@ the PDF is made.
 
 ## The tools that keep running on your computer during a talk
 
-**`--watch` and `--serve` listen on your own computer only** (127.0.0.1).
+**`--watch` and `--serve` listen on your own computer only** (127.0.0.1),
+on ports derived from where the lecture is, so a restart has the same
+address.
 `--serve` delivers the lecture to your browser over http. It answers only a
 request addressed to `localhost`, `127.0.0.1` or `[::1]` on its own port, and
 only with the four files and the kinds of file they use: pictures, clips,
@@ -203,9 +205,12 @@ same browser can therefore neither read what `--serve` delivers nor change a
 file. One gap is left. A page embedded in a restricted frame (an iframe with
 the `sandbox` attribute) presents itself to that connection the same way a
 file opened from disk does, so it can open the connection and hear that a
-rebuild happened. It also hears that a rebuild failed, and nothing more: why
-it failed is sent only to the live views, which carry either that secret or a
-second one that lets a page hear the reason and do nothing else.
+rebuild happened. It also hears that a rebuild failed, and which run of
+`--watch` is answering, and nothing more: why it failed is sent only to the
+live views, which carry either that secret or a second one that lets a page
+hear the reason and do nothing else. Which run is answering is how a page left
+open from an earlier run knows to reload itself; it is all such a message can
+make a page do.
 
 **The live prompter (`--prompter`) listens to you while you talk and shows
 hints in the cockpit.** It is off unless you switch it on. When it is on:
@@ -222,8 +227,18 @@ hints in the cockpit.** It is off unless you switch it on. When it is on:
   someone from the room speaks, and check what data protection law (in the
   EU the GDPR) and the personal rights of the people present require in your
   setting.
-- **The key** (`OPENROUTER_API_KEY`) is read by `node build.js` and never
-  written into the HTML or the logs.
+- **The key** is read by `node build.js` and never written into the HTML or
+  the logs. It comes from the environment variable `OPENROUTER_API_KEY`, or,
+  when that is not set, from one file of your own:
+  `~/.config/psi-slides/openrouter.key` (under `$XDG_CONFIG_HOME` when that is
+  set). That file is refused when another account owns it or may read or
+  write it (`chmod 600` it), and only the key is read from it – not
+  `OPENROUTER_BASE_URL`, the address the deck and the transcript are sent to.
+  **No `.env` file is read**, neither beside `source.md` nor in the folder
+  the command runs in: a lecture someone sent you could carry one that names
+  an address of theirs, and the deck, your speaker notes and what the room
+  says would go there. Without a key the prompter runs as a dry run and
+  sends nothing to a model.
 
 Two files stay on your computer, beside `source.md`: the log
 `prompter-<date>.jsonl` and the prompt file `prompter-<hash>.prompt.txt`,

@@ -66,6 +66,19 @@ view; the help must have a row for every flag in `CLI_FLAGS` that is not
 hidden, which is the half the `cli` gate cannot run. About 170 assertions,
 five seconds.
 
+`test/present.mjs` follows it, for the same reason, and is the start of a
+talk from the command line: the addresses after the first build, the
+lecture's own port for `--serve` and the watch socket and the same ports on a
+restart, a `run` message that tells a page of the first run it is stale (a
+socket of its own, not a browser), the line when a port is taken, `--open`,
+the key (none, the key file, the environment over the file, a file others can
+read, a `.env` beside the lecture that must not be read), the line Ctrl-C
+prints, and `--present` with what it refuses. Every run gets `PSI_OPEN=print`,
+so `--open` prints what it would open, and an `XDG_CONFIG_HOME` of its own,
+so the key file is never the machine's. About 50 assertions, half a minute.
+The page half of a restart – a tab of the old run reloads itself, once – is
+the last section of `watch-resume.mjs`.
+
 A fourth place exists and is deliberately not one of these: `desktop/test/`
 holds the desktop app's own tests, run by `npm test` inside `desktop/` and by
 `desktop.yml`, never by `npm test` here. What it guards is the app's reading
@@ -391,7 +404,9 @@ document opened meanwhile says only that it failed, and the fix's reload takes
 it away; with the cockpit opened by `S`, a save lands both windows on one
 chunk and beat, a failure shows in the cockpit and not on the projection, a
 frozen cockpit comes back frozen on its look-ahead while the room stays put,
-and a deleted chunk lands both on one slide.
+and a deleted chunk lands both on one slide. Last, the engine is stopped and
+started again under the two open windows: both reload themselves onto the
+new run, once each, on the slide they were on.
 
 **Because nothing that ships can reach the case** – `palette` (the start menu
 lives on the first slide and its first beat of a page load, so the spec needs

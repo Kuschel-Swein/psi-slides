@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import crypto from 'node:crypto';
 import os from 'node:os';
@@ -7377,6 +7377,32 @@ const WATCH_BANNER_JS = `
     location.reload();
   };`;
 
+// What every page with a reload script does when its socket closes and when
+// it opens again. The watcher's socket has a port of the lecture's own
+// (lecturePorts), so a page left open across a restart of the watcher finds
+// the new run where the old one was – and is a page of the old run. The
+// server says which run it is on every connection, after its first good
+// build; a page whose run differs reloads itself, once per run, so a view a
+// --*-only run did not rebuild comes back as the old file and stays rather
+// than reloading for ever. A reload is all a stranger's message could cause,
+// and the Origin check keeps strangers off the socket anyway. The retry
+// backs off from half a second to five, where it used to knock on a dead
+// port every 500 ms for as long as the tab was open.
+function watchRunJs(run) {
+  return `
+  const psiRun = ${JSON.stringify(run || '')};
+  let retryMs = 500;
+  const retryLater = (fn) => { setTimeout(fn, retryMs); retryMs = Math.min(retryMs * 2, 5000); };
+  const runSeen = (id) => {
+    if (!psiRun || typeof id !== 'string' || !id || id === psiRun) return;
+    try {
+      if (sessionStorage.getItem('psi-watch-run') === id) return;
+      sessionStorage.setItem('psi-watch-run', id);
+    } catch (err) { return; }
+    bfReload();
+  };`;
+}
+
 function reloadScript(port, nonce, opts = {}) {
   if (!port) return '';
   // Two-way now. The reload half is unchanged; the other half is what the
@@ -7406,23 +7432,25 @@ function reloadScript(port, nonce, opts = {}) {
       try { ws.send(JSON.stringify({ type: 'hello', listen })); } catch (err) { /* closing */ }
     });` : '';
     return `${WATCH_BANNER_CSS}<script>
-(() => {${WATCH_BANNER_JS}
+(() => {${WATCH_BANNER_JS}${watchRunJs(opts.run)}
   const connect = () => {
     const ws = new WebSocket('ws://127.0.0.1:${port}');${listen}
+    ws.addEventListener('open', () => { retryMs = 500; });
     ws.addEventListener('message', e => {
       if (e.data === 'reload') { bfReload(); return; }
       if (e.data === 'build-failed') { ${opts.listen ? '/* the reason follows */' : "bfShow('', false);"} return; }
       let m; try { m = JSON.parse(e.data); } catch (err) { return; }
+      if (m && m.type === 'run') { runSeen(m.id); return; }
       if (m && m.type === 'build-failed') bfShow(m.why, true);
     });
-    ws.addEventListener('close', () => { setTimeout(connect, 500); });
+    ws.addEventListener('close', () => { retryLater(connect); });
   };
   connect();
 })();
 </script>`;
   }
   return `${WATCH_BANNER_CSS}<script>
-window.psiWatch = (() => {${WATCH_BANNER_JS}
+window.psiWatch = (() => {${WATCH_BANNER_JS}${watchRunJs(opts.run)}
   let sock = null;
   let seq = 0;
   const waiting = new Map();
@@ -7436,6 +7464,7 @@ window.psiWatch = (() => {${WATCH_BANNER_JS}
     const ws = new WebSocket('ws://127.0.0.1:${port}');
     sock = ws;
     ws.addEventListener('open', () => {
+      retryMs = 500;
       // The page says who it is before anything else, so the server can tell
       // a view it built from any other page that connected: only a socket
       // that has shown this build's nonce is told why a rebuild failed.
@@ -7451,6 +7480,7 @@ window.psiWatch = (() => {${WATCH_BANNER_JS}
       // reason follows the hello.
       if (e.data === 'build-failed') return;
       let m; try { m = JSON.parse(e.data); } catch (err) { return; }
+      if (m && m.type === 'run') { runSeen(m.id); return; }
       // The server could not rebuild – a deleted asset, a syntax error made
       // in a text editor. The banner says so, and the diagram editor's status
       // line too while it is open; without this the page sat on the old
@@ -7476,7 +7506,7 @@ window.psiWatch = (() => {${WATCH_BANNER_JS}
         try { fn(m); } catch (err) { /* ignore */ }
       }
     });
-    ws.addEventListener('close', () => { sock = null; setTimeout(connect, 500); });
+    ws.addEventListener('close', () => { sock = null; retryLater(connect); });
   };
   connect();
   const ask = (type, body, ms) => new Promise((resolve) => {
@@ -9654,7 +9684,7 @@ ${fontStyleTag(opts.fontEmbed, 'print')}
 ${styleBlockCss(styleOpts)}
 ${codeTag(styleOpts, opts.codeSizing, 'print')}
 ${katexStyleTag(anonHtml + namedHtml)}
-${reloadScript(opts.watchPort, null, { receiveOnly: true })}
+${reloadScript(opts.watchPort, null, { receiveOnly: true, run: opts.watchRun })}
 </head>
 <body data-slide-nums="${printNums}" ${styleBodyAttrs(styleOpts, frontmatter)}${readerOn ? ' data-reader="on"' : ''}>
 ${readerOn ? readerHtml + READER_EARLY_JS : ''}<main>
@@ -14672,12 +14702,12 @@ ${styleBlockCss(styleOpts, S)}
 ${codeTag(styleOpts, opts.codeSizing, 'live')}
 ${katexStyleTag(columnsHtml, { fontToggle: true })}
 ${shipsEditor
-  ? reloadScript(opts.watchPort, opts.watchNonce)
+  ? reloadScript(opts.watchPort, opts.watchNonce, { run: opts.watchRun })
   // The editor is the projection's only writer. A projection without it -
   // editor: speaker or none, or a lecture with no figure - gets the reload
   // the documents get and no nonce: it is the window on the projector, and
   // the nonce is what lets a page write to source.md.
-  : reloadScript(opts.watchPort, null, { receiveOnly: true, listen: opts.watchListen })}
+  : reloadScript(opts.watchPort, null, { receiveOnly: true, listen: opts.watchListen, run: opts.watchRun })}
 </head>
 <body ${viewBodyAttrs(defaults, styleBodyAttrs(styleOpts, frontmatter))}>
 ${themeBootScript(defaults)}
@@ -26279,10 +26309,10 @@ ${fontStyleTag(opts.fontEmbed, 'live')}
 ${codeTag(styleOpts, opts.codeSizing, 'live')}
 ${katexStyleTag(columnsHtml, { fontToggle: true })}
 ${shipsEditor || souffSettings
-  ? reloadScript(opts.watchPort, opts.watchNonce)
+  ? reloadScript(opts.watchPort, opts.watchNonce, { run: opts.watchRun })
   // The editor and the prompter are the cockpit's two writers; with
   // neither, it gets the reload alone, as the projection does.
-  : reloadScript(opts.watchPort, null, { receiveOnly: true, listen: opts.watchListen })}
+  : reloadScript(opts.watchPort, null, { receiveOnly: true, listen: opts.watchListen, run: opts.watchRun })}
 </head>
 <body ${viewBodyAttrs(defaults, 'data-view="speaker" ' + styleBodyAttrs(styleOpts, frontmatter))}>
 ${themeBootScript(defaults)}
@@ -31210,6 +31240,69 @@ function souffleuseLogPath(absIn, when = new Date()) {
   return path.join(path.dirname(absIn), `prompter-${stamp}.jsonl`);
 }
 
+// A path for the prompter's lines: relative to where the command runs when it
+// is below it, else whole – "../../../.." helps nobody find a file.
+function shownPath(p) {
+  const rel = path.relative(process.cwd(), p);
+  return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : p;
+}
+
+// Where the key is read from when the environment has none: one file, the
+// user's own, holding the key alone or an `OPENROUTER_API_KEY=…` line. Under
+// $XDG_CONFIG_HOME when that is set to an absolute path, else ~/.config.
+// Refused, as ssh refuses a private key, when another account owns it or may
+// read or write it. Nothing else is read from it – OPENROUTER_BASE_URL least
+// of all – and no `.env` anywhere is read: one beside source.md would be
+// the sender's of a deck, and an endpoint of their choosing receives the
+// deck, the speaker notes and what the room says.
+function prompterKeyFile(env = process.env, home = os.homedir()) {
+  const xdg = String(env.XDG_CONFIG_HOME || '');
+  const dir = path.isAbsolute(xdg) ? xdg : path.join(home, '.config');
+  return path.join(dir, 'psi-slides', 'openrouter.key');
+}
+
+// The key and where it came from, or why there is none.
+//   { key, from }       from: 'OPENROUTER_API_KEY' or the file's path
+//   { key: '', file, problem }   problem: null when the file is not there
+function resolvePrompterKey(env = process.env, home = os.homedir()) {
+  const fromEnv = String(env.OPENROUTER_API_KEY || '').trim();
+  if (fromEnv) return { key: fromEnv, from: 'OPENROUTER_API_KEY' };
+  const file = prompterKeyFile(env, home);
+  const shown = file.startsWith(home + path.sep) ? '~' + file.slice(home.length) : file;
+  let fd;
+  try { fd = fs.openSync(file, 'r'); } catch (e) {
+    return { key: '', file: shown, problem: e.code === 'ENOENT' ? null : `${shown} cannot be read (${e.code || e.message})` };
+  }
+  try {
+    const st = fs.fstatSync(fd);
+    if (!st.isFile()) return { key: '', file: shown, problem: `${shown} is not a file` };
+    if (process.platform !== 'win32') {
+      if (typeof process.getuid === 'function' && st.uid !== process.getuid()) {
+        return { key: '', file: shown, problem: `${shown} belongs to another account, so it is not read` };
+      }
+      if (st.mode & 0o077) {
+        return {
+          key: '', file: shown,
+          problem: `${shown} can be read by other accounts (mode ${(st.mode & 0o777).toString(8)}; chmod 600 it), so it is not read`,
+        };
+      }
+    }
+    if (st.size > 4096) return { key: '', file: shown, problem: `${shown} is longer than a key` };
+    const text = fs.readFileSync(fd, 'utf8');
+    for (const raw of text.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith('#')) continue;
+      const m = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+      if (m && m[1] !== 'OPENROUTER_API_KEY') continue;
+      const key = (m ? m[2] : line).trim().replace(/^(['"])(.*)\1$/, '$2').trim();
+      if (key) return { key, from: shown };
+    }
+    return { key: '', file: shown, problem: `${shown} holds no key` };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 /**
  * The sidecar. One per watch process, created before the first build and fed
  * the parsed deck by `rebuild`.
@@ -31235,11 +31328,16 @@ async function createSouffleuse({
   const souff = await import('./souffleuse.mjs');
   const { notesToCards } = await import('./cue-cards.mjs');
 
-  let key = String(process.env.OPENROUTER_API_KEY || '').trim();
+  // The environment's key, or the key file's (resolvePrompterKey). A dry run
+  // asks for none and does not open the file; the environment's is still
+  // taken, so that redact knows it.
+  const found = opts.dryRun
+    ? { key: String(process.env.OPENROUTER_API_KEY || '').trim(), from: 'OPENROUTER_API_KEY' }
+    : resolvePrompterKey();
+  let key = found.key;
   const base = String(process.env.OPENROUTER_BASE_URL || SOUFFLEUSE_BASE_URL)
     .trim().replace(/\/+$/, '');
   const logPath = souffleuseLogPath(absIn);
-  const dryRun = !!opts.dryRun;
   // A key is printable ASCII and nothing else. One with a line break or a
   // space inside it - pasted with its neighbour, or with the shell's quote -
   // made the HTTP client throw an error that quoted the header, key and all,
@@ -31248,7 +31346,16 @@ async function createSouffleuse({
   // sent anywhere.
   const keyUnusable = !!key && !SOUFFLEUSE_KEY_RE.test(key);
   if (keyUnusable) key = '';
-  const unusableKey = String(process.env.OPENROUTER_API_KEY || '').trim();
+  const unusableKey = found.key;
+  // No usable key is a dry run rather than a prompter that is off: the ear,
+  // the ticks, the policy and the log all run, which is what a rehearsal on a
+  // machine without the key wants, and the start says so in one line with
+  // the fix. --prompter-dry-run is the same run, asked for.
+  const noKeyWhy = opts.dryRun || key ? null
+    : keyUnusable
+      ? `the key in ${found.from} is not usable – it contains a space, a line break or a character outside printable ASCII`
+      : found.problem || 'no OpenRouter key';
+  const dryRun = !!opts.dryRun || !!noKeyWhy;
 
   // Every string that leaves this function - a log line, a terminal line, an
   // event, a status on the cockpit's badge, a reply - goes through this, so
@@ -31282,16 +31389,10 @@ async function createSouffleuse({
 
   // Disabled is not off: the transcript, the moves and the ticks that would
   // have gone out are still logged, because the log is what a rehearsal is
-  // read back from and a missing key is not a reason to lose it.
-  //
-  // A dry run needs no key, which is the point of it: everything but the one
-  // call runs, so the scheduler, the state line and the window can be read on
-  // a machine that has no account at all.
-  let disabled = (key || dryRun) ? null : {
-    why: keyUnusable
-      ? 'OPENROUTER_API_KEY is not a usable key – it contains a space, a line break or a character outside printable ASCII'
-      : 'no OPENROUTER_API_KEY in the environment',
-  };
+  // read back from. A run starts enabled – without a key it is a dry run,
+  // above – and is disabled only by what happens later: a key the endpoint
+  // refuses, five failures in a row.
+  let disabled = null;
 
   let deck = null;            // what deckPayload made of the last build
   let prefix = null;          // {text, hash} – the cached system prompt
@@ -31468,7 +31569,7 @@ async function createSouffleuse({
         const kb = Math.round(prefix.text.length / 1024);
         log(`[prompter] deck ${deck.chunks.length} slides, prompt ${kb} KB (${hash}), `
           + `model ${model}, cadence ${cadence}s, cues ${cuesAllowed ? 'on' : 'off'}`);
-        log(`             the prompt as sent: ${promptPath}`);
+        log(`             the prompt as sent: ${shownPath(promptPath)}`);
         emit({
           type: 'prompter', state: disabled ? 'off' : 'ready',
           why: disabled ? disabled.why : null,
@@ -32250,13 +32351,17 @@ async function createSouffleuse({
   // nothing: Chrome's speech recognition runs on the device only where it
   // has a model for the language, and otherwise sends the audio to Google –
   // in a dry run as much as in a live one. The cockpit says which it got.
+  if (noKeyWhy) {
+    log(`[prompter] ${noKeyWhy}, so this is a dry run – for hints, `
+      + (found.problem ? 'fix that' : `put the key in ${found.file || prompterKeyFile()} (chmod 600)`)
+      + ' and start again.');
+  } else if (!dryRun) {
+    log(`[prompter] the key: ${found.from}`);
+  }
   if (dryRun) {
-    log('[prompter] dry run: everything runs except the call to the model. The ear, the');
-    log('             socket, the ticks, the policy and the log are all real; nothing goes to');
-    log('             a model and no OPENROUTER_API_KEY is needed. The speech recognition is');
-    log('             Chrome\'s: on this device where it can, otherwise it sends the audio to');
-    log('             Google – the cockpit says which. Read the `tick` lines of the log to see');
-    log('             the state line and the window a model would get.');
+    log('[prompter] dry run: the ear, the ticks, the policy and the log all run; nothing goes to a model.');
+    log('             Chrome\'s speech recognition sends the audio to Google unless it runs on this');
+    log('             device – the cockpit says which.');
   } else {
     log('[prompter] the live prompter is on. What it sends, as text: the deck including');
     log('             speaker notes, and what the cockpit hears, to ' + base + '.');
@@ -32284,17 +32389,20 @@ async function createSouffleuse({
   // it is about – but this engine's .gitignore only covers this repository,
   // and a lecture being written in a content repo of its own is one `git add
   // -A` away from committing a transcript of a rehearsal.
-  log('[prompter] the debrief of this run: ' + logPath);
-  log('             It holds the spoken words verbatim. In a content repository of your own,');
-  log('             put prompter-*.jsonl in its .gitignore before the first rehearsal.');
-  log('             Beside it, prompter-<hash>.prompt.txt is the system prompt of each');
-  log('             build, as sent – gitignore that too.');
-  if (disabled) {
-    log(`[prompter] disabled: ${disabled.why}. Nothing is sent; the transcript is still logged.`);
-    emit({ type: 'prompter', state: 'off', why: disabled.why });
+  log('[prompter] the debrief of this run, with the spoken words verbatim: ' + shownPath(logPath));
+  log('             In a content repository of your own, gitignore prompter-*.jsonl and');
+  log('             prompter-*.prompt.txt (the system prompt of each build) before the first rehearsal.');
+
+  // Where this run's two files are, for the line Ctrl-C prints: the log once
+  // it exists, and the prompt of the last build.
+  function files() {
+    let log = null;
+    try { if (fs.statSync(logPath).isFile()) log = logPath; } catch (e) { /* none written */ }
+    const prompt = prefix ? path.join(path.dirname(absIn), `prompter-${prefix.hash}.prompt.txt`) : null;
+    return { log, prompt: prompt && fs.existsSync(prompt) ? prompt : null };
   }
 
-  return { onBuild, onMessage, say, setEnabled, close, logPath };
+  return { onBuild, onMessage, say, setEnabled, close, logPath, files, dryRun };
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────
@@ -32762,11 +32870,12 @@ function buildOnce(absIn, only, opts = {}) {
   return { written, shape, stats, sourceModifiedMs: sourceModifiedAt(absIn), lecture };
 }
 
-// Watch mode: build once, start a WS server on a free port, install a
-// debounced fs.watch on the source file, and broadcast 'reload' to all
-// connected clients on each successful rebuild. The reload snippet
-// reconnects on close, so the server can come and go without breaking
-// the open browser tabs.
+// Watch mode: build once, start a WS server on the lecture's own port
+// (lecturePorts), install a debounced fs.watch on the source file, and
+// broadcast 'reload' to all connected clients on each successful rebuild.
+// The reload snippet reconnects on close, and a page of an earlier run
+// reloads when it hears this run's id, so the server can come and go
+// without breaking the open browser tabs.
 // The largest message the watch socket takes. The biggest thing a page sends
 // is an asset upload, capped at MAX_INLINE_BYTES before base64 (2.7 MB after
 // it); anything larger is refused by `ws` before a byte of it is parsed.
@@ -32787,20 +32896,33 @@ function watchOriginAllowed(origin, port) {
   return ['localhost', '127.0.0.1', '[::1]'].some(n => o === `http://${n}:${port}`);
 }
 
-async function runWatch(absIn, only, baseOpts = {}) {
+async function runWatch(absIn, only, baseOpts = {}, { serve = false } = {}) {
   const { WebSocketServer } = await import('ws');
+  const http = await import('node:http');
   // Loopback, explicitly. Omitting `host` listens on every interface, which
   // for a one-way reload socket was merely untidy and for a socket that can
-  // write to the author's disk is not.
+  // write to the author's disk is not. On the lecture's own port, so a page
+  // left open across a restart finds this run (watchRunJs); listened on
+  // before the socket is attached, because `ws` rethrows a failed listen of
+  // a server it is attached to.
+  const wsHttp = http.createServer((req, res) => { res.writeHead(426); res.end(); });
+  const listened = await listenOnLecturePort(wsHttp, lecturePorts(absIn, WATCH_PORT_BASE));
+  const port = listened.port;
   const wss = new WebSocketServer({
-    port: 0, host: '127.0.0.1',
+    server: wsHttp,
     maxPayload: WATCH_MAX_PAYLOAD,
     // Read at every handshake rather than once: --serve starts beside this
     // and learns its port after the socket is already listening.
     verifyClient: ({ origin }) => watchOriginAllowed(origin, servedPort),
   });
-  await new Promise(resolve => wss.on('listening', resolve));
-  const port = wss.address().port;
+  if (listened.moved) {
+    console.log(`The reload socket's port ${listened.wanted} is taken – using ${port}; a page left open`
+      + ' from an earlier run will not reload by itself.');
+  }
+  // Which run of the watcher this is. Not a secret: it is said to every page
+  // that connects, and a page of another run reloads (watchRunJs).
+  const runId = crypto.randomBytes(8).toString('hex');
+  let builtOnce = false;
   // A per-build secret, required on every patch. Without it any page in the
   // browser that guessed the port could write to source.md.
   let nonce = crypto.randomBytes(16).toString('hex');
@@ -32808,7 +32930,7 @@ async function runWatch(absIn, only, baseOpts = {}) {
   // socket hear why a rebuild failed and nothing else. Never accepted where
   // the nonce is asked for.
   const listenKey = crypto.randomBytes(16).toString('hex');
-  const opts = { ...baseOpts, watchPort: port, watchNonce: nonce, watchListen: listenKey };
+  const opts = { ...baseOpts, watchPort: port, watchNonce: nonce, watchListen: listenKey, watchRun: runId };
 
   // Only a driver on stdin can turn this off, and the watch process stays up
   // when it does: live reload and the editor's write-back hang off this
@@ -32836,6 +32958,28 @@ async function runWatch(absIn, only, baseOpts = {}) {
   // the process is going: a call left in flight is abandoned rather than
   // resolved into a socket nobody is holding any more.
   if (sidecar) process.on('exit', () => sidecar.close());
+  // Ctrl-C: where this run's debrief is, and then the signal's own end, as
+  // if there had been no handler (an exit code of 130 or 143 is what a shell
+  // and a test harness read). The log is written a line at a time with a
+  // synchronous append, so there is nothing to flush; abandoning the call in
+  // flight is all that is left to do.
+  if (sidecar) {
+    const stop = (sig) => {
+      process.removeListener('SIGINT', stop);
+      process.removeListener('SIGTERM', stop);
+      try {
+        sidecar.close();
+        const { log, prompt } = sidecar.files();
+        if (log) {
+          process.stdout.write((process.stdout.isTTY ? '\n' : '')
+            + `[prompter] this run's log: ${shownPath(log)}${prompt ? ` · its prompt: ${shownPath(prompt)}` : ''}\n`);
+        }
+      } catch (e) { /* stopping anyway */ }
+      process.kill(process.pid, sig);
+    };
+    process.on('SIGINT', stop);
+    process.on('SIGTERM', stop);
+  }
 
   // Sockets that have shown this build's nonce - a live view saying hello,
   // or any message it sent with it. A reload goes to every socket, because
@@ -32881,6 +33025,7 @@ async function runWatch(absIn, only, baseOpts = {}) {
         shape, durationMs: Date.now() - t0, embeds: embedsThisBuild.length,
         stats, sourceModifiedMs,
       });
+      builtOnce = true;
       broadcast('reload');
     } catch (err) {
       lastBuildError = err.message;
@@ -32924,6 +33069,11 @@ async function runWatch(absIn, only, baseOpts = {}) {
     // A page that opens while the source is broken is on the last good build
     // too. The reason, if it may hear one, follows its hello.
     if (lastBuildError) { try { sock.send('build-failed'); } catch (e) { /* gone */ } }
+    // Which run this is, once this run has written its views: a page of an
+    // earlier run reloads onto them. Before the first good build the files
+    // on disk are still the earlier run's, and the reload that build sends
+    // reaches this socket too.
+    if (builtOnce) { try { sock.send(JSON.stringify({ type: 'run', id: runId })); } catch (e) { /* gone */ } }
     sock.on('message', (raw) => {
       let msg;
       try { msg = JSON.parse(String(raw)); } catch { return; }
@@ -33093,7 +33243,8 @@ async function runWatch(absIn, only, baseOpts = {}) {
   });
 
   rebuild('initial');
-  console.log(`Watching ${path.relative(process.cwd(), absIn)} – live-reload active (open the HTML files in Chrome)`);
+  console.log(`Watching ${path.relative(process.cwd(), absIn)} – `
+    + (serve ? 'every save rebuilds and reloads the open views' : 'live-reload active (open the HTML files in Chrome)'));
   // Absolute, unlike the log line: a driver knows neither this process's
   // working directory nor which folder a relative path is relative to.
   emitEvent({ type: 'watching', source: absIn, dir: path.dirname(absIn), auto: autoBuild });
@@ -33154,6 +33305,7 @@ async function runWatch(absIn, only, baseOpts = {}) {
       }
     });
   }
+  return { port, runId, built: builtOnce, prompter: sidecar };
 }
 
 // Phase-1-valid scaffold for `--new <slug>`. Builds without errors as
@@ -33284,7 +33436,7 @@ function servePathAllowed(rel) {
   return Object.prototype.hasOwnProperty.call(SERVE_MIME, path.extname(leaf).slice(1).toLowerCase());
 }
 
-async function runServe(rootDir, wantedPort) {
+async function runServe(rootDir, wantedPort, { absIn = null } = {}) {
   const http = await import('node:http');
   // Canonicalise the root too, or a repo reached through a symlinked path
   // would fail its own containment check.
@@ -33378,39 +33530,153 @@ async function runServe(rootDir, wantedPort) {
     fs.createReadStream(abs).pipe(res);
   });
 
-  await new Promise((resolve, reject) => {
-    server.on('error', reject);
-    server.listen(wantedPort || 0, '127.0.0.1', resolve);
-  }).catch((err) => { throw portRefusal(err, wantedPort); });
+  // A port the author named is that port or a refusal; otherwise the
+  // lecture's own (lecturePorts), so a restart is the same origin.
+  let moved = null;
+  if (wantedPort) {
+    await new Promise((resolve, reject) => {
+      server.on('error', reject);
+      server.listen(wantedPort, '127.0.0.1', resolve);
+    }).catch((err) => { throw portRefusal(err, wantedPort); });
+  } else {
+    const got = await listenOnLecturePort(server,
+      lecturePorts(absIn || path.join(rootDir, 'source.md'), SERVE_PORT_BASE));
+    if (got.moved) moved = got.wanted;
+  }
   port = server.address().port;
   servedPort = port;
   const base = `http://localhost:${port}`;
-  console.log(`Serving ${path.relative(process.cwd(), rootDir) || '.'} on ${base}`);
+  console.log(`Serving ${path.relative(process.cwd(), rootDir) || '.'} on ${base} – loopback only, Ctrl-C to stop`);
+  if (moved) {
+    console.log(`  Port ${moved}, this lecture's own, is taken – by this lecture in another terminal, or by`
+      + ` another program – so ${port} it is. A tab from an earlier run still points at ${moved}.`);
+  }
   emitEvent({ type: 'serving', url: base });
-  for (const name of ['audience', 'speaker', 'print', 'print-notes']) {
-    if (fs.existsSync(path.join(rootDir, `${name}.html`))) {
-      console.log(`  ${base}/${name}.html`);
+  return { server, base, port };
+}
+
+// The addresses, once the views they name are on disk: printed after the
+// first build rather than when the server starts, which under --watch was
+// before anything was built – a fresh folder printed no address at all, and
+// a second run listed the files of the first. The cockpit first, because it
+// is the one a lecturer opens; the projection is opened from it (S).
+function printViewAddresses(rootDir, base, { prompter = false } = {}) {
+  const rows = [
+    ['cockpit', 'speaker'], ['projection', 'audience'],
+    ['document', 'print'], ['with notes', 'print-notes'],
+  ].filter(([, name]) => fs.existsSync(path.join(rootDir, `${name}.html`)));
+  if (!rows.length) return;
+  console.log('');
+  for (const [label, name] of rows) console.log(`  ${label.padEnd(11)} ${base}/${name}.html`);
+  if (prompter) console.log(`  ${'prompter'.padEnd(11)} Chrome only (speech recognition) – Shift-S in the cockpit switches it on`);
+  console.log('');
+}
+
+// ── the lecture's own ports ──────────────────────────────────────────
+//
+// A served page's localStorage – the slide it was on, the theme, the live
+// annotations not yet exported – belongs to its origin, and the origin is the
+// port. A free port per run made every restart a new origin and an empty
+// store, and a tab left open across the restart pointed at a port nobody was
+// listening on. So a lecture has ports of its own, derived from where its
+// source.md really is: one for --serve in 41000-44999 and one for the watch
+// socket in 45000-48999, the same offset in both. Below 49152, where macOS
+// and Windows hand out ephemeral ports, and a handful of services a lecture
+// hall's own machines speak are skipped. Taken - the same lecture still
+// running in another terminal, or some other program - the next free one of
+// the next few is used and the start says so; after those, any free port.
+// --port keeps the old answer: that port, or a refusal.
+const LECTURE_PORT_SPAN = 4000;
+const SERVE_PORT_BASE = 41000;
+const WATCH_PORT_BASE = 45000;
+const LECTURE_PORT_TRIES = 10;
+// Crestron (41794, 41795), EtherNet/IP (44818), WinRM (47001), BACnet (47808).
+const LECTURE_PORTS_AVOIDED = new Set([41794, 41795, 44818, 47001, 47808]);
+
+function lecturePorts(absIn, base) {
+  let real = absIn;
+  try { real = fs.realpathSync.native(absIn); } catch { /* as given */ }
+  const at = crypto.createHash('sha256').update(real).digest().readUInt32BE(0) % LECTURE_PORT_SPAN;
+  const out = [];
+  for (let k = 0; out.length < LECTURE_PORT_TRIES && k < LECTURE_PORT_SPAN; k++) {
+    const port = base + (at + k) % LECTURE_PORT_SPAN;
+    if (!LECTURE_PORTS_AVOIDED.has(port)) out.push(port);
+  }
+  return out;
+}
+
+// Listens on the first of `ports` the system gives, else on a free one.
+// Resolves to the port; `moved` says the first was taken.
+async function listenOnLecturePort(server, ports) {
+  const attempt = (port) => new Promise((resolve, reject) => {
+    const onError = (err) => { server.removeListener('listening', onListening); reject(err); };
+    const onListening = () => { server.removeListener('error', onError); resolve(); };
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(port, '127.0.0.1');
+  });
+  for (const port of ports) {
+    try {
+      await attempt(port);
+      return { port: server.address().port, wanted: ports[0], moved: port !== ports[0] };
+    } catch (err) {
+      if (err.code !== 'EADDRINUSE' && err.code !== 'EACCES') throw err;
     }
   }
-  console.log('  (loopback only – Ctrl-C to stop)');
-  return server;
+  await attempt(0);
+  return { port: server.address().port, wanted: ports[0], moved: true };
+}
+
+// --open: the cockpit in a browser, once the first build is on disk and the
+// server listens. Chrome under --prompter, because the prompter's ear is
+// Chrome's speech recognition; elsewhere the system's default. Never a reason
+// for the run to fail: a browser that does not start is one line saying what
+// to open by hand. PSI_OPEN=print says what would be opened instead, which is
+// how the tests ask without a window appearing.
+function openInBrowser(url, { chrome = false } = {}) {
+  const how = chrome && process.platform === 'darwin' ? 'Google Chrome' : 'the default browser';
+  if (process.env.PSI_OPEN === 'print') {
+    console.log(`[open] ${how}: ${url}`);
+    return;
+  }
+  const byHand = () => console.log(`Could not open a browser – open ${url} by hand.`);
+  const run = (cmd, args, onFail, extra = {}) => {
+    let failed = false;
+    const fail = () => { if (!failed) { failed = true; onFail(); } };
+    let child;
+    try { child = spawn(cmd, args, { stdio: 'ignore', ...extra }); } catch (e) { fail(); return; }
+    child.on('error', fail);
+    child.on('exit', (code) => { if (code) fail(); });
+    child.unref();
+  };
+  if (process.platform === 'darwin') {
+    if (!chrome) { run('open', [url], byHand); return; }
+    run('open', ['-a', 'Google Chrome', url], () => {
+      console.log('Google Chrome is not installed here, so the default browser opens – the prompter needs Chrome.');
+      run('open', [url], byHand);
+    });
+  } else if (process.platform === 'win32') {
+    run('cmd', ['/c', 'start', '""', url], byHand, { windowsVerbatimArguments: true });
+  } else {
+    run('xdg-open', [url], byHand);
+  }
 }
 
 // A port the author named and the system will not give. Said as a sentence
 // rather than as Node's EADDRINUSE stack, and asked before anything is built
 // (assertPortFree, from main) as well as at the listen itself, because under
 // --watch --serve the watcher has already built and printed by the time the
-// server listens. The watch socket takes a free port of its own (port 0), so
-// only this one can collide.
+// server listens. The watch socket's port is never named on the line: when
+// the lecture's own is taken it moves to another (listenOnLecturePort).
 function portRefusal(err, port) {
   if (!err || !port) return err;
   const other = port < 65535 ? port + 1 : port - 1;
   const msg = err.code === 'EADDRINUSE'
     ? `Error: port ${port} is in use – by another build.js --serve, or by another program.\n`
-      + `  Pick another (--port ${other}), or leave --port out and a free one is chosen.`
+      + `  Pick another (--port ${other}), or leave --port out and the lecture's own is used.`
     : err.code === 'EACCES'
       ? `Error: port ${port} needs privileges this account does not have.\n`
-        + '  Pick one above 1023, or leave --port out and a free one is chosen.'
+        + '  Pick one above 1023, or leave --port out and the lecture\'s own is used.'
       : null;
   if (!msg) return err;
   const e = new Error(msg);
@@ -34774,14 +35040,18 @@ const CLI_GROUPS = [
     'originals; needs cwebp or magick on PATH):'] },
   { id: 'fit', title: ['Fit checking (needs playwright-core and a Chrome or Chromium):'] },
   { id: 'squint', title: ['Reading the projection back (needs playwright-core and a Chrome or Chromium):'] },
-  { id: 'prompter', title: ['Live prompter (only together with --watch; the cockpit reaches it over the',
-    'watch socket, and Shift-S in the cockpit switches it on). What it sends is text:',
-    'the deck including speaker notes, and what the cockpit hears. The prompter sends',
-    'no audio; Chrome\'s speech recognition sends the audio to Google unless it runs',
-    'on the device.'],
+  { id: 'prompter', title: ['Live prompter (only together with --watch or --present; the cockpit reaches it',
+    'over the watch socket, and Shift-S in the cockpit switches it on – in Chrome).',
+    'What it sends is text: the deck including speaker notes, and what the cockpit',
+    'hears. The prompter sends no audio; Chrome\'s speech recognition sends the audio',
+    'to Google unless it runs on the device.'],
   rows: [
-    ['OPENROUTER_API_KEY', 'required; without it the prompter starts disabled',
-      'and only logs what it heard.'],
+    ['OPENROUTER_API_KEY', 'the key. Without it, and without the key file below,',
+      'the prompter runs dry and says so.'],
+    ['the key file', '~/.config/psi-slides/openrouter.key ($XDG_CONFIG_HOME',
+      'if set), read when the environment has none: the key',
+      'alone or OPENROUTER_API_KEY=…, mode 600. Nothing else',
+      'is read from it, and no .env from anywhere.'],
     ['OPENROUTER_BASE_URL', 'another OpenAI-compatible endpoint',
       '(default https://openrouter.ai/api/v1).'],
   ] },
@@ -34797,16 +35067,28 @@ const CLI_GROUPS = [
 ];
 
 const CLI_FLAGS = [
+  { name: '--present', group: 'build',
+    doc: [null, 'give or rehearse the talk: --watch --serve --open in one, plus',
+      '--prompter when the lecture has a `prompter:` block or the line',
+      'names --prompter, --prompter-dry-run or --prompter-model. The',
+      'port is the lecture\'s own, so a restart keeps the address.'] },
   { name: '--watch', group: 'build',
     doc: [null, 'rebuild on every save and reload the views open in a browser.'] },
   { name: '--serve', group: 'build',
     doc: [null, 'serve the lecture folder over http on loopback once it is built;',
       'with --watch, live reload over http. A hosted embed (YouTube)',
       'plays only from http.'] },
-  { name: '--port', group: 'build', value: 'next', arg: 'N', needs: ['--serve'],
-    need: 'a port number, e.g. --port 8080; leave it out and a free one is chosen.',
+  { name: '--port', group: 'build', value: 'next', arg: 'N', needs: ['--serve', '--present'],
+    need: 'a port number, e.g. --port 8080; leave it out and the lecture\'s own is used.',
     why: 'It sets the port --serve listens on',
-    doc: [null, 'the port --serve listens on (default: a free one).'] },
+    doc: [null, 'the port --serve listens on. Default: the lecture\'s own, from',
+      'where its source.md is (41000-44999), or one of the next few',
+      'when another program has it.'] },
+  { name: '--open', group: 'build', needs: ['--watch', '--serve', '--present'],
+    why: 'It opens what a watching or serving run has built',
+    doc: [null, 'open the cockpit in a browser once it is built – Chrome',
+      'under --prompter. A browser that does not start costs a line,',
+      'not the run.'] },
   { name: '--audience-only', group: 'build', doc: [null, 'build audience.html and nothing else.'] },
   { name: '--print-only', group: 'build', doc: [null, 'build print.html and nothing else.'] },
   { name: '--print-notes-only', group: 'build', doc: [null, 'build print-notes.html and nothing else.'] },
@@ -34952,7 +35234,8 @@ const cliLabel = (f) => f.name + (!f.arg ? '' : f.value === 'equals' ? '=' + f.a
 function helpText() {
   const out = [
     'Usage:',
-    '  node build.js <source.md> [--watch] [--serve [--port N]] [--audience-only|--print-only|--print-notes-only|--speaker-only]',
+    '  node build.js <source.md> --present [--port N] [--prompter-dry-run] [--prompter-model ID]',
+    '  node build.js <source.md> [--watch] [--serve [--port N]] [--open] [--audience-only|--print-only|--print-notes-only|--speaker-only]',
     '                            [--inline-images|--no-inline-images] [--no-optimize-images] [--events]',
     '  node build.js <source.md> --watch --prompter [--prompter-model ID] [--prompter-dry-run]',
     '  node build.js <source.md> --check-fit [--viewport 1600x900]',
@@ -35125,6 +35408,52 @@ function refuseCombinations({ flags, values, positional }) {
   }
 }
 
+// --present is a talk: all four views, rebuilt and served until Ctrl-C. A flag
+// that builds one view would leave the others as an earlier run wrote them,
+// and one that looks at a finished build and exits has nothing to look at in
+// a run that does not finish.
+const PRESENT_ONE_VIEW = ['--audience-only', '--print-only', '--print-notes-only', '--speaker-only'];
+const PRESENT_EXITS = ['--check-fit', '--squint', '--frames', '--slides-pdf', '--print-pdf', '--print-notes-pdf'];
+function refusePresentCompany({ flags }) {
+  if (!flags.has('--present')) return;
+  const one = PRESENT_ONE_VIEW.find(n => flags.has(n));
+  if (one) {
+    throw cliError(`Error: --present and ${one} cannot run together.\n`
+      + `  --present builds all four views for a talk; ${one} would leave three of them as they were.\n`
+      + `  For one view: node build.js <source.md> --watch --serve ${one}`);
+  }
+  const exits = PRESENT_EXITS.find(n => flags.has(n));
+  if (exits) {
+    throw cliError(`Error: --present and ${exits} cannot run together.\n`
+      + `  ${exits} works on one finished build and exits; --present keeps rebuilding until Ctrl-C.\n`
+      + '  Run it in a second terminal.');
+  }
+}
+
+// Whether --present starts the prompter on its own: when the lecture has a
+// `prompter:` block, which is its author saying the talk is given with one.
+// A key on the machine is not enough – a talk given without the prompter
+// should not start listening because a rehearsal of another one left a key.
+function lectureWantsPrompter(absIn) {
+  try {
+    const fm = safeMatter(fs.readFileSync(absIn, 'utf8')).data || {};
+    return fm.prompter != null;
+  } catch (e) {
+    return false;   // the build says what is wrong with the frontmatter
+  }
+}
+
+// --open's target: the cockpit if there is one, else the projection; over
+// http under --serve, as a file otherwise.
+function openCockpit(rootDir, base, { chrome = false } = {}) {
+  const name = ['speaker', 'audience'].find(n => fs.existsSync(path.join(rootDir, `${n}.html`)));
+  if (!name) {
+    console.log('Nothing to open yet: no speaker.html or audience.html was written.');
+    return;
+  }
+  openInBrowser(base ? `${base}/${name}.html` : pathToFileURL(path.join(rootDir, `${name}.html`)).href, { chrome });
+}
+
 // The source.md a command names, or the one in the folder it names. Exits as
 // "Input not found" always did; a folder without a source.md says what it
 // holds instead of failing on EISDIR.
@@ -35179,6 +35508,7 @@ async function main() {
 
   const cli = parseCommandLine(argv);
   refuseCombinations(cli);
+  refusePresentCompany(cli);
   const { flags, values, positional } = cli;
 
   if (flags.has('--new')) {
@@ -35272,6 +35602,15 @@ async function main() {
   // Resolved before the Shiki init, so a wrong path is said at once; and a
   // viewport before the build it would measure, not after it.
   const absIn = resolveSourceArg(inputPath);
+  // --present is the three flags a talk is started with, and the prompter
+  // when the lecture has settings for one or the line asks for it. Expanded
+  // here, so everything below reads the flags it always read.
+  if (flags.has('--present')) {
+    for (const f of ['--watch', '--serve', '--open']) flags.add(f);
+    if (['--prompter-dry-run', '--prompter-model'].some(f => flags.has(f)) || lectureWantsPrompter(absIn)) {
+      flags.add('--prompter');
+    }
+  }
   if (values.has('--viewport')) readViewportFlag(argv);
 
   // A port the system will not give is said before anything is built.
@@ -35281,7 +35620,7 @@ async function main() {
     servePort = /^\d{1,5}$/.test(v) ? Number(v) : NaN;
     if (!(servePort >= 0 && servePort <= 65535)) {
       const err = new Error(`Error: --port takes a port number from 1 to 65535, and ${v} is not one.\n`
-        + '  Leave --port out and a free one is chosen.');
+        + '  Leave --port out and the lecture\'s own is used.');
       err.userFacing = true;
       throw err;
     }
@@ -35364,16 +35703,25 @@ async function main() {
   const pdf = pdfJobsFrom(argv, flags, absIn);
 
   if (flags.has('--watch')) {
-    runWatch(absIn, only, opts).catch(err => {
+    // Awaited: it returns once the first build is on disk, which is when the
+    // addresses below name files that exist.
+    try {
+      await runWatch(absIn, only, opts, { serve: flags.has('--serve') });
+    } catch (err) {
       console.error(`Watch failed: ${err.message}`);
       emitEvent({ type: 'watch-error', message: err.message });
       process.exit(1);
-    });
+    }
     // Serving is layered on top of watching rather than instead of it, so
     // --watch --serve gives live reload over http in one command.
+    let base = null;
     if (flags.has('--serve')) {
-      await runServe(path.dirname(absIn), servePort);
+      ({ base } = await runServe(path.dirname(absIn), servePort, { absIn }));
+      printViewAddresses(path.dirname(absIn), base, { prompter: !!opts.souffleuse });
+    } else if (opts.souffleuse) {
+      console.log('Prompter: open speaker.html in Chrome (speech recognition); Shift-S there switches it on.');
     }
+    if (flags.has('--open')) openCockpit(path.dirname(absIn), base, { chrome: !!opts.souffleuse });
     return;
   }
 
@@ -35422,7 +35770,11 @@ async function main() {
     const code = await runFrames(absIn, readViewportFlag(argv), values.get('--frames') || null);
     if (code) process.exitCode = code;
   }
-  if (flags.has('--serve')) await runServe(path.dirname(absIn), servePort);
+  if (flags.has('--serve')) {
+    const { base } = await runServe(path.dirname(absIn), servePort, { absIn });
+    printViewAddresses(path.dirname(absIn), base);
+    if (flags.has('--open')) openCockpit(path.dirname(absIn), base);
+  }
 }
 
 main().catch(err => {

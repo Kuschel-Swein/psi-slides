@@ -131,9 +131,10 @@
     <p><strong>The internet and an OpenRouter key.</strong> The model is
     reached through openrouter.ai. You create an API key in an OpenRouter
     account, which is also where the calls are paid for, and put it in the
-    environment variable <code>OPENROUTER_API_KEY</code> before you start.
-    Without a key the prompter asks no model and only writes what it hears
-    into its log.</p>
+    file <code>~/.config/psi-slides/openrouter.key</code>, readable by you
+    alone, or in the environment variable <code>OPENROUTER_API_KEY</code>.
+    Without a key the prompter runs as a rehearsal: it asks no model and only
+    writes what it hears into its log.</p>
    </div>
    <div>
     <p><strong>Money.</strong> One keynote, together with every rehearsal
@@ -170,11 +171,12 @@
 <span class="t-dir">prompter:</span>
   <span class="t-dir">cooldown:</span> 60
 
-<span class="t-cmt"># the talk, with OPENROUTER_API_KEY set in the environment</span>
-<span class="t-cmd">node</span> <span class="t-path">build.js</span> <span class="t-path">lectures/my-lecture/source.md</span> <span class="t-flag">--watch --prompter</span>
+<span class="t-cmt"># the talk: rebuilt, served, the cockpit opened in Chrome, and</span>
+<span class="t-cmt"># the prompter on, because of the prompter: block above</span>
+<span class="t-cmd">node</span> <span class="t-path">build.js</span> <span class="t-path">lectures/my-lecture/source.md</span> <span class="t-flag">--present</span>
 
 <span class="t-cmt"># a rehearsal: nothing goes to the model, no key needed</span>
-<span class="t-cmd">node</span> <span class="t-path">build.js</span> <span class="t-path">lectures/my-lecture/source.md</span> <span class="t-flag">--watch --prompter --prompter-dry-run</span></code></pre>
+<span class="t-cmd">node</span> <span class="t-path">build.js</span> <span class="t-path">lectures/my-lecture/source.md</span> <span class="t-flag">--present --prompter-dry-run</span></code></pre>
   </div>
  </div>
 </section>
