@@ -35,7 +35,7 @@ node test/run.mjs                           # the browser suite, see below
 ```
 
 `npm test` runs the fast gates and then the browser suite, in that order, so a
-compiler regression fails in seconds rather than after twelve minutes.
+compiler regression fails in seconds rather than after minutes.
 
 **`node lint.js lectures/` is the gate**, and `node test/run.mjs` is the
 safety net. The linter is zero-dependency and runs anywhere, so run it on every
@@ -43,11 +43,13 @@ commit. The suite drives built lectures in a headless Chromium and covers what
 can only break in a built page, in four families: the navigation model, the
 geometry the live chrome leaves the slide, the diagram editor's gestures and
 panel, and the geometry of an emitted figure (`test/README.md` lists them). It
-said "three things" for as long as it had three specs; it has fifty-three, and
-about 1,800 assertions. It builds and serves the lectures itself, so it never
+said "three things" for as long as it had three specs; it has fifty-four, and
+about 1,990 assertions. It builds and serves the lectures itself, so it never
 reports on stale HTML. It needs a browser (`$PSI_CHROME`, else the Playwright
-cache, else the browser the host installed) and takes about twelve minutes.
-`node test/run.mjs nav` runs the specs whose name matches.
+cache, else the browser the host installed) and takes about four minutes on a
+twelve-core machine, six specs at a time; `--jobs N` sets how many, and
+`--jobs 1` runs them one after another in one browser. `node test/run.mjs nav`
+runs the specs whose name matches.
 
 `no page errors` is asserted by the runner after every spec rather than by
 each spec, because it is an invariant of running one at all – it was a line

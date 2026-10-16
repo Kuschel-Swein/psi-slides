@@ -22,6 +22,8 @@ import { ROOT } from './harness.mjs';
 export const name = 'live demo · both transports';
 export const lecture = 'diagrams';
 export const view = 'audience';
+// Run alone, after the parallel batch (test/run.mjs): a capture handed between two windows over WebRTC on loopback, waited for with fixed sleeps.
+export const serial = true;
 
 // A canvas stream instead of a capture, resolving after `delay` ms so a
 // spec can press D again while the "picker" is still open. Each capture is

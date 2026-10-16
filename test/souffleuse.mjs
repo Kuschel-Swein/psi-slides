@@ -43,6 +43,8 @@ import { ROOT } from './harness.mjs';
 export const name = 'souffleuse · the live prompter, cockpit to sidecar to strip';
 export const lecture = 'tutorial';   // built for other specs already; unused here
 export const view = 'audience';
+// Run alone, after the parallel batch (test/run.mjs): two engines of its own (--watch --serve) and a fake model server on loopback, timed against the wall clock.
+export const serial = true;
 
 // Seven slides, ids that say what they are for, one note whose first line
 // opens with a mark so the drift has a real reference - `@0:00` on a second

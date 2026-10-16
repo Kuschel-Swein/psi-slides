@@ -265,9 +265,11 @@ node lint.js lectures/ --strict                # warnings → exit 2
 # figures or not: `frontmatter` holds lint.js's KNOWN_FRONTMATTER_KEYS
 # against what build.js reads, and `image-refs` holds the two readers of the
 # image-reference set against the one collector both go through.
-# test/ is the things that only break in a built page - 54 specs, ~12 min,
-# one Chromium; one of them, souffleuse, starts an engine of its own beside
-# that browser. `npm test` also runs test/reproducible.mjs, which needs
+# test/ is the things that only break in a built page - 55 specs, about four
+# minutes: six at a time by default (--jobs N, half the cores, at most six),
+# each in a child process with its own Chromium, and the eight that export
+# `serial = true` alone afterwards; --jobs 1 is the old one-browser run. One
+# of them, souffleuse, starts an engine of its own beside its browser. `npm test` also runs test/reproducible.mjs, which needs
 # neither: it builds a lecture under a partial flag and under a full one and
 # asserts the shared view is the same bytes, because release.yml's
 # tracked-output check is only meaningful if a rebuild is a function of the
@@ -278,7 +280,9 @@ node lint.js lectures/ --strict                # warnings → exit 2
 # `:::`), built and linted, asserting the two agree and nothing leaks onto
 # the projection – about 175 decks, five seconds.
 # `npm test` runs the gates first so a compiler regression fails in seconds
-# rather than in twelve minutes; gates.yml runs them on push and PR.
+# rather than in minutes; gates.yml runs them on push and PR. A spec waits
+# with `settle(page, cap)` from harness.mjs, not a fixed sleep, wherever the
+# wait is for the page to finish reacting.
 #
 # Run the browser suite after touching AUDIENCE_JS, the key map (commands.mjs, COMMAND_RUN), editor.mjs,
 # createSpanTable, or anything that moves a label or an extent. Anything
@@ -290,6 +294,7 @@ npm run gate                                   # all gates
 node test/gates/run.mjs semantics              # gates whose name matches
 node test/run.mjs                              # all specs
 node test/run.mjs nav                          # specs whose name matches
+node test/run.mjs --jobs 1                     # one at a time, one browser
 
 # the PDF export, in the shape of test/settings.mjs and not of a spec: it
 # writes its fixtures into $TMPDIR, spawns build.js, and reads back the PDFs

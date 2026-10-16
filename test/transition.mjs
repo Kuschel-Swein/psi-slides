@@ -35,6 +35,8 @@ import { serve, ROOT } from './harness.mjs';
 export const name = 'transition · pan travels, cut lands in a frame, fade never paints two slides';
 export const lecture = 'tutorial';   // built for other specs already; unused here
 export const view = 'audience';
+// Run alone, after the parallel batch (test/run.mjs): it samples per animation frame, and a busy CPU drops frames.
+export const serial = true;
 
 const DECK = (mode) => `---
 title: T

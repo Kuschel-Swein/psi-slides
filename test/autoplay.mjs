@@ -26,6 +26,8 @@ import { serve, ROOT } from './harness.mjs';
 export const name = 'autoplay · the clock, and who stops it';
 export const lecture = 'tutorial';   // built for other specs already; unused here
 export const view = 'audience';
+// Run alone, after the parallel batch (test/run.mjs): the figure's beats run on a real timer the spec waits out.
+export const serial = true;
 
 // 260 ms so the spec is quick and still inside the documented 200 ms – 60 s.
 // Three steps, so "it moved" is several beats rather than one and cannot be

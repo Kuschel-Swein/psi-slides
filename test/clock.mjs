@@ -30,6 +30,8 @@ import { ROOT, serve } from './harness.mjs';
 
 export const name = 'clock · cockpit';
 export const lecture = 'tutorial';
+// Run alone, after the parallel batch (test/run.mjs): the reload case runs on the real clock.
+export const serial = true;
 
 const deck = (frontmatter) => `---
 title: Clock

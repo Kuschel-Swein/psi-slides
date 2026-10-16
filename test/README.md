@@ -7,13 +7,13 @@ Two suites, split by one question: **can this be decided without a browser?**
   hand-mirrored list one file keeps of another's. Twenty-three gates, about three seconds,
   no browser and no `npm install`. Run by `gates.yml` on push and pull
   request.
-- **`test/`** – the things that only break in a built page. 54 specs, about 1,670
-  assertions, about twelve minutes, one Chromium for the whole run. One of
-  them, `souffleuse`, starts an engine of its own beside that browser – see
-  below.
+- **`test/`** – the things that only break in a built page. 55 specs, about 2,010
+  assertions, about four minutes on a twelve-core machine with six specs at a
+  time (about eleven minutes one at a time). One of them, `souffleuse`, starts an
+  engine of its own beside its browser – see below.
 
 `npm test` runs the gates first, so a compiler regression fails in seconds
-rather than in twelve minutes.
+rather than in minutes.
 
 Anything checkable without a browser belongs in `lint.js`, where it runs on
 every commit, or in `test/gates/`, where it runs on every push. The browser
@@ -72,6 +72,7 @@ npm run gate                        # all gates
 node test/gates/run.mjs semantics   # gates whose name matches
 node test/run.mjs                   # all specs
 node test/run.mjs nav               # specs whose name matches
+node test/run.mjs --jobs 1          # one spec at a time, as before
 npm run reproducible                # same bytes under any flag set
 npm run containers                  # every container × every line type, build against lint
 ```
@@ -486,8 +487,58 @@ holds the canonical examples of what the tool supports, and these are tests.
 ## Running it
 
 The runner builds and serves the lectures itself, so it never reports on stale
-HTML, and launches one Chromium for the whole run (`$PSI_CHROME`, else the
-Playwright cache, else system Chrome).
+HTML (`$PSI_CHROME`, else the Playwright cache, else system Chrome, is the
+browser).
+
+**Specs run side by side, `--jobs N` at a time**, by default half the cores and
+at most six. Each one runs in a child process of its own with its own Chromium,
+because half of them build a fixture deck with `spawnSync`, which would stall
+every other spec sharing an event loop, and because `tmp.mjs` cleans up when
+the process exits. A spec's output is held until it finishes and then printed
+whole, with its time, so two specs never interleave; the tally at the end
+lists failures in `SPECS` order whichever order they finished in. The batch
+starts the longest specs first (`SLOW_FIRST` in `run.mjs`, measured; a stale
+list costs wall time, never a result). `--jobs 1` is the old runner exactly:
+one process, one Chromium, specs in order, output as it happens – and what a
+filter that leaves one spec gets anyway.
+
+**Eight specs export `serial = true`** and run afterwards, alone, in the
+runner's own process: `souffleuse` and `live-trust` (engines of their own with
+sockets), `demo` (a capture handed over WebRTC on loopback, waited for with
+sleeps), `nav-fullscreen` (a browser policy about user activation), `clock`
+(its reload case is on the real clock), `transition` (it samples per animation
+frame), `autoplay` (it waits out a real timer) and `live-sync` (two presses
+inside one 260 ms fade). The rule for a new spec: if what it asserts depends
+on how quickly the machine answers, or it starts a process that listens, mark
+it serial. A spec that passes alone and fails beside others is the other
+signal – fix the wait if it is a sleep racing a state change, else mark it.
+
+Measured on the twelve-core machine the suite is maintained on: 843 s one at a
+time with the old fixed sleeps, 682 s one at a time with `settle` (below), and
+238 s with six at a time (three runs, 1,987 passed and 0 failed each). About
+140 s of those 238 is the eight serial specs, so that is where the next minute
+is. Of the rest of `npm test`, `settings.mjs` is the long stage at about two
+minutes with no browser.
+
+**Waiting.** `settle(page, cap)` in `harness.mjs` replaced the fixed sleeps of
+`press`, `walkTo`, `openDeck`, `restart` and the editor helpers: it returns
+when every page of the spec's context holds still – no finite animation
+running, the live chunk, `revealed`, the stage's transform, a pending fade and
+each stepped figure's geometry the same on two frames, and at least 50 ms
+gone – and never later than the sleep it replaced. Use it in a new spec
+instead of `waitForTimeout` wherever the wait is for the page to finish
+reacting; keep a sleep only where the time itself is the subject (an autoplay
+tick, a timer running out). `walkTo` asks for less between presses (the press
+taken, no fade still holding the change) and gives the camera its old 90 ms
+once the target is up.
+
+What would make `settle` exact rather than inferred is a signal from the
+runtime: a `window.psiIdle()` promise that `AUDIENCE_JS` resolves once the
+camera transition, a fade, a figure tween and the deferred `focusCamera`
+calls (the 20–30 ms timeouts after an expansion and an annotation) have all
+finished. `settle` reads all of those from outside, through globals and
+`document.getAnimations()`, and needs its 50 ms floor only because the
+deferred calls are invisible from there.
 
 Run it after touching `AUDIENCE_JS`, the key map (`commands.mjs`, `COMMAND_RUN`), `editor.mjs`,
 `createSpanTable`, or anything that moves a label or an extent.

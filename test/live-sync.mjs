@@ -19,11 +19,13 @@ import fs from 'node:fs';
 import { tmpDir } from './tmp.mjs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { serve, ROOT } from './harness.mjs';
+import { serve, settle, ROOT } from './harness.mjs';
 
 export const name = 'live-sync · freeze, landing and focus across the two windows';
 export const lecture = 'tutorial';   // built for other specs already; unused here
 export const view = 'audience';
+// Run alone, after the parallel batch (test/run.mjs): two presses have to land inside one 260 ms fade.
+export const serial = true;
 
 const BODY = `
 ## title: {#title}
@@ -147,17 +149,19 @@ async function openPair(ctx, port, errors) {
   return { aud, spk };
 }
 
+// A key, and then until both windows hold still (harness.mjs, settle), at
+// most the time it used to sleep.
 async function key(p, k, ms = 300) {
   await p.bringToFront();
   await p.keyboard.press(k);
-  await wait(p, ms);
+  await settle(p, ms);
 }
 
 async function goTo(p, id) {
   // The deck's own hash route: jumpTo, broadcast and all.
   await p.bringToFront();
   await p.evaluate((i) => { location.hash = '#' + i; }, id);
-  await wait(p, 500);
+  await settle(p, 500);
 }
 
 export async function run({ page, report }) {
@@ -244,8 +248,17 @@ export async function run({ page, report }) {
     const a1 = await aud.evaluate(() => revealed.auto ?? 0);
     ok(a1 !== a0 || await aud.evaluate(() => autoplayTimer !== 0),
       'and the figure plays itself on the projection', `${a0} -> ${a1}`);
-    const sAuto = await spk.evaluate(() => revealed.auto ?? 0);
-    ok(sAuto === await aud.evaluate(() => revealed.auto ?? 0), 'the cockpit follows the clock', String(sAuto));
+    // The figure keeps playing, so a tick can land between the two reads and
+    // the cockpit is then one message behind for a moment. What is claimed is
+    // that it follows, so ask until both windows name the same beat.
+    let sAuto, aAuto;
+    for (let i = 0; i < 20; i++) {
+      sAuto = await spk.evaluate(() => revealed.auto ?? 0);
+      aAuto = await aud.evaluate(() => revealed.auto ?? 0);
+      if (sAuto === aAuto) break;
+      await wait(aud, 50);
+    }
+    ok(sAuto === aAuto, 'the cockpit follows the clock', `${sAuto} vs ${aAuto}`);
     // A press in the cockpit takes the figure over on the projection too.
     await key(spk, 'ArrowUp', 100);
     await wait(aud, 200);

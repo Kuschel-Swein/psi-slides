@@ -37,7 +37,7 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { findChrome } from '../chrome-path.mjs';
@@ -67,6 +67,24 @@ export function buildLecture(slug, flags = []) {
     throw new Error(`build of ${slug} failed:\n${r.stdout || ''}${r.stderr || ''}`);
   }
   return path.join(ROOT, 'lectures', slug);
+}
+
+// The same build without holding the event loop, so the parallel runner can
+// build its three lectures side by side. Same arguments, same refusal.
+export function buildLectureAsync(slug, flags = []) {
+  const src = path.join(ROOT, 'lectures', slug, 'source.md');
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath,
+      [path.join(ROOT, 'build.js'), src, '--no-optimize-images', ...flags],
+      { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    child.stdout.on('data', d => { out += d; });
+    child.stderr.on('data', d => { out += d; });
+    child.on('close', (code) => {
+      if (code === 0) resolve(path.join(ROOT, 'lectures', slug));
+      else reject(new Error(`build of ${slug} failed:\n${out}`));
+    });
+  });
 }
 
 export function serve(dir) {
@@ -103,12 +121,101 @@ export function createReport() {
 }
 
 // ── driving a built deck ────────────────────────────────────────────
-// One Chromium for the whole run. Launching cost ~1.5s per spec and the
-// suite pays it fifteen times over; a browser context gives each spec the
-// same isolation (fresh localStorage, fresh windows) for a few milliseconds.
+// One Chromium per process. Under `--jobs 1` that is one for the whole run;
+// in parallel it is one per spec, since each spec runs in a process of its
+// own, and the launch (about a second) is paid six at a time. A browser
+// context gives each spec its isolation (fresh localStorage, fresh windows).
 let sharedBrowser = null;
 export async function closeBrowser() {
   if (sharedBrowser) { const b = sharedBrowser; sharedBrowser = null; await b.close(); }
+}
+
+// ── holding still ───────────────────────────────────────────────────
+// The waits after a key, a click or a load used to be fixed sleeps sized for
+// the slowest thing the action could start: 240 ms after a key, 700 after a
+// load. Most actions start nothing that takes that long, and a suite of a
+// few thousand of them spent most of its wall time asleep.
+//
+// `settle` waits instead until every page of the spec's context holds still,
+// with the old sleep as the upper bound, so it is never slower than the sleep
+// it replaced and never decides anything the sleep did not. "Still" is read
+// off what the runtime already exposes, without a hook of its own:
+//
+//  - no finite animation running – document.getAnimations() sees the
+//    camera's CSS transition, a reveal's fade, the fade transition's WAAPI
+//    dip and a backdrop's clip-path; an infinite one (a caret, a pulse) is
+//    left out, or nothing with one would ever settle;
+//  - the same picture of the state on two frames running: the live chunk,
+//    `revealed`, the stage's transform, a pending fade, and each stepped
+//    figure's current geometry (a step is tweened in JavaScript, which
+//    getAnimations() cannot see);
+//  - and a floor, `SETTLE_FLOOR_MS`, because two runtime paths move the
+//    camera from a 20–30 ms setTimeout and a message to the other window
+//    takes a task to arrive; a settle that answered on the first frame would
+//    answer before either had started.
+//
+// Every page in the context, not only the one the key went to: the cockpit
+// and the projection move each other by postMessage. A page that cannot be
+// asked (closed, mid-navigation) falls back to the old sleep. The runtime
+// signal that would make this exact – a promise the runtime resolves when
+// the camera, the fade and the figure tweens are done – does not exist yet;
+// test/README.md says what it would be.
+export const SETTLE_FLOOR_MS = 50;
+
+function stillInPage({ cap, floor, quick }) {
+  return new Promise((done) => {
+    const t0 = performance.now();
+    let last = null, same = 0, over = false;
+    const finish = () => { if (!over) { over = true; done(Math.round(performance.now() - t0)); } };
+    // rAF does not run in a page that is not being drawn; the timer does.
+    setTimeout(finish, cap);
+    // The runtime's own top-level bindings, read by name; a page without
+    // them (a document, a fixture) simply has less to compare.
+    /* global state, revealed, fadePending */
+    const picture = () => {
+      const st = typeof state === 'object' && state ? state.activeIdx : '';
+      const rev = typeof revealed === 'object' && revealed ? JSON.stringify(revealed) : '';
+      const fade = typeof fadePending !== 'undefined' && fadePending ? 'fade' : '';
+      const stage = document.getElementById('psiINT-stage');
+      const figs = quick ? [] : [...document.querySelectorAll('svg.psi-diagram')].map(s => s.psiDiagram && s.psiDiagram.cur);
+      return {
+        key: [st, (document.querySelector('.chunk.active') || {}).id, rev,
+          stage ? stage.style.transform : '', fade].join('|'),
+        figs,
+      };
+    };
+    const busy = () => !quick && document.getAnimations().some((a) => {
+      if (a.playState !== 'running') return false;
+      const t = a.effect && a.effect.getTiming ? a.effect.getTiming() : null;
+      return !t || t.iterations !== Infinity;
+    });
+    const tick = () => {
+      if (over) return;
+      const now = performance.now() - t0;
+      const pic = picture();
+      const unchanged = last && pic.key === last.key
+        && pic.figs.length === last.figs.length && pic.figs.every((f, i) => f === last.figs[i]);
+      same = unchanged ? same + 1 : 0;
+      last = pic;
+      if (now >= cap) { finish(); return; }
+      if (now >= floor && same >= (quick ? 1 : 2) && !busy()) { finish(); return; }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+// `quick` asks less: the press has been taken and no fade is still holding
+// the slide change, never mind whether the camera has arrived. It is what a
+// walk needs between two presses, and only there.
+export async function settle(page, cap, { quick = false, floor = SETTLE_FLOOR_MS } = {}) {
+  const t0 = Date.now();
+  const pages = page.isClosed() ? [] : page.context().pages();
+  const opts = { cap, floor: Math.min(floor, cap), quick };
+  const asked = await Promise.all(pages.map(p => p.evaluate(stillInPage, opts).then(() => true, () => false)));
+  if (asked.length && asked.every(Boolean)) return;
+  const left = cap - (Date.now() - t0);
+  if (left > 0 && !page.isClosed()) await page.waitForTimeout(left);
 }
 
 export async function openDeck(port, view = 'audience', viewport = { width: 1440, height: 900 }) {
@@ -127,7 +234,7 @@ export async function openDeck(port, view = 'audience', viewport = { width: 1440
     errors.push(m.text());
   });
   await page.goto(`http://127.0.0.1:${port}/${view}.html`, { waitUntil: 'load' });
-  await page.waitForTimeout(700);
+  await settle(page, 700, { floor: 150 });
   // `close` shuts this spec's context; the browser itself lives until
   // closeBrowser() at the end of the run.
   return { page, errors, close: () => context.close(), ...deckHelpers(page) };
@@ -155,16 +262,27 @@ function deckHelpers(page) {
 
   const press = async (key, wait = 240) => {
     await page.keyboard.press(key);
-    await page.waitForTimeout(wait);
+    await settle(page, wait);
   };
 
   // Forward is one key now, across reveals and across columns, so reaching a
   // slide is that key until it comes up. Asserting the walk terminates is
   // itself worth something: it is the property "one key runs the lecture".
+  //
+  // Between two presses the walk only needs the first one taken – and, under
+  // `transition: fade`, landed, or the next press settles the fade onto the
+  // target and walks past it – so it asks `settle` for that and nothing
+  // more. Once the target is up it gives the camera the 90 ms every step
+  // used to get, so a spec that measures straight after a walk sees what it
+  // always saw.
   const walkTo = async (id, limit = 200) => {
     for (let i = 0; i < limit; i++) {
-      if ((await at()).id === id) return true;
-      await press('ArrowDown', 90);
+      if ((await at()).id === id) {
+        if (i) await settle(page, 90);
+        return true;
+      }
+      await page.keyboard.press('ArrowDown');
+      await settle(page, 90, { quick: true, floor: 0 });
     }
     return (await at()).id === id;
   };
@@ -184,7 +302,7 @@ function deckHelpers(page) {
   const restart = async (page_ = page) => {
     await page_.evaluate(() => { try { localStorage.clear(); } catch (e) { /* private window */ } });
     await page_.reload({ waitUntil: 'load' });
-    await page_.waitForTimeout(700);
+    await settle(page_, 700, { floor: 150 });
   };
 
   return { at, press, walkTo, beatOf, restart };
@@ -194,9 +312,9 @@ function deckHelpers(page) {
 export function editorHelpers(page) {
   const open = async (chunkId) => {
     await page.click(`#${chunkId} figure.figure-diagram svg`, { position: { x: 8, y: 8 } });
-    await page.waitForTimeout(400);
+    await settle(page, 400);
     await page.keyboard.press('e');
-    await page.waitForTimeout(700);
+    await settle(page, 700);
     // Open at the last beat: an element hidden at beat 0 has geometry but no
     // stroke to aim at, and a spec that clicked one would be testing the hit
     // test against something the author cannot see either.
@@ -204,7 +322,7 @@ export function editorHelpers(page) {
       const b = [...document.querySelectorAll('#psiINT-dge-beats .dge-beat')];
       if (b.length) b[b.length - 1].click();
     });
-    await page.waitForTimeout(400);
+    await settle(page, 400);
     return page.locator('#psiINT-dge-root').count().then(n => n > 0);
   };
 
@@ -234,7 +352,7 @@ export function editorHelpers(page) {
     const pt = await pointOnPath(selector, frac);
     if (!pt) return false;
     await page.mouse.click(pt.x, pt.y);
-    await page.waitForTimeout(320);
+    await settle(page, 320);
     return true;
   };
 
@@ -249,9 +367,9 @@ export function editorHelpers(page) {
     await page.mouse.move(from.x, from.y);
     await page.mouse.down();
     await page.mouse.move(from.x + dx, from.y + dy, { steps });
-    await page.waitForTimeout(140);
+    await settle(page, 140);
     await page.mouse.up();
-    await page.waitForTimeout(380);
+    await settle(page, 380);
   };
 
   // Which beat the canvas shows. It matters to more than the picture: at a
@@ -262,7 +380,7 @@ export function editorHelpers(page) {
       const b = [...document.querySelectorAll('#psiINT-dge-beats .dge-beat')];
       if (b[i]) b[i].click();
     }, k);
-    await page.waitForTimeout(350);
+    await settle(page, 350);
   };
 
   // **The error rows only.** Every caller tests this with `.includes('line ')`,

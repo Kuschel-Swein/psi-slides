@@ -23,6 +23,8 @@
 export const name = 'navigation · fullscreen';
 export const lecture = 'tutorial';
 export const view = 'audience';
+// Run alone, after the parallel batch (test/run.mjs): fullscreen is a browser policy about user activation, and the spec measures it rather than trusting it.
+export const serial = true;
 
 const fsState = (p) => p.evaluate(() => ({
   on: !!document.fullscreenElement,

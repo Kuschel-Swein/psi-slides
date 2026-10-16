@@ -35,6 +35,8 @@ import { ROOT } from './harness.mjs';
 export const name = 'live views · who may talk to them';
 export const lecture = 'diagrams';
 export const view = 'audience';
+// Run alone, after the parallel batch (test/run.mjs): three --watch engines of its own, each a process with a socket.
+export const serial = true;
 
 const fixture = (editor) => `---
 title: Trust

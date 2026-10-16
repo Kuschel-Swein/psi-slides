@@ -133,6 +133,15 @@ from building the same way is a major version.
   stacked divider's figure is no longer width-capped at 62 % while its canvas
   says 72 %.
 
+- Tests only: the browser suite runs six specs at a time by default
+  (`node test/run.mjs --jobs N`; `--jobs 1` is the old serial run), each in a
+  process and a Chromium of its own, with the eight specs that depend on
+  timing or start a listening process run alone afterwards
+  (`export const serial = true`). The harness waits for the page to hold
+  still instead of sleeping a fixed time after a key, a load or an editor
+  gesture, never longer than the sleep it replaced. On a twelve-core machine
+  the suite went from 843 s to 238 s.
+
 - CI only: the workflows use the current major of each GitHub action
   (checkout and setup-node v7, upload-artifact v7, download-artifact v8,
   upload-pages-artifact and deploy-pages v5), which run on Node.js 24, and
