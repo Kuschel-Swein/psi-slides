@@ -7,10 +7,11 @@ Two suites, split by one question: **can this be decided without a browser?**
   hand-mirrored list one file keeps of another's. Twenty-three gates, about three seconds,
   no browser and no `npm install`. Run by `gates.yml` on push and pull
   request.
-- **`test/`** – the things that only break in a built page. 56 specs, about 2,040
+- **`test/`** – the things that only break in a built page. 57 specs, about 2,080
   assertions, about four minutes on a twelve-core machine with six specs at a
-  time (about eleven minutes one at a time). One of them, `souffleuse`, starts an
-  engine of its own beside its browser – see below.
+  time (about eleven minutes one at a time). Three of them, `souffleuse`,
+  `live-trust` and `watch-resume`, start an engine of their own beside their
+  browser – see below.
 
 `npm test` runs the gates first, so a compiler regression fails in seconds
 rather than in minutes.
@@ -169,7 +170,7 @@ fixture is compiled *and* linted.
 ## The browser suite: four families
 
 **Navigation** – `nav`, `nav-cockpit`, `nav-goto`, `nav-fullscreen`, `help-search`, `palette`, `transition`, `pitchblack`,
-`cue-cards`, `cockpit-notes`, `cockpit-alone`, `clock`, `autoplay`, `live-sync`. The navigation
+`cue-cards`, `cockpit-notes`, `cockpit-alone`, `watch-resume`, `clock`, `autoplay`, `live-sync`. The navigation
 model, and what a slide change looks like under `transition: pan | cut | fade` –
 the one spec here that samples per animation frame rather than after a settle,
 because its whole subject is what happens between two states.
@@ -322,7 +323,7 @@ is fine. **They assert the property and never a coordinate.**
 context the bar is not in the document and a measurement of it reports no
 overlaps among no buttons.
 
-### The twenty-four specs that build a deck of their own
+### The twenty-five specs that build a deck of their own
 
 Four different reasons, and the last is the one to remember.
 
@@ -366,7 +367,16 @@ one; its `S` opens `audience.html` attached to it, on its slide; a reload of
 that projection is answered within a second; a closed one turns the light back,
 and `S` opens it again into the same cockpit with its clock unreset; and a
 projection opened by hand beside it names the running cockpit instead of
-opening a second one, until `S` is pressed again.
+opening a second one, until `S` is pressed again. `watch-resume` is the pair
+under `--watch`, with an engine of its own on a fixture whose source it
+rewrites: a chunk added above the one on screen reloads the projection onto
+the same chunk and beat; a source the build refuses puts the banner up with
+the message's first line as text (its quoted `<img onerror>` stays text), a
+document opened meanwhile says only that it failed, and the fix's reload takes
+it away; with the cockpit opened by `S`, a save lands both windows on one
+chunk and beat, a failure shows in the cockpit and not on the projection, a
+frozen cockpit comes back frozen on its look-ahead while the room stays put,
+and a deleted chunk lands both on one slide.
 
 **Because nothing that ships can reach the case** – `palette` (the start menu
 lives on the first slide and its first beat of a page load, so the spec needs
@@ -510,9 +520,9 @@ list costs wall time, never a result). `--jobs 1` is the old runner exactly:
 one process, one Chromium, specs in order, output as it happens – and what a
 filter that leaves one spec gets anyway.
 
-**Eight specs export `serial = true`** and run afterwards, alone, in the
-runner's own process: `souffleuse` and `live-trust` (engines of their own with
-sockets), `demo` (a capture handed over WebRTC on loopback, waited for with
+**Nine specs export `serial = true`** and run afterwards, alone, in the
+runner's own process: `souffleuse`, `live-trust` and `watch-resume` (engines
+of their own with sockets), `demo` (a capture handed over WebRTC on loopback, waited for with
 sleeps), `nav-fullscreen` (a browser policy about user activation), `clock`
 (its reload case is on the real clock), `transition` (it samples per animation
 frame), `autoplay` (it waits out a real timer) and `live-sync` (two presses

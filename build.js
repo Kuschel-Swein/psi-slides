@@ -7296,6 +7296,87 @@ function lectureStats(src, lecture) {
 // into each renderer; a non-null port emits this <script> just before
 // </head>. Production builds receive opts.watchPort = null and the
 // renderers emit nothing, keeping the output a static file.
+// What a failed rebuild looks like in an open page. Ships inside the reload
+// script and nowhere else, so a build without --watch carries none of it.
+// A page used to sit on its old build in silence while the terminal said
+// the rebuild had failed, and an author whose terminal was behind the
+// browser saved, saw nothing change and took the edit for one with no
+// effect. Shown where the lecturer looks: always in the cockpit, in the
+// projection only while no cockpit answers it (psiBuildBannerHere in
+// AUDIENCE_JS, a projector mid-talk is not where a typo belongs), and in the
+// two documents. Gone on the next good build, because every good build
+// reloads every page; a click hides it until the next failure.
+//
+// The reason is text from the build's error, which can quote source.md, so
+// it reaches the page through textContent and never as markup. A page that
+// knows neither secret hears only that a rebuild failed (the bare string),
+// and says the terminal has the reason.
+//
+// The diagram editor's status line already says it while the editor is
+// open (psiWatchBuildFailed answers true when it did), so the banner then
+// stands behind the editor rather than beside it.
+const WATCH_BANNER_CSS = `<style>
+#psiINT-build-failed {
+  position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 2147483000; box-sizing: border-box;
+  max-width: min(46rem, calc(100vw - 32px)); padding: 8px 14px;
+  background: var(--paper, #fff); color: var(--ink, #222);
+  border: 1px solid var(--rule, #bbb); border-radius: 6px;
+  box-shadow: 0 2px 12px rgb(0 0 0 / 0.18);
+  font: 13px/1.45 system-ui, sans-serif; text-align: left; cursor: pointer;
+  overflow-wrap: anywhere;
+}
+#psiINT-build-failed[hidden], body.dge-open #psiINT-build-failed.by-editor { display: none; }
+#psiINT-build-failed strong { font-weight: 600; }
+#psiINT-build-failed .bf-soft { color: var(--ink-soft, #666); }
+@media print { #psiINT-build-failed { display: none; } }
+</style>`;
+const WATCH_BANNER_JS = `
+  let bfEl = null;
+  const bfPaint = () => {
+    if (!bfEl) return;
+    const here = !window.psiBuildBannerHere || window.psiBuildBannerHere();
+    bfEl.hidden = !here || bfEl.hasAttribute('data-dismissed');
+  };
+  window.psiBuildBannerRefresh = bfPaint;
+  const bfShow = (why, detailed) => {
+    if (!document.body) {
+      document.addEventListener('DOMContentLoaded', () => bfShow(why, detailed), { once: true });
+      return;
+    }
+    let byEditor = false;
+    if (detailed && window.psiWatchBuildFailed) {
+      try { byEditor = window.psiWatchBuildFailed(why || 'the rebuild failed') === true; } catch (err) { /* ignore */ }
+    }
+    if (!bfEl) {
+      bfEl = document.createElement('div');
+      bfEl.id = 'psiINT-build-failed';
+      bfEl.setAttribute('role', 'status');
+      bfEl.title = 'Click to hide. It goes by itself when a build succeeds.';
+      bfEl.addEventListener('click', () => { bfEl.setAttribute('data-dismissed', ''); bfPaint(); });
+      document.body.appendChild(bfEl);
+    }
+    let first = detailed ? String(why || '').split('\\n')[0].trim() : '';
+    if (first.length > 240) first = first.slice(0, 239) + '\u2026';
+    const head = document.createElement('div');
+    const strong = document.createElement('strong');
+    strong.textContent = first ? 'The rebuild failed: ' : 'The rebuild failed.';
+    head.append(strong, first);
+    const soft = document.createElement('div');
+    soft.className = 'bf-soft';
+    soft.textContent = (first ? '' : 'The terminal says why. ') + 'This page still shows the last good build.';
+    bfEl.replaceChildren(head, soft);
+    bfEl.classList.toggle('by-editor', byEditor);
+    bfEl.removeAttribute('data-dismissed');
+    bfPaint();
+  };
+  // A watch reload: the live views stash where they are first (psiWatchResume
+  // in AUDIENCE_JS), so the page comes back on the same chunk and beat.
+  const bfReload = () => {
+    try { if (window.psiWatchResumeSave) window.psiWatchResumeSave(); } catch (err) { /* ignore */ }
+    location.reload();
+  };`;
+
 function reloadScript(port, nonce, opts = {}) {
   if (!port) return '';
   // Two-way now. The reload half is unchanged; the other half is what the
@@ -7313,20 +7394,35 @@ function reloadScript(port, nonce, opts = {}) {
   // --watch build of one used to carry the secret that lets a page write to
   // source.md. The server sends a bare "reload" to every socket it accepted,
   // so this needs no message of its own.
+  //
+  // A live view without a writer (`listen`) says one thing on every open, a
+  // second secret that marks the socket as one this build made and that may
+  // be told why a rebuild failed - and that lets it do nothing else. The
+  // documents send nothing at all and hear only that one failed.
   if (opts.receiveOnly) {
-    return `<script>
-(() => {
+    const listen = opts.listen ? `
+    const listen = ${JSON.stringify(opts.listen)};
+    ws.addEventListener('open', () => {
+      try { ws.send(JSON.stringify({ type: 'hello', listen })); } catch (err) { /* closing */ }
+    });` : '';
+    return `${WATCH_BANNER_CSS}<script>
+(() => {${WATCH_BANNER_JS}
   const connect = () => {
-    const ws = new WebSocket('ws://127.0.0.1:${port}');
-    ws.addEventListener('message', e => { if (e.data === 'reload') location.reload(); });
+    const ws = new WebSocket('ws://127.0.0.1:${port}');${listen}
+    ws.addEventListener('message', e => {
+      if (e.data === 'reload') { bfReload(); return; }
+      if (e.data === 'build-failed') { ${opts.listen ? '/* the reason follows */' : "bfShow('', false);"} return; }
+      let m; try { m = JSON.parse(e.data); } catch (err) { return; }
+      if (m && m.type === 'build-failed') bfShow(m.why, true);
+    });
     ws.addEventListener('close', () => { setTimeout(connect, 500); });
   };
   connect();
 })();
 </script>`;
   }
-  return `<script>
-window.psiWatch = (() => {
+  return `${WATCH_BANNER_CSS}<script>
+window.psiWatch = (() => {${WATCH_BANNER_JS}
   let sock = null;
   let seq = 0;
   const waiting = new Map();
@@ -7350,14 +7446,18 @@ window.psiWatch = (() => {
       for (const fn of opened) { try { fn(); } catch (err) { /* ignore */ } }
     });
     ws.addEventListener('message', e => {
-      if (e.data === 'reload') { location.reload(); return; }
+      if (e.data === 'reload') { bfReload(); return; }
+      // The bare form goes to a socket that has not said hello yet; the
+      // reason follows the hello.
+      if (e.data === 'build-failed') return;
       let m; try { m = JSON.parse(e.data); } catch (err) { return; }
       // The server could not rebuild – a deleted asset, a syntax error made
-      // in a text editor. Surfaced to whoever can show it (the diagram
-      // editor's status line); without this the page sat on the old build in
-      // silence and the next write-back failed with unhelpful advice.
+      // in a text editor. The banner says so, and the diagram editor's status
+      // line too while it is open; without this the page sat on the old
+      // build in silence and the next write-back failed with unhelpful
+      // advice.
       if (m && m.type === 'build-failed') {
-        if (window.psiWatchBuildFailed) window.psiWatchBuildFailed(m.why || 'the rebuild failed');
+        bfShow(m.why, true);
         return;
       }
       // Any *-result carrying an id we are waiting on. The patch protocol
@@ -14577,7 +14677,7 @@ ${shipsEditor
   // editor: speaker or none, or a lecture with no figure - gets the reload
   // the documents get and no nonce: it is the window on the projector, and
   // the nonce is what lets a page write to source.md.
-  : reloadScript(opts.watchPort, null, { receiveOnly: true })}
+  : reloadScript(opts.watchPort, null, { receiveOnly: true, listen: opts.watchListen })}
 </head>
 <body ${viewBodyAttrs(defaults, styleBodyAttrs(styleOpts, frontmatter))}>
 ${themeBootScript(defaults)}
@@ -20408,9 +20508,14 @@ function loadPersisted() {
     const raw = localStorage.getItem(storageKey('annotations'));
     if (raw) annotations = JSON.parse(raw) || {};
   } catch (e) {}
+  // The chunk id first, the index where the id is gone (or was never
+  // written, by a build before it). An index alone put a reopened deck on
+  // the neighbour of its slide as soon as a chunk was added above it.
   try {
     const pos = localStorage.getItem(storageKey('activeIdx'));
     if (pos !== null) state.activeIdx = Math.max(0, Math.min(flatChunks.length - 1, parseInt(pos, 10) || 0));
+    const at = chunkIdxOf(localStorage.getItem(storageKey('activeId')));
+    if (at >= 0) state.activeIdx = at;
   } catch (e) {}
   // Font, theme and slide numbers are global (not per-lecture): shared
   // across all lectures so the reading preference follows the user, not the
@@ -20456,7 +20561,28 @@ function saveActive() {
   // a projection reloaded under a freeze read the cockpit's look-ahead and
   // put it on the wall. Thawing stores the position the room then gets.
   if (viewHooks.lookingAhead()) return;
-  try { localStorage.setItem(storageKey('activeIdx'), String(state.activeIdx)); } catch (e) {}
+  try {
+    localStorage.setItem(storageKey('activeIdx'), String(state.activeIdx));
+    const entry = flatChunks[state.activeIdx];
+    if (entry && entry.id) localStorage.setItem(storageKey('activeId'), entry.id);
+  } catch (e) {}
+}
+// The index of the chunk with this id, or -1. Positions that outlive one
+// build - a stored one, the other window's, one kept across a watch reload -
+// are named by id, because an index moves whenever a chunk is added above.
+function chunkIdxOf(id) {
+  if (typeof id !== 'string' || !id) return -1;
+  return flatChunks.findIndex(c => c.id === id);
+}
+// Where a payload from the other window says the room is: by its chunk id
+// when this window has that chunk, else by index. The two windows reload
+// one after the other on a --watch save, so for a moment one of them holds
+// the old build: its indices are the old deck's, its ids are still right.
+// An older peer sends no id and is read by index, as before.
+function remoteActiveIdx(payload) {
+  const at = chunkIdxOf(payload.activeId);
+  if (at >= 0) return at;
+  return Math.max(0, Math.min(flatChunks.length - 1, payload.activeIdx || 0));
 }
 function applyFontTheme() {
   document.body.dataset.font = state.font;
@@ -20620,8 +20746,14 @@ function notePeer() {
       try { sessionStorage.setItem(PAIRED_KEY, '1'); } catch (e) {}
     }
     viewHooks.onPeerChange(live);
+    if (window.psiBuildBannerRefresh) window.psiBuildBannerRefresh();
   }
 }
+// Whether --watch's failed-build banner (reloadScript) may stand in this
+// window: always in the cockpit, in the projection only while no cockpit
+// answers - with one attached, the projection is on a wall and the
+// lecturer reads it in the cockpit.
+window.psiBuildBannerHere = () => VIEW !== 'audience' || !hasLivePeer();
 // This tab's projection has had a cockpit of this deck - kept across a
 // reload, and not copied into a tab opened by hand. A projection that had one
 // finds it again by its window name (openViewWindow), so the heartbeat check
@@ -20654,6 +20786,8 @@ function shouldBroadcast() {
 function snapshot() {
   return {
     activeIdx: state.activeIdx,
+    // The same position by name; see remoteActiveIdx.
+    activeId: (flatChunks[state.activeIdx] || {}).id || null,
     revealed: Object.assign({}, revealed),
     collapse: state.collapse,
     // Two fields for one setting, and the second is the compatibility one.
@@ -20780,7 +20914,7 @@ function applyRemoteState(payload) {
   // pair of screens nobody sees at once, was judged cheaper than teaching
   // the snapshot to carry a phase.
   settleFade();
-  const changed = Math.max(0, Math.min(flatChunks.length - 1, payload.activeIdx || 0)) !== state.activeIdx;
+  const changed = remoteActiveIdx(payload) !== state.activeIdx;
   if (changed) landSlide(() => applyRemoteStateNow(payload, true));
   else {
     // A snapshot on the slide already up is the other window's hand on it -
@@ -20808,7 +20942,7 @@ function applyRemoteStateNow(payload, changed) {
     // stepped figure's clone follows the step runtime. Closing it on purpose
     // travels as figure-unfocus.
     if (changed) unfocusFigure();
-    state.activeIdx = Math.max(0, Math.min(flatChunks.length - 1, payload.activeIdx || 0));
+    state.activeIdx = remoteActiveIdx(payload);
     state.collapse = COLLAPSE_MODES.includes(payload.collapse) ? payload.collapse : 'topic-bold';
     state.zoom = payload.zoom || 1.35;
     // autoFitMode when the peer sends one, the old boolean when it does
@@ -25897,6 +26031,49 @@ loadPersisted();
 // remembered position rather than the other way round.
 const bootHashIdx = chunkIdxFromHash();
 if (bootHashIdx >= 0) state.activeIdx = bootHashIdx;
+// And a --watch reload wins over both: the page is coming back from a save,
+// and the author is where they were a moment ago, not where the address
+// they opened pointed. One stash per window (sessionStorage), written by the
+// reload script just before it reloads (psiWatchResumeSave) and taken once
+// here. The chunk by id - a chunk added above used to land the page on its
+// neighbour - and the old index, clamped, when the id is gone; every chunk's
+// beat, clamped to the beats it has now - the reveal state used to start
+// over, so a stepped figure took three presses after every save. A frozen
+// cockpit stays frozen, or its first push would move the room to the slide
+// it was looking ahead at. Only on a reload, and only a fresh stash: a
+// stash nobody took is not a reason to move a later visit.
+const WATCH_RESUME_KEY = storageKey('watch-resume');
+window.psiWatchResumeSave = () => {
+  const entry = flatChunks[state.activeIdx];
+  sessionStorage.setItem(WATCH_RESUME_KEY, JSON.stringify({
+    id: entry ? entry.id : null, idx: state.activeIdx,
+    revealed: Object.assign({}, revealed),
+    frozen: viewHooks.lookingAhead(), at: Date.now(),
+  }));
+};
+const watchResume = (() => {
+  let r = null;
+  try {
+    const raw = sessionStorage.getItem(WATCH_RESUME_KEY);
+    if (raw === null) return null;
+    sessionStorage.removeItem(WATCH_RESUME_KEY);
+    const nav = performance.getEntriesByType('navigation')[0];
+    if (!nav || nav.type !== 'reload') return null;
+    r = JSON.parse(raw);
+  } catch (e) { return null; }
+  if (!r || typeof r !== 'object' || !(Date.now() - r.at < 60000)) return null;
+  return r;
+})();
+if (watchResume) {
+  const at = chunkIdxOf(watchResume.id);
+  state.activeIdx = at >= 0 ? at
+    : Math.max(0, Math.min(flatChunks.length - 1, Number(watchResume.idx) || 0));
+  const kept = watchResume.revealed || {};
+  flatChunks.forEach(c => {
+    const n = kept[c.id];
+    if (typeof n === 'number' && n >= 0) revealed[c.id] = Math.min(n, countSegments(c.el));
+  });
+}
 applyFontTheme();
 document.querySelectorAll('.reveal-segment').forEach(seg => splitSentencesIn(seg));
 wireAnnotations();
@@ -26105,7 +26282,7 @@ ${shipsEditor || souffSettings
   ? reloadScript(opts.watchPort, opts.watchNonce)
   // The editor and the prompter are the cockpit's two writers; with
   // neither, it gets the reload alone, as the projection does.
-  : reloadScript(opts.watchPort, null, { receiveOnly: true })}
+  : reloadScript(opts.watchPort, null, { receiveOnly: true, listen: opts.watchListen })}
 </head>
 <body ${viewBodyAttrs(defaults, 'data-view="speaker" ' + styleBodyAttrs(styleOpts, frontmatter))}>
 ${themeBootScript(defaults)}
@@ -27372,7 +27549,10 @@ requestAnimationFrame(sizeStageViewport);
 // the image while I look ahead). Inverted and renamed, the second key
 // disappears: thawing *is* the resync, because the first thing an ungated
 // broadcast does is hand the room our current state.
-let frozen = false;
+// A --watch save reloads this window with the freeze it had (watchResume in
+// AUDIENCE_JS); a frozen cockpit that came back live pushed its look-ahead
+// to the room on the first message.
+let frozen = !!(watchResume && watchResume.frozen);
 viewHooks.shouldBroadcast = () => !frozen;
 viewHooks.lookingAhead = () => frozen;
 // The cockpit's own commands, assigned into the key map's COMMAND_RUN the way
@@ -32624,7 +32804,11 @@ async function runWatch(absIn, only, baseOpts = {}) {
   // A per-build secret, required on every patch. Without it any page in the
   // browser that guessed the port could write to source.md.
   let nonce = crypto.randomBytes(16).toString('hex');
-  const opts = { ...baseOpts, watchPort: port, watchNonce: nonce };
+  // The second secret, for the live views that carry no writer: it lets a
+  // socket hear why a rebuild failed and nothing else. Never accepted where
+  // the nonce is asked for.
+  const listenKey = crypto.randomBytes(16).toString('hex');
+  const opts = { ...baseOpts, watchPort: port, watchNonce: nonce, watchListen: listenKey };
 
   // Only a driver on stdin can turn this off, and the watch process stays up
   // when it does: live reload and the editor's write-back hang off this
@@ -32658,12 +32842,17 @@ async function runWatch(absIn, only, baseOpts = {}) {
   // the two documents carry no nonce and still reload; why a build failed
   // goes only to these, because it quotes the source.
   const trusted = new WeakSet();
-  const broadcast = (msg, onlyTrusted = false) => {
+  // Sockets that may be told why a build failed: the trusted ones, and a
+  // live view without a writer that showed the listen key. Everyone else -
+  // the two documents, which send nothing - hears the bare 'build-failed'.
+  const hearers = new WeakSet();
+  const broadcast = (msg) => {
     for (const client of wss.clients) {
-      if (onlyTrusted && !trusted.has(client)) continue;
       if (client.readyState === 1) client.send(msg);
     }
   };
+  const failedFor = (client, why) =>
+    hearers.has(client) ? JSON.stringify({ type: 'build-failed', why }) : 'build-failed';
 
   // The last rebuild's failure, if any. A failed rebuild used to be visible
   // only in the terminal: the open pages kept the old build silently, and
@@ -32705,7 +32894,9 @@ async function runWatch(absIn, only, baseOpts = {}) {
         stack: err.userFacing ? null : (err.stack || null),
         durationMs: Date.now() - t0,
       });
-      broadcast(JSON.stringify({ type: 'build-failed', why: err.message }), true);
+      for (const client of wss.clients) {
+        if (client.readyState === 1) client.send(failedFor(client, err.message));
+      }
     }
   };
 
@@ -32730,6 +32921,9 @@ async function runWatch(absIn, only, baseOpts = {}) {
     // listener `ws` rethrows it, and one message over WATCH_MAX_PAYLOAD - or
     // a malformed frame - took the whole watch process down with it.
     sock.on('error', () => { try { sock.terminate(); } catch (e) { /* gone */ } });
+    // A page that opens while the source is broken is on the last good build
+    // too. The reason, if it may hear one, follows its hello.
+    if (lastBuildError) { try { sock.send('build-failed'); } catch (e) { /* gone */ } }
     sock.on('message', (raw) => {
       let msg;
       try { msg = JSON.parse(String(raw)); } catch { return; }
@@ -32737,7 +32931,9 @@ async function runWatch(absIn, only, baseOpts = {}) {
       // A live view's first word on every connection, answered with nothing:
       // it only marks the socket as one this build made.
       if (msg.type === 'hello') {
-        if (typeof msg.nonce === 'string' && msg.nonce === nonce) trusted.add(sock);
+        if (typeof msg.nonce === 'string' && msg.nonce === nonce) { trusted.add(sock); hearers.add(sock); }
+        else if (typeof msg.listen === 'string' && msg.listen === listenKey) hearers.add(sock);
+        if (lastBuildError && hearers.has(sock)) sock.send(failedFor(sock, lastBuildError));
         return;
       }
       const known = msg.type === 'patch' || msg.type === 'assets' || msg.type === 'asset'
@@ -32750,6 +32946,7 @@ async function runWatch(absIn, only, baseOpts = {}) {
       const reply = (ok, why, extra) => sock.send(JSON.stringify({ ...extra, type: msg.type + '-result', id: msg.id, ok, why }));
       if (msg.nonce !== nonce) return reply(false, 'this page is from an older build – reload it and try again');
       trusted.add(sock);
+      hearers.add(sock);
 
       // The live prompter, after the nonce check like everything else. A
       // second cockpit tab takes the hints over by saying hello; the one that

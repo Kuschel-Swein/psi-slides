@@ -39,6 +39,7 @@ const SPECS = [
   './cue-cards.mjs',
   './cockpit-notes.mjs',
   './cockpit-alone.mjs',
+  './watch-resume.mjs',
   './clock.mjs',
   './souffleuse.mjs',
   './demo.mjs',

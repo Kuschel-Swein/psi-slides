@@ -43,8 +43,8 @@ commit. The suite drives built lectures in a headless Chromium and covers what
 can only break in a built page, in four families: the navigation model, the
 geometry the live chrome leaves the slide, the diagram editor's gestures and
 panel, and the geometry of an emitted figure (`test/README.md` lists them). It
-said "three things" for as long as it had three specs; it has fifty-six, and
-about 1,990 assertions. It builds and serves the lectures itself, so it never
+said "three things" for as long as it had three specs; it has fifty-seven, and
+about 2,080 assertions. It builds and serves the lectures itself, so it never
 reports on stale HTML. It needs a browser (`$PSI_CHROME`, else the Playwright
 cache, else the browser the host installed) and takes about four minutes on a
 twelve-core machine, six specs at a time; `--jobs N` sets how many, and

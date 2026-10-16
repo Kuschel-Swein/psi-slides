@@ -229,13 +229,21 @@ export async function run({ page, report }) {
   const qs = read(quiet.dir, 'speaker.html'), qa = read(quiet.dir, 'audience.html');
   const nonce = nonceOf(qs);
   ok(!!nonce, 'the cockpit, which ships the editor, carries the nonce');
-  ok(!qa.includes(nonce) && !qa.includes('psiWatch') && /ws:\/\/127\.0\.0\.1:\d+/.test(qa),
-    'the projection without an editor reloads over the socket and carries no nonce and nothing that sends');
+  ok(!qa.includes(nonce) && !qa.includes('window.psiWatch =') && /ws:\/\/127\.0\.0\.1:\d+/.test(qa),
+    'the projection without an editor reloads over the socket and carries no nonce and nothing that writes');
+  // What it does carry is the listen key, which lets it be told why a
+  // rebuild failed and nothing more; the documents carry not even that.
+  const listenOf = (html) => (html.match(/const listen = "([0-9a-f]+)"/) || [])[1];
+  const listen = listenOf(qa);
+  ok(!!listen && listen !== nonce, 'it carries the listen key instead, a secret of its own', String(listen));
+  const qp = read(quiet.dir, 'print.html');
+  ok(!listenOf(qp) && !nonceOf(qp) && !qp.includes('.send(') && /ws:\/\/127\.0\.0\.1:\d+/.test(qp),
+    'print.html carries neither secret and sends nothing');
   const both = await watchBuild('both');
   ok(both.ok && !!nonceOf(read(both.dir, 'audience.html')),
     'a projection that ships the editor still carries it - it writes to source.md');
   const none = await watchBuild('none');
   const ns = none.ok ? read(none.dir, 'speaker.html') : '';
-  ok(none.ok && !nonceOf(ns) && !ns.includes('psiWatch') && /ws:\/\/127\.0\.0\.1:\d+/.test(ns),
+  ok(none.ok && !nonceOf(ns) && !ns.includes('window.psiWatch =') && /ws:\/\/127\.0\.0\.1:\d+/.test(ns),
     'with editor: none and no prompter the cockpit has nothing to send, and carries no nonce either');
 }

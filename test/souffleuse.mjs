@@ -1259,7 +1259,7 @@ export async function run({ page, report }) {
     ok(!!watchPort && !!nonce, 'the cockpit carries the socket and its nonce', String(watchPort));
     for (const doc of ['print.html', 'print-notes.html']) {
       const text = fs.readFileSync(path.join(dir, doc), 'utf8');
-      ok(!text.includes(nonce) && !text.includes('psiWatch') && text.includes('ws://127.0.0.1:' + watchPort),
+      ok(!text.includes(nonce) && !text.includes('window.psiWatch =') && !text.includes('.send(') && text.includes('ws://127.0.0.1:' + watchPort),
          `${doc} reloads over the socket and carries neither the nonce nor anything that sends`);
     }
     const handshake = (origin) => new Promise((resolve) => {

@@ -8391,9 +8391,13 @@ window.psiEditorThaw = () => {
 
 // The watch server says so when a rebuild fails – a deleted asset, a syntax
 // error made in a text editor beside this one. The status line is the one
-// place an author working in here actually looks.
+// place an author working in here actually looks. True when it said so, and
+// the page's own banner (reloadScript in build.js) then stays behind the
+// editor rather than saying it a second time beside it.
 window.psiWatchBuildFailed = (why) => {
-  if (DGE.open) dgeStatus('', 'the rebuild failed: ' + why, true);
+  if (!DGE.open) return false;
+  dgeStatus('', 'the rebuild failed: ' + why, true);
+  return true;
 };
 
 function dgeApplyRemoteEdit(m) {

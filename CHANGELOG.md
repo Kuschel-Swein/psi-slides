@@ -171,6 +171,24 @@ from building the same way is a major version.
   preview strip's smooth scroll to the current slot starts a frame later as
   well. On a 39-chunk deck with a note on every slide, the forced layouts
   inside a press went from 2.0 to 1.3.
+- **A save under `--watch` keeps the slide and the beat.** The live views
+  remembered their place as an index and not their reveals at all, so adding
+  a chunk above the one on screen reloaded the page onto its neighbour, and
+  every save put the slide back to its first beat – a stepped figure took
+  three presses per edit. Each window now comes back to the same chunk, by
+  id, on the same beat; a deleted chunk lands on the slide at its old
+  position. Projection and cockpit agree after the reload, and a frozen
+  cockpit stays frozen, so a save while looking ahead no longer moves the
+  room. A deck reopened after a rebuild finds its slide by id as well.
+- **A failed rebuild shows in the browser.** The page used to keep the last
+  good build in silence while only the terminal said why. A banner now says
+  “The rebuild failed” with the first line of the error and that the page
+  still shows the last good build – in the cockpit, in the two documents, and
+  in the projection only while no cockpit is attached. The next good build
+  takes it away. A page opened while the source is broken says so too. The
+  documents hear only that the build failed, not the reason, which can quote
+  `source.md`; a projection or cockpit without the diagram editor carries a
+  second secret of its own for the reason, one that lets it do nothing else.
 - **A cockpit with no projection says so, and opens one.** `speaker.html`
   opened on its own showed a green “● live”, `S` did nothing there, and `B`
   answered “projection blanked” with no projection to blank. The footer's

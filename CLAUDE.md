@@ -265,11 +265,12 @@ node lint.js lectures/ --strict                # warnings → exit 2
 # figures or not: `frontmatter` holds lint.js's KNOWN_FRONTMATTER_KEYS
 # against what build.js reads, and `image-refs` holds the two readers of the
 # image-reference set against the one collector both go through.
-# test/ is the things that only break in a built page - 56 specs, about four
+# test/ is the things that only break in a built page - 57 specs, about four
 # minutes: six at a time by default (--jobs N, half the cores, at most six),
-# each in a child process with its own Chromium, and the eight that export
-# `serial = true` alone afterwards; --jobs 1 is the old one-browser run. One
-# of them, souffleuse, starts an engine of its own beside its browser. `npm test` also runs test/reproducible.mjs, which needs
+# each in a child process with its own Chromium, and the nine that export
+# `serial = true` alone afterwards; --jobs 1 is the old one-browser run. Three
+# of them, souffleuse, live-trust and watch-resume, start an engine of their
+# own beside their browser. `npm test` also runs test/reproducible.mjs, which needs
 # neither: it builds a lecture under a partial flag and under a full one and
 # asserts the shared view is the same bytes, because release.yml's
 # tracked-output check is only meaningful if a rebuild is a function of the
@@ -288,7 +289,7 @@ node lint.js lectures/ --strict                # warnings → exit 2
 # createSpanTable, or anything that moves a label or an extent. Anything
 # checkable without a browser belongs in lint.js or in test/gates/, never here.
 #
-# WHAT EACH GATE AND EACH SPEC FAMILY GUARDS, and the twenty-four specs that build a
+# WHAT EACH GATE AND EACH SPEC FAMILY GUARDS, and the twenty-five specs that build a
 # deck of their own rather than hunting shapes in a real one: test/README.md.
 npm run gate                                   # all gates
 node test/gates/run.mjs semantics              # gates whose name matches
@@ -600,9 +601,29 @@ browser, on loopback**, so they carry rules of their own (`runServe`,
 - **The watch socket checks Origin before the nonce** (`watchOriginAllowed`:
   `null` / `file://`, or the served origin via `servedPort`), caps messages at
   `WATCH_MAX_PAYLOAD`, and keeps an `error` listener on every socket – without
-  one, an oversized message killed the watcher. `build-failed` goes only to
-  sockets that showed the nonce (`hello` on open, or any valid message).
-  **The documents' `reloadScript` is `receiveOnly`**: no nonce, no `psiWatch`.
+  one, an oversized message killed the watcher. **Why a build failed** (the
+  JSON `build-failed`, which quotes the source) goes only to *hearers*:
+  sockets that showed the nonce (`hello` on open, or any valid message), or
+  the **listen key** (`watchListen`, a second per-run secret a live view with
+  no writer sends in its `hello` – it lets a socket hear and do nothing else,
+  and is never accepted where the nonce is asked for). Every other socket
+  hears the bare string `build-failed`, also on connect while the last build
+  is broken. **The documents' `reloadScript` is `receiveOnly` with no listen
+  key**: no nonce, no `psiWatch`, nothing sent.
+- **The page side of a watch build lives in `reloadScript` and ships nowhere
+  else**: the failed-build banner (`WATCH_BANNER_CSS` / `WATCH_BANNER_JS`,
+  `#psiINT-build-failed`, text only through `textContent`; shown in the
+  cockpit and the documents, in the projection only while
+  `psiBuildBannerHere()` says no cockpit answers, behind the diagram editor
+  when its status line said it), and the call to `psiWatchResumeSave` before
+  `location.reload()`. That stash (`sessionStorage`, `storageKey('watch-resume')`:
+  chunk id, old index, every chunk's beat, the cockpit's freeze) is taken once
+  at boot, on a navigation of type `reload` within a minute, and wins over the
+  address's fragment; the id resolves, else the index clamped, and each beat
+  is clamped to `countSegments`. Positions that outlive a build are named by
+  id elsewhere too: `saveActive` writes `activeId` beside `activeIdx`, and the
+  snapshot carries `activeId`, read through `remoteActiveIdx` – on a save one
+  window is briefly the old build, whose indices are stale.
 - **The prompter's strings go through `redact` and, for the terminal,
   `terminalSafe`**; its log and prompt file are `0o600`; `clampSpan`,
   `SEGMENT_MAX_CHARS` and `prompter: {calls-per-hour}` bound what a page can
@@ -963,7 +984,7 @@ plan, its decisions and its build log are `docs/history/PLAN-electron-builder.md
 
 - `CONTRIBUTING.md` – **the build and release procedure** (§ Building and releasing): what the two workflows do, what has to be true before tagging, and why the release asset names cannot change. Follow it rather than improvising a release.
 - `SECURITY.md` – **what a deck someone sent can do, what the build refuses from a `source.md` someone else wrote, and what `--watch`, `--serve` and `--prompter` expose** – written for lecturers and evaluators, its claims checked against the code or in a browser. Change it in the same commit as a refusal, a `--serve` rule or a prompter data flow it describes.
-- `test/README.md` – **the two test suites and which one a thing belongs in**: what each of the twenty-three gates guards, the four browser-spec families, and the twenty-four specs that build a deck of their own rather than hunting shapes in a real one.
+- `test/README.md` – **the two test suites and which one a thing belongs in**: what each of the twenty-three gates guards, the four browser-spec families, and the twenty-five specs that build a deck of their own rather than hunting shapes in a real one.
 - `PRD.md` – §1 non-negotiables, §2 content model, §2.1 type vocabulary, §3 source format + parsing contract, §4 visual language, §7 speaker view, §9 build system. Read this before making design-shape changes.
 - `speaker.md` – speaker spec and the `window.postMessage` sync protocol (fields, direction, freeze gating, timer, localStorage recovery).
 - `editor.md` – the diagram editor: what it is for, the four decisions, the grammar contract it edits against, the drag policy, and **§15, a build log written while building** – what landed, what it cost, and what bit. Read §15 first if you are picking the work up. §13 answers the two questions the plan left open, from the running prototype, and §14 is how a picture gets into a figure.

@@ -84,8 +84,9 @@ document's reader tools.
 files.** Files made under `--watch` contain a script that tries to reach a
 port on the reader's own computer to hear about rebuilds. Their projection
 and cockpit may also carry a random secret that lets a page change your
-`source.md` while that `--watch` run lasts. The secret is useless once the
-run has ended, but it does not belong in a file you hand on. The desktop
+`source.md` while that `--watch` run lasts, or a second one that lets a page
+hear why a rebuild failed. Both are useless once the run has ended, but they
+do not belong in a file you hand on. The desktop
 builder always runs with `--watch`, so run `node build.js <source.md>` once
 before sending what it made.
 
@@ -202,8 +203,9 @@ same browser can therefore neither read what `--serve` delivers nor change a
 file. One gap is left. A page embedded in a restricted frame (an iframe with
 the `sandbox` attribute) presents itself to that connection the same way a
 file opened from disk does, so it can open the connection and hear that a
-rebuild happened. It learns nothing more: why a rebuild failed is sent only
-to views that know the secret.
+rebuild happened. It also hears that a rebuild failed, and nothing more: why
+it failed is sent only to the live views, which carry either that secret or a
+second one that lets a page hear the reason and do nothing else.
 
 **The live prompter (`--prompter`) listens to you while you talk and shows
 hints in the cockpit.** It is off unless you switch it on. When it is on:
