@@ -962,6 +962,19 @@ Five of the viewer defaults carry a decision the table does not:
   (2.2 vs the lecturer's own zoom). The snapshot carries the mode *and* a legacy
   boolean, because `--audience-only` rebuilds one of the two windows and an
   older peer coerces the field with `!!`.
+
+  **The zoom reaches the page through `showZoom` and nothing else.** It goes
+  inline, at once, on the live slide, the one being left and the two beside
+  it, and onto `<html>` in `catchUpZoom`, 500 ms after the last change, once
+  the stage is still and the browser idle – which re-solves the camera in the
+  same task when the slides above moved the live one. Writing `<html>` inside
+  the press restyled every slide of the deck: 45 ms a slide change on
+  `lectures/diagrams`, 182 ms in a course cockpit at 4x CPU throttling, now
+  15–20 ms. So **the live slide's computed `--zoom` is the zoom on screen;
+  `<html>`'s may lag** – read the chunk's (as the specs and `--squint` do).
+  The overview board and the PDF export need `<html>` current and get it at
+  once (`flushZoom`; any `psiExport.chunks` / `jumpTo` sets `zoomNow` for the
+  page), and a clone of a chunk drops the inline value.
 - **`pitchblack` is `on` / `off`, and it is a rule about `data-mode`, not a theme.**
   `body[data-mode=dark][data-pitchblack=on]` takes `--paper` to black and sets
   `--dg-ground` to the theme's own paper, over which a figure's tones are

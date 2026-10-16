@@ -60,7 +60,7 @@ const geom = (page) => page.evaluate(() => {
   return {
     id: c.dataset.chunkId,
     vw: vp.width, vh: vp.height,
-    zoom: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--zoom')),
+    zoom: parseFloat(getComputedStyle(c).getPropertyValue('--zoom')),
     panned: document.body.classList.contains('aside-panned'),
     chunk: R(c), content: R(c.querySelector('.chunk-content')),
     marg: R(c.querySelector('.marginalia')),

@@ -121,7 +121,7 @@ const measure = (page, id) => page.evaluate((id) => {
     tier: el.dataset.canvasTier || '',
     label: svg.clientWidth / parseFloat(cs.getPropertyValue('--dg-fit-w')),
     bodyPx: parseFloat(getComputedStyle(body).fontSize),
-    zoom: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--zoom')),
+    zoom: parseFloat(getComputedStyle(el).getPropertyValue('--zoom')),
     step: svg.psiDiagram ? svg.psiDiagram.step : -1,
     card: card ? { ...r(card), hidden: card.hasAttribute('data-hidden') } : null,
     layerPad: layer ? parseFloat(getComputedStyle(layer).paddingLeft) : 0,

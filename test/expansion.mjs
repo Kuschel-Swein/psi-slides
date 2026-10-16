@@ -143,7 +143,7 @@ export async function run({ page, report, press, walkTo, restart }) {
   ok(await textHits(page) === 0, 'no line of prose sits under the chevrons at the default zoom');
   for (let i = 0; i < 6; i++) await press('+', 110);   // 1.35 -> 1.95
   const zoom = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue('--zoom').trim());
+    getComputedStyle(document.querySelector('.chunk.active')).getPropertyValue('--zoom').trim());
   ok(await textHits(page) === 0,
     'nor at the zoom where it did - the reserve is written in the chevron’s own terms',
     'zoom ' + zoom);

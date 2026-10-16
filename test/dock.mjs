@@ -99,7 +99,7 @@ const boxes = (page, id) => page.evaluate((id) => {
   return { chunk: r(el), dock: r(el.querySelector('.dock')), content: r(el.querySelector('.chunk-content')),
            num: r(el.querySelector('.chunk-num')), contentW, cols,
            dockHidden: el.querySelector('.dock')?.hasAttribute('data-hidden'),
-           zoom: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--zoom')) || null,
+           zoom: parseFloat(getComputedStyle(el).getPropertyValue('--zoom')) || null,
            slideH: parseFloat(getComputedStyle(el).getPropertyValue('--slide-h')) || null };
 }, id);
 

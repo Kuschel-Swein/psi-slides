@@ -153,6 +153,20 @@ from building the same way is a major version.
 
 ### Changed
 
+- **A slide change that moves the zoom no longer restyles the whole deck.**
+  Under auto-fit nearly every slide change moves the zoom, and writing it on
+  `<html>` restyled and relaid every slide inside the press: 45 ms on
+  `lectures/diagrams` against 10 for a change that kept the zoom, 97 ms with
+  the CPU throttled 4x, and 67 / 182 ms in the cockpit of a 77-slide course.
+  The zoom now goes at once onto the slides that can be on screen – the new
+  one, the one being left and the two beside it – and onto the rest of the
+  deck half a second later, when the stage is still and the browser idle:
+  15 / 19 ms on `lectures/diagrams`, 15 / 16 ms in that cockpit. What a frame
+  at rest shows is unchanged. During the half second, a slide the camera
+  passes over on a long jump and the cockpit's thumbnails keep the zoom they
+  had, and a slide above the one being left no longer changes height as the
+  glide starts.
+
 - **The prompter's log names carry seconds, and a dry run says so.**
   `prompter-YYYYMMDD-HHMMSS.jsonl`, and `prompter-YYYYMMDD-HHMMSS-dry.jsonl`
   for a dry run, where two runs started in one minute used to share one

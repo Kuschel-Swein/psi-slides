@@ -81,7 +81,7 @@ export async function run({ page, report, press }) {
       }
       return {
         id: act.id || '?',
-        zoom: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--zoom')),
+        zoom: parseFloat(getComputedStyle(act).getPropertyValue('--zoom')),
         bodyPx: body ? Math.round(parseFloat(getComputedStyle(body).fontSize) * 10) / 10 : 0,
         figs,
       };

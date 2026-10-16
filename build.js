@@ -21497,7 +21497,7 @@ function applyDemoBadge() {
 
 function applyState() {
   document.body.dataset.collapse = state.collapse;
-  document.documentElement.style.setProperty('--zoom', state.zoom);
+  showZoom();
   document.body.classList.toggle('blanked', state.blanked);
   applyBlankBadge();
   applyDemoBadge();
@@ -22100,6 +22100,9 @@ function setOverviewMode(on, opts = {}) {
     manualPan = { dx: 0, dy: 0 };
     overviewAnchorIdx = state.activeIdx;
     if (opts.selectActive !== false) setSelectedIdx(state.activeIdx);
+    // The board shows every slide, so the zoom the live one shows reaches
+    // them all now rather than at the catch-up (showZoom).
+    flushZoom();
     applyOverviewCamera(false);
     return;
   }
@@ -23417,8 +23420,9 @@ function fitWalk(el, cap, avail, trial) {
 // above takes up to twenty steps. Measured on lectures/diagrams (47 chunks,
 // 5,700 elements): 90 ms a step, up to two seconds a press, two thirds of it
 // style recalculation. On the chunk a step costs that chunk; the document is
-// restyled once, by commitZoom, and not at all when the answer is the zoom
-// it already had - which is every press that only reveals a beat.
+// restyled once, by the catch-up after commitZoom (see showZoom), and not at
+// all when the answer is the zoom it already had - which is every press that
+// only reveals a beat.
 // state.zoom follows each step because figureCapProbe memoises on it.
 //
 // That "on .chunk or below" is held by the zoom-scope gate, which fails on a
@@ -23445,14 +23449,111 @@ function commitZoom(el) {
   el.style.removeProperty('--zoom');
   showZoom();
 }
-// Puts state.zoom on <html>, and does nothing when it is there already, so a
-// caller that set state.zoom and then ran a fit that may have returned before
-// committing can call it unconditionally. Writing <html> restyles every
-// slide; writing it twice in one press is what the chunk-scoped walk exists
-// to avoid.
+// Puts state.zoom on the page: at once on the slides that can be on screen,
+// and on <html> a moment later. It does nothing when the page shows it
+// already, so a caller that set state.zoom and then ran a fit that may have
+// returned before committing can call it unconditionally. Every writer of
+// the zoom ends here (applyState, setZoom, the fits through commitZoom); a
+// second one writing <html> directly would not reach a slide that holds the
+// zoom inline.
+//
+// WHY NOT <html> AT ONCE. The value on <html> is inherited by every element
+// of every slide, so writing it restyled and relaid the whole deck on the
+// slide change that moved the zoom - which under auto-fit is nearly every
+// one. The read that paid for it was focusCamera's, inside the press:
+// measured on lectures/diagrams at 1600x900, 45 ms against 10 for a slide
+// change that kept its zoom, 97 ms with the CPU throttled 4x; in a 77-chunk
+// course's cockpit, which also carries a clone of every slide in its preview
+// strip, 67 ms and 182 ms. Under cut that is how long the new slide takes to
+// appear, under pan how late the glide starts.
+//
+// What can be on screen at a slide change is the live slide, the one it
+// replaces (under pan it is in the frame for the whole glide, and fading
+// under neighbours: hidden) and the slide on either side of it (the
+// neighbours a dim frame shows at its edges). Those four take the zoom
+// inline, now, which restyles four slides; the rest of the deck still
+// inherits the old value from <html> and catches up in catchUpZoom, once
+// the stage has stopped moving and the browser is idle. Nothing a frame at
+// rest shows differs, before or after the catch-up: the camera centres the
+// live slide wherever the slides above it put it, and the catch-up re-solves
+// the camera in the same task when they moved it. What does differ is
+// deliberate and brief: a slide the camera passes over on a long jump, or
+// the cockpit's thumbnails, keep the old zoom until the catch-up - and a
+// slide above the one being left no longer changes height at the start of
+// the glide, which used to jerk the outgoing slide before it moved.
+//
+// Three readers need <html> current and get it synchronously: the overview
+// board, which shows every slide; the PDF export, which writes <html>
+// itself after jumpTo and so must not find a slide holding a zoom inline
+// (psiExport sets zoomNow); and the first write, at boot.
+const ZOOM_CATCH_UP_MS = 500;
+const zoomHeld = new Set();   // slides carrying state.zoom inline until the catch-up
+let zoomLastActive = -1;      // the live slide at the last showZoom: the one being left
+let zoomNow = false;          // set for good by a caller that needs <html> current
+let zoomTimer = 0, zoomGen = 0;
+function rootZoom() {
+  return parseFloat(document.documentElement.style.getPropertyValue('--zoom'));
+}
 function showZoom() {
-  const shown = parseFloat(document.documentElement.style.getPropertyValue('--zoom'));
-  if (shown !== state.zoom) applyZoom(state.zoom);
+  const left = zoomLastActive;
+  zoomLastActive = state.activeIdx;
+  const root = rootZoom();
+  if (root === state.zoom && !zoomHeld.size) return;
+  if (overview || zoomNow || !(root > 0)) { flushZoom(); return; }
+  for (const i of [left, state.activeIdx - 1, state.activeIdx, state.activeIdx + 1]) {
+    const c = flatChunks[i];
+    if (!c) continue;
+    c.el.style.setProperty('--zoom', state.zoom);
+    zoomHeld.add(c.el);
+  }
+  scheduleZoomCatchUp();
+}
+// <html> takes state.zoom and every slide holding it inline lets go. Returns
+// whether anything was written, for the catch-up's camera check.
+function flushZoom() {
+  clearTimeout(zoomTimer);
+  zoomTimer = 0;
+  zoomGen++;
+  if (rootZoom() === state.zoom && !zoomHeld.size) return false;
+  applyZoom(state.zoom);
+  zoomHeld.forEach(el => el.style.removeProperty('--zoom'));
+  zoomHeld.clear();
+  return true;
+}
+// Every showZoom that leaves <html> behind re-arms this, so a run of presses
+// pays for one catch-up after the last of them rather than one per press.
+function scheduleZoomCatchUp() {
+  clearTimeout(zoomTimer);
+  const gen = ++zoomGen;
+  zoomTimer = setTimeout(() => {
+    zoomTimer = 0;
+    const idle = window.requestIdleCallback || ((f) => setTimeout(f, 0));
+    idle(() => { if (gen === zoomGen) catchUpZoom(); }, { timeout: 1000 });
+  }, ZOOM_CATCH_UP_MS);
+}
+// Not while the stage moves: a camera re-solve with the transition off would
+// cut a glide short, and a fade has a slide change still to make.
+function catchUpZoom() {
+  const moving = fadeAnim || fadePending || (stage.getAnimations && stage.getAnimations().length);
+  if (moving) { scheduleZoomCatchUp(); return; }
+  const entry = flatChunks[state.activeIdx];
+  const before = entry && !overview ? getOffset(entry.el, stage) : null;
+  if (!flushZoom() || !before) return;
+  // A slide above the live one in its column that is taller or shorter at
+  // the new zoom moves the live slide; the transform is re-solved in this
+  // task, before a frame is painted, so the room sees nothing move.
+  //
+  // The style is read back before returning, which focusCamera(true) alone
+  // does not do. It turns the transition off, sets the transform and turns
+  // the transition back on in the next animation frame - and from an idle
+  // callback no style is computed in between, so the frame computed both at
+  // once and glided: the slide stood off the frame by the distance it had
+  // moved, for 250 ms, measured under --frames.
+  const after = getOffset(entry.el, stage);
+  if (after.left !== before.left || after.top !== before.top) {
+    focusCamera(true);
+    void getComputedStyle(stage).transform;
+  }
 }
 
 // With auto-fit off the zoom is the lecturer's, and it is deliberately never
@@ -23551,7 +23652,8 @@ function clampZoom(z) {
 }
 // Write the zoom without the announcement or the broadcast, for the
 // automatic fit which would otherwise flash a number on every C press.
-// On the document by default; the fit's trial steps pass the chunk (onChunk).
+// On the document by default, which only flushZoom asks for; the fit's trial
+// steps pass the chunk (onChunk). Anything else goes through showZoom.
 function applyZoom(z, target = document.documentElement) {
   state.zoom = clampZoom(z);
   target.style.setProperty('--zoom', state.zoom);
@@ -23593,7 +23695,7 @@ function stepZoom(dir) {
 
 function setZoom(z) {
   state.zoom = clampZoom(z);
-  document.documentElement.style.setProperty('--zoom', state.zoom);
+  showZoom();
   // A manual adjustment in the collapsed view is the setting to remember;
   // in full text it is a one-off correction of the automatic fit and must
   // not overwrite what the lecturer chose for the projector.
@@ -25987,9 +26089,12 @@ function wireFigureClicks() {
 // and it would save these lines at the price of a contract no reader of
 // build.js can see and a rename breaks in silence.
 window.psiExport = {
-  chunks: () => flatChunks,
+  // The export writes <html>'s zoom itself after jumpTo and the fit, and
+  // clones the slide it prints, so it must find no slide holding a zoom
+  // inline: from its first call on, showZoom writes <html> at once.
+  chunks: () => { zoomNow = true; flushZoom(); return flatChunks; },
   countSegments,
-  jumpTo,
+  jumpTo: (idx, dir) => { zoomNow = true; jumpTo(idx, dir); },
   setRevealed: (id, n) => { revealed[id] = n; },
   applyReveal,
   settle: () => { if (autoFitOn()) fitZoomToChunk(2.2); else clampZoomToWidth(); },
@@ -28062,6 +28167,9 @@ function populatePreviewStrip() {
     const clone = entry.el.cloneNode(true);
     clone.classList.add('chunk-clone');
     clone.classList.remove('active', 'expanded', 'annot-visible', 'has-annot', 'overview-selected');
+    // A slide may be holding the zoom inline until the catch-up (showZoom);
+    // a thumbnail takes the document's, as it always has.
+    clone.style.removeProperty('--zoom');
     clone.querySelectorAll('.reveal-segment').forEach(s => s.removeAttribute('data-hidden'));
     clone.querySelectorAll('[data-beat-hidden]').forEach(s => { s.removeAttribute('data-beat-hidden'); s.removeAttribute('data-next'); });
     // Thumbnails show slides fully revealed (PRD §4.6) so the speaker can
@@ -34663,7 +34771,9 @@ function squintMeta() {
     lang: document.documentElement.lang || 'en',
     collapse: document.body.dataset.collapse || '',
     mode: document.body.dataset.mode || '',
-    zoom: getComputedStyle(document.documentElement).getPropertyValue('--zoom').trim(),
+    // The live slide's, which is what the room sees: <html> may still be
+    // catching up with it (showZoom in the runtime).
+    zoom: getComputedStyle(document.querySelector('.chunk.active') || document.documentElement).getPropertyValue('--zoom').trim(),
     chunks: document.querySelectorAll('.chunk').length,
     cols,
   };

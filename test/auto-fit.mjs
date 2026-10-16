@@ -90,8 +90,8 @@ One line, and nothing else on the slide.
 
 // The zoom the runtime settled on, and whether the slide is inside the frame.
 const measure = (page) => page.evaluate(() => {
-  const zoom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--zoom'));
   const el = document.querySelector('.chunk.active');
+  const zoom = parseFloat(getComputedStyle(el || document.documentElement).getPropertyValue('--zoom'));
   const vp = document.getElementById('psiINT-stage-viewport');
   return {
     zoom,
@@ -103,12 +103,17 @@ const measure = (page) => page.evaluate(() => {
 });
 
 // The walk writes its trial zooms on the chunk it measures and commits the
-// answer to <html> once (fitZoomToChunk, onChunk, commitZoom). What that
-// owes everything else: no chunk is left with a zoom of its own, which + and
-// - could not reach, and <html> shows the zoom state.zoom says it does.
+// answer once (fitZoomToChunk, onChunk, commitZoom): at once on the slides
+// that can be on screen, and on <html> at the catch-up a moment later
+// (showZoom, catchUpZoom). What that owes everything else: the live slide
+// shows the zoom state.zoom says it does, at once; and once the catch-up has
+// run, no chunk is left with a zoom of its own, which + and - could not
+// reach, and <html> shows it too. Read without psiExport, whose first use
+// switches the catch-up off.
 const zoomHeld = (page) => page.evaluate(() => ({
   root: parseFloat(document.documentElement.style.getPropertyValue('--zoom')),
-  state: window.psiExport.zoom(),
+  live: parseFloat(getComputedStyle(document.querySelector('.chunk.active')).getPropertyValue('--zoom')),
+  state: state.zoom,
   private: [...document.querySelectorAll('.chunk')]
     .filter(c => c.style.getPropertyValue('--zoom') !== '').map(c => c.id),
 }));
@@ -133,9 +138,16 @@ export async function run({ page, report, walkTo }) {
     await page.waitForTimeout(700);
 
     const checkHeld = async (when) => {
-      const h = await zoomHeld(page);
-      ok(h.private.length === 0, `${when}: no chunk keeps a zoom of its own after the fit`, h.private.join(', '));
-      ok(h.root === h.state, `${when}: <html> shows the zoom the runtime holds`, `${h.root} vs ${h.state}`);
+      let h = await zoomHeld(page);
+      ok(h.live === h.state, `${when}: the live slide shows the zoom the runtime holds`, `${h.live} vs ${h.state}`);
+      // The catch-up waits ZOOM_CATCH_UP_MS (500) after the last change and
+      // then for an idle moment.
+      for (let t = 0; t < 30 && (h.private.length || h.root !== h.state); t++) {
+        await page.waitForTimeout(100);
+        h = await zoomHeld(page);
+      }
+      ok(h.private.length === 0, `${when}: no chunk keeps a zoom of its own after the catch-up`, h.private.join(', '));
+      ok(h.root === h.state, `${when}: <html> shows the zoom the runtime holds after it`, `${h.root} vs ${h.state}`);
     };
 
     // ── off, which is where a deck that says nothing opens ──

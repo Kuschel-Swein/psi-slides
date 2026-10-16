@@ -12,6 +12,11 @@
  * chunk's room depends on it the fit converges on a zoom that overflows.
  * Nothing throws: the slide is cut off in the hall.
  *
+ * The commit leans on the same property. showZoom puts the zoom inline on
+ * the slides that can be on screen and writes <html> only at the catch-up
+ * half a second later, because a write there inside the press restyled the
+ * whole deck; a reader outside the chunk would show the old zoom until then.
+ *
  * So the subject of every such rule must be placed inside a chunk by its own
  * selector: .chunk on the subject or on one of its ancestors, or a class the
  * renderers only ever emit inside a chunk article (.chunk-..., or the

@@ -43,7 +43,7 @@ const geometry = (page) => page.evaluate(() => {
   const r = (e) => { const b = e.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; };
   const ta = el.querySelector('.annot-textarea');
   const qr = el.querySelector('.annot-qr');
-  const zoom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--zoom')) || 1;
+  const zoom = parseFloat(getComputedStyle(el).getPropertyValue('--zoom')) || 1;
   return {
     box: r(el.querySelector('.annot-box')),
     ta: r(ta),
