@@ -283,9 +283,12 @@ What is different here is the combination: one text rendered at two densities, a
 ## Command reference
 
 ```bash
+node build.js --help                         # every flag, grouped (also -h)
 node build.js <source.md>                    # build all four views
+node build.js lectures/my-lecture            # …or name the folder that holds it
 node build.js <source.md> --watch            # live reload
 node build.js <source.md> --serve            # serve over http on loopback
+node build.js <source.md> --serve --port 8080   # on a fixed port (default: a free one)
 node build.js <source.md> --watch --serve    # both
 node build.js <source.md> --audience-only    # also --print-only, --print-notes-only, --speaker-only
 node build.js --new <slug> [--into <dir>]    # scaffold a lecture (default: lectures/)
@@ -322,6 +325,8 @@ node build.js <source.md> --check-fit        # report any slide that fits the fr
 node lint.js lectures/                       # all lectures
 node lint.js lectures/ --strict              # warnings exit 2
 ```
+
+A flag `build.js` does not know is refused with the nearest one it does (`--wacth` – did you mean `--watch`?), and so is a flag that would change nothing where it stands, such as `--port` without `--serve` or `--check-fit` together with `--watch`.
 
 The linter checks unknown types and widths, duplicate or missing chunk IDs, unclosed `:::` directives and unclosed `$$` math, per-type word budgets, duplicate explicit-slide blocks, assets over the inline cap, reveal overuse, orphan columns, and redundant figure captions. A source file can silence a warning with `<!-- linter: ignore reveal-overuse, density -->`; an error cannot be silenced.
 

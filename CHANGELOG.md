@@ -111,6 +111,23 @@ from building the same way is a major version.
 
 ### Changed
 
+- **`build.js` refuses a flag it does not know, and names the nearest one.**
+  `--wacth`, `--serv`, `--check-fitt` and `--check-fit=true` used to build
+  an ordinary deck and exit 0, doing none of what they were typed for; each
+  now exits 1 with one sentence (`--wacth is not a flag of build.js. Did you
+  mean --watch?`). The flags are one table, and `--help` is generated from
+  it. Refused the same way, because each changed nothing where it stood: a
+  value in the other form (`--port=8080`, `--pdf-zoom 1.2`), a flag where a
+  value belongs (`--prompter-model --watch`), `--port` without `--serve`,
+  `--viewport` without `--check-fit`, `--squint` or `--frames`,
+  `--squint-out` without `--squint`, `--dry-run`, `--all` or `--max-width`
+  without `--optimize-images`, `--into` without `--new`, `--check-fit`,
+  `--squint` or `--frames` with `--watch` (the watcher ran and the check
+  never did), any flag beside `--new`, `--optimize-images`,
+  `--prompter-replay` or `--integrate-annotations`, and a second source
+  file. A script that passed a flag this release does not know now stops
+  where it used to carry on.
+
 - **`D` pauses a live demo instead of ending it.** On a running demo `D`
   takes the picture off the projection and leaves the capture running, so
   the room is back on the slides; `D` again shows the same window, with no
@@ -149,6 +166,18 @@ from building the same way is a major version.
   instead of `-latest`.
 
 ### Fixed
+
+- **`-h`, `--help`, a folder and a port.** `-h` was taken for a file name
+  (`Input not found: …/-h`); it now prints the help, and `--help` prints it
+  to stdout with exit 0 rather than to stderr with exit 1 (a bare
+  `node build.js` still prints it to stderr and exits 1). A folder in place
+  of `source.md` died on `EISDIR`; one with a `source.md` in it is now built
+  from that file, with one line saying so, and one without says what it
+  holds. `--port 99999` died in a `RangeError` stack and `--port abc` served
+  on a free port without a word; both are now one sentence. A port that is
+  taken was an `EADDRINUSE` stack – under `--watch --serve` after the watcher
+  had already built – and is now refused in one sentence before anything is
+  built. `--viewport` is checked before the build it would measure, not after.
 
 - **A click into the cockpit's notes no longer takes the presenter remote.**
   The key map stands back for a text field, so after one click into the notes

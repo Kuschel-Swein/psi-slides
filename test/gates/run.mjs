@@ -9,7 +9,7 @@
  * two agree – in seconds, on a bare checkout, with no `npm install` and no
  * Chromium, because both of those files are zero-dependency by design.
  *
- * Twenty-three gates, and they prove twenty-three different things – which is
+ * Twenty-four gates, and they prove twenty-four different things – which is
  * worth stating because a green run summarised as one number hid a wrong
  * drawing behind a passing parse:
  *
@@ -86,6 +86,9 @@
  *              file, the addresses of what it names, the same bytes twice
  *   zoom-scope every CSS rule that reads var(--zoom) sits on a slide, which
  *              is what lets the auto-fit walk measure on the chunk alone
+ *   cli        the command line's one flag table: every flag main() reads
+ *              has a row (a flag without one is refused as unknown), every
+ *              row is read, and CLAUDE.md's commands block names them all
  *
  * `test/run.mjs` is the other half and stays separate: it builds and serves
  * the lectures, launches a browser and takes about four minutes. Splitting
@@ -120,6 +123,7 @@ const GATES = [
   './editor.mjs',
   './skills.mjs',
   './zoom-scope.mjs',
+  './cli.mjs',
 ];
 
 const filter = process.argv.slice(2).filter(a => !a.startsWith('-'));

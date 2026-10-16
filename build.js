@@ -33381,7 +33381,7 @@ async function runServe(rootDir, wantedPort) {
   await new Promise((resolve, reject) => {
     server.on('error', reject);
     server.listen(wantedPort || 0, '127.0.0.1', resolve);
-  });
+  }).catch((err) => { throw portRefusal(err, wantedPort); });
   port = server.address().port;
   servedPort = port;
   const base = `http://localhost:${port}`;
@@ -33396,10 +33396,37 @@ async function runServe(rootDir, wantedPort) {
   return server;
 }
 
-// Flags that consume the following argv token as their value, so it is not
-// mistaken for the source path.
-const VALUE_FLAGS = new Set(['--frames', '--max-width', '--port', '--viewport', '--squint-out', '--into',
-  '--prompter-model', '--prompter-replay']);
+// A port the author named and the system will not give. Said as a sentence
+// rather than as Node's EADDRINUSE stack, and asked before anything is built
+// (assertPortFree, from main) as well as at the listen itself, because under
+// --watch --serve the watcher has already built and printed by the time the
+// server listens. The watch socket takes a free port of its own (port 0), so
+// only this one can collide.
+function portRefusal(err, port) {
+  if (!err || !port) return err;
+  const other = port < 65535 ? port + 1 : port - 1;
+  const msg = err.code === 'EADDRINUSE'
+    ? `Error: port ${port} is in use – by another build.js --serve, or by another program.\n`
+      + `  Pick another (--port ${other}), or leave --port out and a free one is chosen.`
+    : err.code === 'EACCES'
+      ? `Error: port ${port} needs privileges this account does not have.\n`
+        + '  Pick one above 1023, or leave --port out and a free one is chosen.'
+      : null;
+  if (!msg) return err;
+  const e = new Error(msg);
+  e.userFacing = true;
+  return e;
+}
+
+async function assertPortFree(port) {
+  if (!port) return;
+  const net = await import('node:net');
+  await new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once('error', reject);
+    probe.listen(port, '127.0.0.1', () => probe.close(resolve));
+  }).catch((err) => { throw portRefusal(err, port); });
+}
 
 // ── driving the built projection (shared by --check-fit and --squint) ─
 // Two commands answer questions that only a rendered page can answer - does
@@ -34714,38 +34741,458 @@ function pdfJobsFrom(argv, flags, absIn) {
   };
 }
 
+// ── the command line's flags ─────────────────────────────────────────
+//
+// Every flag main() reads, in one table, and a word the table does not hold is
+// refused with the nearest name: an unknown flag used to build an ordinary
+// deck and exit 0 (`--wacth`, `--check-fitt`, `--check-fit=true`), the silent
+// no-op each of the specific refusals in main() was written after. Those stay,
+// because they explain more. The --help text is generated from these rows, and
+// test/gates/cli.mjs holds the table against every flag main() reads and
+// against CLAUDE.md's commands block. The two constants between the markers
+// are plain literals, because that gate reads them out of this file as text.
+//
+//   value    absent: a switch, and `--name=x` is refused;
+//            'next': the value is the next word (--port 8080), required;
+//            'optional': the next word, unless it is a flag or names a .md
+//              file (--frames [DIR]);
+//            'equals': one word, `--name=value` (the --pdf-* options).
+//   need     what the value is, for the refusal when it is missing.
+//   needs    refused unless one of these is given too – nothing else reads it.
+//            Not set where main() has a refusal of its own that says more.
+//   mode     a command of its own that returns before the build; `takes` is
+//            the only company it keeps, `does` what it does instead.
+//   notWith  refused together with these.
+//   hidden   read and checked, documented in neither --help nor CLAUDE.md.
+//   doc      the --help rows: [label, line, …]; the first line beside the
+//            label. Without one, the row is the name and its arg.
+// cli-flags:start
+const CLI_GROUPS = [
+  { id: 'build', title: ['Building and watching:'] },
+  { id: 'images', title: ['Image inlining (default: auto – inline iff referenced images sum < 10 MB; per-image cap 2 MB):'] },
+  { id: 'optimize', title: ['Image optimisation (converts referenced PNG/JPEG to WebP q92, replacing the',
+    'originals; needs cwebp or magick on PATH):'] },
+  { id: 'fit', title: ['Fit checking (needs playwright-core and a Chrome or Chromium):'] },
+  { id: 'squint', title: ['Reading the projection back (needs playwright-core and a Chrome or Chromium):'] },
+  { id: 'prompter', title: ['Live prompter (only together with --watch; the cockpit reaches it over the',
+    'watch socket, and Shift-S in the cockpit switches it on). What it sends is text:',
+    'the deck including speaker notes, and what the cockpit hears. The prompter sends',
+    'no audio; Chrome\'s speech recognition sends the audio to Google unless it runs',
+    'on the device.'],
+  rows: [
+    ['OPENROUTER_API_KEY', 'required; without it the prompter starts disabled',
+      'and only logs what it heard.'],
+    ['OPENROUTER_BASE_URL', 'another OpenAI-compatible endpoint',
+      '(default https://openrouter.ai/api/v1).'],
+  ] },
+  { id: 'events', title: ['Driving the build from another program:'] },
+  { id: 'slides-pdf', title: ['PDF slide export (a fallback deck; print.html stays the document):'],
+    foot: ['Needs a Chromium (playwright-core, $PSI_CHROME or a system Chrome).'] },
+  { id: 'doc-pdf', title: ['PDF document export (print.html on paper, at its own A4 page, margins and numbers):'],
+    foot: ['Any of the three PDF flags combine and start one browser. --pdf-out names the',
+      'file when exactly one is asked for; the --pdf-* options above are the slides\'.'] },
+  { id: 'annotations', title: ['Annotation integration:'] },
+  { id: 'new', title: ['A new lecture:'] },
+  { id: 'help', title: ['This text:'] },
+];
+
+const CLI_FLAGS = [
+  { name: '--watch', group: 'build',
+    doc: [null, 'rebuild on every save and reload the views open in a browser.'] },
+  { name: '--serve', group: 'build',
+    doc: [null, 'serve the lecture folder over http on loopback once it is built;',
+      'with --watch, live reload over http. A hosted embed (YouTube)',
+      'plays only from http.'] },
+  { name: '--port', group: 'build', value: 'next', arg: 'N', needs: ['--serve'],
+    need: 'a port number, e.g. --port 8080; leave it out and a free one is chosen.',
+    why: 'It sets the port --serve listens on',
+    doc: [null, 'the port --serve listens on (default: a free one).'] },
+  { name: '--audience-only', group: 'build', doc: [null, 'build audience.html and nothing else.'] },
+  { name: '--print-only', group: 'build', doc: [null, 'build print.html and nothing else.'] },
+  { name: '--print-notes-only', group: 'build', doc: [null, 'build print-notes.html and nothing else.'] },
+  { name: '--speaker-only', group: 'build', doc: [null, 'build speaker.html and nothing else.'] },
+
+  { name: '--inline-images', group: 'images', doc: [null, 'force inlining regardless of total size'] },
+  { name: '--no-inline-images', group: 'images', doc: [null, 'force external asset paths'] },
+  { name: '--no-optimize-images', group: 'images',
+    doc: [null, 'inline PNG/JPEG as they are, rather than', 're-encoding them to WebP for the output'] },
+
+  { name: '--optimize-images', group: 'optimize', mode: true,
+    takes: ['--dry-run', '--all', '--max-width'],
+    does: 'converts the referenced pictures and exits; it builds nothing',
+    doc: [null, 'convert referenced rasters ≥ 512 KB'] },
+  { name: '--dry-run', group: 'optimize', needs: ['--optimize-images'],
+    why: 'It says what --optimize-images should only report',
+    doc: [null, 'report what would change, write nothing'] },
+  { name: '--all', group: 'optimize', needs: ['--optimize-images'],
+    why: 'It widens what --optimize-images converts',
+    doc: [null, 'convert every referenced raster, not just large ones'] },
+  { name: '--max-width', group: 'optimize', value: 'next', arg: 'N', needs: ['--optimize-images'],
+    need: 'a pixel value of at least 320, e.g. --max-width 2600.',
+    why: 'It caps the width --optimize-images writes',
+    doc: [null, 'also downscale to N px wide. Off by default on purpose:',
+      'figure focus zooms to 8x, so a high-resolution diagram',
+      'is high-resolution for a reason.'] },
+
+  { name: '--check-fit', group: 'fit', notWith: ['--watch'],
+    does: 'looks at one finished build and exits',
+    doc: [null, 'after building, walk audience.html state by state at',
+      '1600x900 and report any slide whose content leaves the',
+      'frame. Exit 2 if one does. The density budgets are word',
+      'counts, so cards and rows can overflow with a clean lint.',
+      'It also reports the deck\'s median settled body type and',
+      'names every slide with a figure more than 15% under it,',
+      'and gives each figure its canvas, its drawing and the room',
+      'left per axis in base labels, tightest first.'] },
+  { name: '--viewport', group: 'fit', value: 'next', arg: 'WxH',
+    needs: ['--check-fit', '--squint', '--frames'],
+    need: 'WIDTHxHEIGHT, e.g. --viewport 1600x900.',
+    why: 'It sets the size --check-fit, --squint and --frames measure at',
+    doc: [null, 'measure at another size (default 1600x900, a 16:9 room).'] },
+
+  { name: '--squint', group: 'squint', notWith: ['--watch'],
+    does: 'reads one finished build back and exits',
+    doc: [null, 'after building, walk audience.html state by state and write',
+      'what a room would see – heading, topic sentences, promoted',
+      'bolds, what stays whole, what the collapse withholds – to',
+      'squint.txt beside the source. Never fails a build.'] },
+  { name: '--frames', group: 'squint', value: 'optional', arg: '[DIR]', notWith: ['--watch'],
+    does: 'photographs one finished build and exits',
+    doc: [null, 'after building, write every state of audience.html as a PNG',
+      'plus contact sheets of eight to DIR (default: frames/ beside',
+      'the source). The review --check-fit and --squint cannot do.'] },
+  { name: '--squint-out', group: 'squint', value: 'next', arg: 'PATH', needs: ['--squint'],
+    need: 'a path, or "-" for stdout.',
+    why: 'It names the file --squint writes',
+    doc: [null, 'write it somewhere else; "-" writes to stdout.'] },
+
+  { name: '--prompter', group: 'prompter',
+    doc: [null, 'run the prompter sidecar beside the watch build.'] },
+  { name: '--prompter-model', group: 'prompter', value: 'next', arg: 'ID',
+    need: 'an OpenRouter model id, e.g. anthropic/claude-sonnet-5.',
+    doc: [null, 'an OpenRouter model id, overriding the deck\'s',
+      '`prompter: model:` and the default.'] },
+  { name: '--prompter-dry-run', group: 'prompter',
+    doc: [null, 'everything but the call: the ear, the ticks, the',
+      'policy and the log all run, nothing goes to a',
+      'model, and no key is needed.'] },
+  { name: '--prompter-replay', group: 'prompter', value: 'next', arg: 'FILE', mode: true, takes: [],
+    need: 'a prompter-*.jsonl written by an earlier run.\n'
+      + '  node build.js <source.md> --prompter-replay prompter-20260911-1015.jsonl',
+    does: 'reads a finished run\'s log back and exits; it builds nothing',
+    doc: [null, 'no watcher and no browser: read a run\'s',
+      'prompter-*.jsonl (or an older souffleuse-*.jsonl)',
+      'back and print, per answer, what the model',
+      'proposed and what the policy would do now.'] },
+
+  { name: '--events', group: 'events',
+    doc: [null, 'emit build events as JSON lines on stdout and accept',
+      'commands on stdin; for tools that drive the build.'] },
+
+  { name: '--slides-pdf', group: 'slides-pdf',
+    doc: [null, 'drive audience.html through every beat and print slides.pdf'] },
+  { name: '--pdf-beats', group: 'slides-pdf', value: 'equals',
+    doc: ['--pdf-beats=all', 'one page per state, cumulative (default)'],
+    more: [['--pdf-beats=final', 'one page per chunk, fully built up']] },
+  { name: '--pdf-size', group: 'slides-pdf', value: 'equals',
+    doc: ['--pdf-size=16:9', '1600x900 css px, a 1200x675 pt page (default)'],
+    more: [['--pdf-size=16:10', '1600x1000 css px, a 1200x750 pt page']] },
+  { name: '--pdf-zoom', group: 'slides-pdf', value: 'equals',
+    doc: ['--pdf-zoom=fit', 'size each chunk to the page, never above 1.35 (default)'],
+    more: [['--pdf-zoom=<n>', 'hold every page at that zoom (0.6-2.2) and report overruns']] },
+  { name: '--pdf-zoom-max', group: 'slides-pdf', value: 'equals',
+    doc: ['--pdf-zoom-max=<n>', 'largest zoom the fit may reach (default 1.35). Raise it to',
+      'fill more of each page, lower it to keep the type even'] },
+  { name: '--pdf-collapse', group: 'slides-pdf', value: 'equals',
+    doc: ['--pdf-collapse=topic-bold', 'only the slide text: topic sentences and bolds'],
+    more: [['--pdf-collapse=none', 'the full prose. Default: whatever the lecture opens with']] },
+  { name: '--pdf-out', group: 'slides-pdf', value: 'equals',
+    doc: ['--pdf-out=<path>', 'default: slides.pdf beside source.md'] },
+  // The PDF export test's and the desktop parity step's: the print DOM, dumped.
+  { name: '--pdf-dump-dom', group: 'slides-pdf', value: 'equals', hidden: true },
+
+  { name: '--print-pdf', group: 'doc-pdf',
+    doc: [null, 'print print.html to print.pdf beside source.md'] },
+  { name: '--print-notes-pdf', group: 'doc-pdf',
+    doc: [null, 'print print-notes.html to print-notes.pdf'] },
+
+  { name: '--integrate-annotations', group: 'annotations', mode: true, takes: [],
+    does: 'rewrites source.md and exits; it builds nothing',
+    doc: [null, 'move `> annot:` blocks from a trailing',
+      '<!-- annotations:start --> … :end marker block',
+      'into their chunks and remove the marker block.'] },
+
+  { name: '--new', group: 'new', mode: true, takes: ['--into'],
+    does: 'writes a new lecture folder and exits; it builds nothing',
+    doc: ['--new SLUG', 'write SLUG/source.md with valid frontmatter and example',
+      'chunks, plus SLUG/assets/, in lectures/ by default.'] },
+  { name: '--into', group: 'new', value: 'next', arg: 'DIR', needs: ['--new'],
+    need: 'a directory: node build.js --new <slug> --into <dir>',
+    why: 'It says where --new writes the lecture folder',
+    doc: [null, 'write the folder into DIR instead.'] },
+
+  { name: '--help', group: 'help',
+    doc: ['--help, -h', 'print this text to stdout. Before anything else is read,',
+      'so it can stand anywhere on the line.'] },
+];
+// cli-flags:end
+
+const CLI_FLAG = new Map(CLI_FLAGS.map(f => [f.name, f]));
+
+function cliError(msg) {
+  const err = new Error(msg);
+  err.userFacing = true;
+  return err;
+}
+
+const cliLabel = (f) => f.name + (!f.arg ? '' : f.value === 'equals' ? '=' + f.arg : ' ' + f.arg);
+
+// The --help text, from the table. The usage block at its head is the one
+// hand-written part: a synopsis of the commands, not a list of flags.
+function helpText() {
+  const out = [
+    'Usage:',
+    '  node build.js <source.md> [--watch] [--serve [--port N]] [--audience-only|--print-only|--print-notes-only|--speaker-only]',
+    '                            [--inline-images|--no-inline-images] [--no-optimize-images] [--events]',
+    '  node build.js <source.md> --watch --prompter [--prompter-model ID] [--prompter-dry-run]',
+    '  node build.js <source.md> --check-fit [--viewport 1600x900]',
+    '  node build.js <source.md> --squint [--squint-out PATH] [--viewport 1600x900]',
+    '  node build.js <source.md> --frames [DIR] [--viewport 1600x900]',
+    '  node build.js <source.md> --slides-pdf [--pdf-beats=all|final] [--pdf-size=16:9|16:10]',
+    '                                         [--pdf-zoom=fit|<n>] [--pdf-zoom-max=<n>]',
+    '                                         [--pdf-collapse=topic-bold|none] [--pdf-out=<path>]',
+    '  node build.js <source.md> --print-pdf|--print-notes-pdf [--pdf-out=<path>]',
+    '  node build.js <source.md> --prompter-replay FILE',
+    '  node build.js <source.md> --integrate-annotations',
+    '  node build.js <source.md> --optimize-images [--dry-run] [--all] [--max-width N]',
+    '  node build.js --new <slug> [--into <dir>]',
+    '  node build.js --help',
+    '',
+    '<source.md> may also be the folder that holds it.',
+  ];
+  for (const g of CLI_GROUPS) {
+    const rows = [];
+    for (const f of CLI_FLAGS) {
+      if (f.group !== g.id || f.hidden) continue;
+      const [label, ...lines] = f.doc || [null];
+      rows.push([label || cliLabel(f), ...lines]);
+      for (const more of f.more || []) rows.push(more);
+    }
+    rows.push(...(g.rows || []));
+    const width = Math.max(22, ...rows.map(r => r[0].length + 2));
+    out.push('', ...g.title);
+    for (const [label, first = '', ...rest] of rows) {
+      out.push(('  ' + label.padEnd(width) + first).trimEnd());
+      for (const line of rest) out.push('  ' + ' '.repeat(width) + line);
+    }
+    for (const line of g.foot || []) out.push('  ' + line);
+  }
+  return out.join('\n') + '\n';
+}
+
+// Optimal string alignment distance: Levenshtein plus one transposition, so
+// `--wacth` is one step from `--watch` rather than two.
+function editDistance(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      }
+    }
+  }
+  return d[a.length][b.length];
+}
+
+// The known name an unknown word was most likely meant to be, or null. Close
+// by edit distance, or the one name the word begins (`--integrate`).
+function nearestFlag(word) {
+  const w = '--' + word.replace(/^-+/, '').toLowerCase();
+  const names = CLI_FLAGS.filter(f => !f.hidden).map(f => f.name);
+  let best = null;
+  let bestD = Infinity;
+  for (const n of names) {
+    const dist = editDistance(w, n);
+    if (dist < bestD) { best = n; bestD = dist; }
+  }
+  // Two edits at most for a short name, a fifth of a long one, and never
+  // more than half of what was typed: `-w` is too little to guess from.
+  if (best && bestD <= Math.max(2, Math.floor(best.length / 5))
+      && bestD <= Math.floor((w.length - 2) / 2)) return best;
+  const starts = w.length >= 6 ? names.filter(n => n.startsWith(w)) : [];
+  return starts.length === 1 ? starts[0] : null;
+}
+
+// argv into flags, values and the words that are not flags, refusing every
+// word that is not in the table and every value in the wrong form. Nothing
+// here knows what a flag does; the combinations are refused by
+// refuseCombinations below.
+function parseCommandLine(argv) {
+  const flags = new Set();
+  const values = new Map();
+  const positional = [];
+  const isFlag = (w) => typeof w === 'string' && (w.startsWith('--') || w === '-h');
+  for (let i = 0; i < argv.length; i++) {
+    const word = argv[i];
+    if (word === '-h') { flags.add('--help'); continue; }
+    if (!(word.length > 1 && word.startsWith('-'))) { positional.push(word); continue; }
+    const eq = word.startsWith('--') ? word.indexOf('=') : -1;
+    const name = eq > 0 ? word.slice(0, eq) : word;
+    const given = eq > 0 ? word.slice(eq + 1) : null;
+    // The prompter was built as the Souffleuse, and its flags carried that
+    // name until 2.0.0 gave it its public one. Said with the new name rather
+    // than as a typo of the nearest flag.
+    if (/^--souffleuse(-|$)/.test(name)) {
+      throw cliError(`${name} is not a flag any more: the live prompter's flags are\n`
+        + '  --prompter, --prompter-model, --prompter-dry-run and --prompter-replay.\n'
+        + `  ${name} is now ${name.replace('--souffleuse', '--prompter')}.`);
+    }
+    const f = CLI_FLAG.get(name);
+    if (!f) {
+      const near = nearestFlag(name);
+      throw cliError(`Error: ${word} is not a flag of build.js.`
+        + (near ? ` Did you mean ${near}${given !== null && CLI_FLAG.get(near).value ? (CLI_FLAG.get(near).value === 'equals' ? '=' : ' ') + given : ''}?` : '')
+        + '\n  node build.js --help lists every flag.');
+    }
+    flags.add(name);
+    if (f.value === 'equals') {
+      if (given === null) throw cliError(`Error: ${name} needs a value, as ${name}=<value>.`);
+      values.set(name, given);
+      continue;
+    }
+    if (given !== null) {
+      throw cliError(f.value
+        ? `Error: ${name} takes its value as the next word: ${name} ${given}`
+        : `Error: ${name} takes no value; write ${name} on its own.`);
+    }
+    if (f.value === 'next') {
+      const v = argv[i + 1];
+      if (v === undefined || isFlag(v)) {
+        throw cliError(`Error: ${name} takes ${f.need}`
+          + (v === undefined ? '' : `\n  ${v} is a flag, not its value.`));
+      }
+      values.set(name, v);
+      i++;
+    } else if (f.value === 'optional') {
+      const v = argv[i + 1];
+      if (v !== undefined && !isFlag(v) && !/\.md$/i.test(v)) { values.set(name, v); i++; }
+    }
+  }
+  return { flags, values, positional };
+}
+
+// The combinations the table can name: a mode with company it ignores, an
+// option without the flag that reads it, two flags that cannot run together,
+// more than one input. Each was an ordinary build and exit 0 before.
+function refuseCombinations({ flags, values, positional }) {
+  const given = (n) => n + (values.has(n) ? ' ' + values.get(n) : '');
+  const modes = CLI_FLAGS.filter(f => f.mode && flags.has(f.name));
+  if (modes.length > 1) {
+    throw cliError(`Error: ${joinFlagNames(modes.map(m => m.name))} are separate commands; run one at a time.`);
+  }
+  if (modes.length) {
+    const m = modes[0];
+    const extra = [...flags].filter(n => n !== m.name && !m.takes.includes(n));
+    if (extra.length) {
+      throw cliError(`Error: ${joinFlagNames(extra)} ${extra.length > 1 ? 'do' : 'does'} nothing with ${m.name}.\n`
+        + `  ${m.name} ${m.does}.\n`
+        + `  Drop ${extra.length > 1 ? 'them' : 'it'}, or run the build as a second command.`);
+    }
+  }
+  for (const f of CLI_FLAGS) {
+    if (!flags.has(f.name) || !f.needs || f.needs.some(n => flags.has(n))) continue;
+    const head = f.needs[0] === '--new' ? '--new <slug>' : '<source.md> ' + f.needs[0];
+    throw cliError(`Error: ${f.name} without ${joinFlagNames(f.needs).replace(/ and (\S+)$/, ' or $1')}.\n`
+      + `  ${f.why}, so on its own it changes nothing about the build.\n`
+      + `  node build.js ${head} ${given(f.name)}`);
+  }
+  const clash = CLI_FLAGS.filter(f => flags.has(f.name) && (f.notWith || []).some(n => flags.has(n)));
+  if (clash.length) {
+    const other = clash[0].notWith.find(n => flags.has(n));
+    throw cliError(`Error: ${joinFlagNames([...clash.map(f => f.name), other])} are mutually exclusive.\n`
+      + `  ${joinFlagNames(clash.map(f => f.name))} ${clash.length > 1 ? 'each ' : ''}${clash[0].does}; `
+      + `${other} keeps rebuilding.\n`
+      + '  Run it in a second terminal, or when you are done authoring.');
+  }
+  if (positional.length > 1) {
+    throw cliError(flags.has('--new')
+      ? `Error: --new takes one slug, and was given ${positional.length}: ${positional.join(', ')}.`
+      : `Error: build.js takes one source.md, and was given ${positional.length}: ${positional.join(', ')}.\n`
+        + '  Build them one at a time.');
+  }
+}
+
+// The source.md a command names, or the one in the folder it names. Exits as
+// "Input not found" always did; a folder without a source.md says what it
+// holds instead of failing on EISDIR.
+function resolveSourceArg(arg) {
+  const abs = path.resolve(arg || '');
+  let st = null;
+  try { st = fs.statSync(abs); } catch { /* reported below */ }
+  if (!arg || !st) {
+    console.error(`Input not found: ${abs}`);
+    process.exit(1);
+  }
+  if (!st.isDirectory()) return abs;
+  const inside = path.join(abs, 'source.md');
+  if (fs.existsSync(inside) && fs.statSync(inside).isFile()) {
+    console.log(`Using ${path.join(arg, 'source.md')}.`);
+    return inside;
+  }
+  let lectures = [];
+  try {
+    lectures = fs.readdirSync(abs, { withFileTypes: true })
+      .filter(d => d.isDirectory() && fs.existsSync(path.join(abs, d.name, 'source.md')))
+      .map(d => d.name).sort();
+  } catch { /* an unreadable folder holds nothing we can name */ }
+  const shown = lectures.slice(0, 3).join(', ') + (lectures.length > 3 ? ', …' : '');
+  console.error(`${arg} is a folder with no source.md in it.`
+    + (lectures.length
+      ? ` It holds ${lectures.length} lecture folder${lectures.length > 1 ? 's' : ''} (${shown});`
+        + ` name one, e.g.\n  node build.js ${path.join(arg, lectures[0])}`
+      : '\n  build.js takes one lecture\'s source.md, or the folder that holds it.'));
+  process.exit(1);
+}
+
 async function main() {
   guardConsole();
   const argv = process.argv.slice(2);
-  const flags = new Set(argv.filter(a => a.startsWith('--')));
   // Set before anything else can emit: the pre-flights inside buildOnce throw
   // through main's catch, and that catch reports a build-error.
-  eventsEnabled = flags.has('--events');
-  const positional = argv.filter((a, i) =>
-    !a.startsWith('--') && !VALUE_FLAGS.has(argv[i - 1]));
+  eventsEnabled = argv.includes('--events');
+
+  // Asked for, the help goes to stdout and the command succeeds; read before
+  // the flags are checked, so it can stand anywhere on the line.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    process.stdout.write(helpText());
+    return;
+  }
+  // Nothing at all: the same text, as the answer to a mistake.
+  if (!argv.length) {
+    process.stderr.write(helpText());
+    process.exitCode = 1;
+    return;
+  }
+
+  const cli = parseCommandLine(argv);
+  refuseCombinations(cli);
+  const { flags, values, positional } = cli;
 
   if (flags.has('--new')) {
-    const intoIdx = argv.indexOf('--into');
-    if (intoIdx >= 0 && !argv[intoIdx + 1]) {
-      console.error('--into takes a directory: node build.js --new <slug> --into <dir>');
-      process.exit(1);
-    }
-    runNew(positional[0], intoIdx >= 0 ? argv[intoIdx + 1] : null);
+    runNew(positional[0], values.get('--into') || null);
     return;
   }
 
   // Image optimisation shells out to an encoder and never renders, so it
   // runs before the Shiki init below rather than paying for it.
   if (flags.has('--optimize-images')) {
-    const absIn = path.resolve(positional[0] || '');
-    if (!positional[0] || !fs.existsSync(absIn)) {
-      console.error(`Input not found: ${absIn}`);
-      process.exit(1);
-    }
+    const absIn = resolveSourceArg(positional[0]);
     let maxWidth = null;
-    const mwIdx = argv.indexOf('--max-width');
-    if (mwIdx !== -1) {
-      maxWidth = parseInt(argv[mwIdx + 1], 10);
+    if (values.has('--max-width')) {
+      maxWidth = parseInt(values.get('--max-width'), 10);
       if (!Number.isFinite(maxWidth) || maxWidth < 320) {
         console.error('--max-width needs a pixel value of at least 320.');
         process.exit(1);
@@ -34759,39 +35206,25 @@ async function main() {
     return;
   }
 
-  // The prompter was built as the Souffleuse, and its flags carried that
-  // name until 2.0.0 gave it its public one. Nothing refuses an unknown flag
-  // in general, so an old --souffleuse would build an ordinary deck with no
-  // prompter and say nothing - the silent no-op the checks below refuse.
-  const oldFlag = argv.find(a => /^--souffleuse(-|$)/.test(a));
-  if (oldFlag) {
-    const err = new Error(`${oldFlag} is not a flag any more: the live prompter's flags are\n`
-      + '  --prompter, --prompter-model, --prompter-dry-run and --prompter-replay.\n'
-      + `  ${oldFlag} is now ${oldFlag.replace('--souffleuse', '--prompter')}.`);
-    err.userFacing = true;
-    throw err;
-  }
-
   // Reading a finished run's debrief back through today's policy. No watcher,
   // no browser, no renderer and no network: one log, one frontmatter, and one
   // line per answer saying what the model proposed and what the policy would
   // do with it now. It is how a threshold gets changed with evidence.
-  const replayIdx = argv.indexOf('--prompter-replay');
-  if (replayIdx >= 0) {
-    const logFile = argv[replayIdx + 1];
-    const absIn = path.resolve(positional[0] || '');
-    if (!logFile || !fs.existsSync(logFile)) {
+  if (flags.has('--prompter-replay')) {
+    const logFile = values.get('--prompter-replay');
+    if (!fs.existsSync(logFile)) {
       const err = new Error('--prompter-replay takes a prompter-*.jsonl written by an'
         + ' earlier run.\n  node build.js <source.md> --prompter-replay prompter-20260911-1015.jsonl');
       err.userFacing = true;
       throw err;
     }
-    if (!positional[0] || !fs.existsSync(absIn)) {
+    if (!positional[0]) {
       const err = new Error('--prompter-replay needs the source.md the log was written beside:'
         + ' its\n  `prompter:` block is what the policy is rebuilt from.');
       err.userFacing = true;
       throw err;
     }
+    const absIn = resolveSourceArg(positional[0]);
     const souff = await import('./souffleuse.mjs');
     const { formatClock } = await import('./cue-cards.mjs');
     const settings = souffleuseSettings(safeMatter(fs.readFileSync(absIn, 'utf8')).data || {});
@@ -34817,126 +35250,47 @@ async function main() {
     return;
   }
 
-  // Shiki must be ready before any renderer runs (the highlighter
-  // singleton is shared across --watch rebuilds).
-  await initHighlighter();
-
   const [inputPath] = positional;
-
-  if (!inputPath || flags.has('--help') || flags.has('-h')) {
-    console.error('Usage:');
-    console.error('  node build.js <source.md> --watch [--prompter [--prompter-model ID]]');
-    console.error('  node build.js <source.md> [--watch] [--serve [--port N]] [--audience-only|--print-only|--print-notes-only|--speaker-only]');
-    console.error('                            [--inline-images|--no-inline-images]');
-    console.error('                            [--no-optimize-images] [--events]');
-    console.error('  node build.js <source.md> --check-fit [--viewport 1600x900]');
-    console.error('  node build.js <source.md> --squint [--squint-out PATH] [--viewport 1600x900]');
-    console.error('  node build.js <source.md> --frames [DIR] [--viewport 1600x900]');
-    console.error('  node build.js <source.md> --slides-pdf [--pdf-beats=all|final] [--pdf-size=16:9|16:10]');
-    console.error('                                         [--pdf-zoom=fit|<n>] [--pdf-zoom-max=<n>]');
-    console.error('                                         [--pdf-collapse=topic-bold|none]');
-    console.error('                                         [--pdf-out=<path>]');
-    console.error('  node build.js <source.md> --print-pdf|--print-notes-pdf [--pdf-out=<path>]');
-    console.error('  node build.js <source.md> --integrate-annotations');
-    console.error('  node build.js <source.md> --optimize-images [--dry-run] [--all] [--max-width N]');
-    console.error('  node build.js --new <slug> [--into <dir>]');
-    console.error('');
-    console.error('Image inlining (default: auto – inline iff referenced images sum < 10 MB; per-image cap 2 MB):');
-    console.error('  --inline-images       force inlining regardless of total size');
-    console.error('  --no-inline-images    force external asset paths');
-    console.error('  --no-optimize-images  inline PNG/JPEG as they are, rather than');
-    console.error('                        re-encoding them to WebP for the output');
-    console.error('');
-    console.error('Image optimisation (converts referenced PNG/JPEG to WebP q92, replacing the');
-    console.error('originals; needs cwebp or magick on PATH):');
-    console.error('  --optimize-images     convert referenced rasters ≥ 512 KB');
-    console.error('  --dry-run             report what would change, write nothing');
-    console.error('  --all                 convert every referenced raster, not just large ones');
-    console.error('  --max-width N         also downscale to N px wide. Off by default on purpose:');
-    console.error('                        figure focus zooms to 8x, so a high-resolution diagram');
-    console.error('                        is high-resolution for a reason.');
-    console.error('');
-    console.error('Fit checking (needs playwright-core and a Chrome or Chromium):');
-    console.error('  --check-fit           after building, walk audience.html state by state at');
-    console.error('                        1600x900 and report any slide whose content leaves the');
-    console.error('                        frame. Exit 2 if one does. The density budgets are word');
-    console.error('                        counts, so cards and rows can overflow with a clean lint.');
-    console.error('                        It also reports the deck\'s median settled body type and');
-    console.error('                        names every slide with a figure more than 15% under it,');
-    console.error('                        and gives each figure its canvas, its drawing and the room');
-    console.error('                        left per axis in base labels, tightest first.');
-    console.error('  --viewport WxH        measure at another size (default 1600x900, a 16:9 room).');
-    console.error('');
-    console.error('Reading the projection back (needs playwright-core and a Chrome or Chromium):');
-    console.error('  --squint              after building, walk audience.html state by state and write');
-    console.error('                        what a room would see – heading, topic sentences, promoted');
-    console.error('                        bolds, what stays whole, what the collapse withholds – to');
-    console.error('                        squint.txt beside the source. Never fails a build.');
-    console.error('  --frames [DIR]        after building, write every state of audience.html as a PNG');
-    console.error('                        plus contact sheets of eight to DIR (default: frames/ beside');
-    console.error('                        the source). The review --check-fit and --squint cannot do.');
-    console.error('  --squint-out PATH     write it somewhere else; "-" writes to stdout.');
-    console.error('');
-    console.error('Live prompter (only together with --watch; the cockpit reaches it over the');
-    console.error('watch socket). What it sends is text: the deck including speaker notes, and');
-    console.error('what the cockpit hears. The prompter sends no audio; Chrome\'s speech');
-    console.error('recognition sends the audio to Google unless it runs on the device.');
-    console.error('  --prompter                run the prompter sidecar beside the watch build.');
-    console.error('  --prompter-model ID       an OpenRouter model id, overriding the deck\'s');
-    console.error('                            `prompter: model:` and the default.');
-    console.error('  --prompter-dry-run        everything but the call: the ear, the ticks, the');
-    console.error('                            policy and the log all run, nothing goes to a');
-    console.error('                            model, and no key is needed.');
-    console.error('  --prompter-replay FILE    no watcher and no browser: read a run\'s');
-    console.error('                            prompter-*.jsonl (or an older souffleuse-*.jsonl)');
-    console.error('                            back and print, per answer, what the model');
-    console.error('                            proposed and what the policy would do now.');
-    console.error('  OPENROUTER_API_KEY        required; without it the prompter starts disabled');
-    console.error('                            and only logs what it heard.');
-    console.error('  OPENROUTER_BASE_URL       another OpenAI-compatible endpoint');
-    console.error('                            (default https://openrouter.ai/api/v1).');
-    console.error('');
-    console.error('Driving the build from another program:');
-    console.error('  --events              emit build events as JSON lines on stdout and accept');
-    console.error('                        commands on stdin; for tools that drive the build.');
-    console.error('');
-    console.error('PDF slide export (a fallback deck; print.html stays the document):');
-    console.error('  --slides-pdf          drive audience.html through every beat and print slides.pdf');
-    console.error('  --pdf-beats=all       one page per state, cumulative (default)');
-    console.error('  --pdf-beats=final     one page per chunk, fully built up');
-    console.error('  --pdf-size=16:9       1600x900 css px, a 1200x675 pt page (default)');
-    console.error('  --pdf-size=16:10      1600x1000 css px, a 1200x750 pt page');
-    console.error('  --pdf-zoom=fit        size each chunk to the page, never above 1.35 (default)');
-    console.error('  --pdf-zoom=<n>        hold every page at that zoom (0.6-2.2) and report overruns');
-    console.error('  --pdf-zoom-max=<n>    largest zoom the fit may reach (default 1.35). Raise it to');
-    console.error('                        fill more of each page, lower it to keep the type even');
-    console.error('  --pdf-collapse=topic-bold  only the slide text: topic sentences and bolds');
-    console.error('  --pdf-collapse=none        the full prose. Default: whatever the lecture opens with');
-    console.error('  --pdf-out=<path>      default: slides.pdf beside source.md');
-    console.error('  Needs a Chromium (playwright-core, $PSI_CHROME or a system Chrome).');
-    console.error('');
-    console.error('PDF document export (print.html on paper, at its own A4 page, margins and numbers):');
-    console.error('  --print-pdf           print print.html to print.pdf beside source.md');
-    console.error('  --print-notes-pdf     print print-notes.html to print-notes.pdf');
-    console.error('  Any of the three PDF flags combine and start one browser. --pdf-out names the');
-    console.error('  file when exactly one is asked for; the --pdf-* options above are the slides\'.');
-    console.error('');
-    console.error('Annotation integration:');
-    console.error('  --integrate-annotations   move `> annot:` blocks from a trailing');
-    console.error('                            <!-- annotations:start --> … :end marker block');
-    console.error('                            into their chunks and remove the marker block.');
-    process.exit(inputPath ? 0 : 1);
+  if (!inputPath) {
+    // --frames takes the next word as its folder, so a source folder written
+    // after it is read as that folder: say so rather than only "no source".
+    const ate = values.get('--frames');
+    const hint = ate && fs.existsSync(path.join(path.resolve(ate), 'source.md'))
+      ? `\n  --frames took ${ate} as the folder its pictures go to; put the source first:\n`
+        + `  node build.js ${ate} --frames`
+      : '';
+    console.error('No source.md given: node build.js <source.md> ' + [...flags].join(' ')
+      + hint + '\n  node build.js --help lists every flag.');
+    process.exit(1);
   }
 
   if (flags.has('--integrate-annotations')) {
-    const absIn = path.resolve(inputPath);
-    if (!fs.existsSync(absIn)) {
-      console.error(`Input not found: ${absIn}`);
-      process.exit(1);
-    }
-    runIntegrate(absIn);
+    runIntegrate(resolveSourceArg(inputPath));
     return;
   }
+
+  // Resolved before the Shiki init, so a wrong path is said at once; and a
+  // viewport before the build it would measure, not after it.
+  const absIn = resolveSourceArg(inputPath);
+  if (values.has('--viewport')) readViewportFlag(argv);
+
+  // A port the system will not give is said before anything is built.
+  let servePort = 0;
+  if (values.has('--port')) {
+    const v = values.get('--port');
+    servePort = /^\d{1,5}$/.test(v) ? Number(v) : NaN;
+    if (!(servePort >= 0 && servePort <= 65535)) {
+      const err = new Error(`Error: --port takes a port number from 1 to 65535, and ${v} is not one.\n`
+        + '  Leave --port out and a free one is chosen.');
+      err.userFacing = true;
+      throw err;
+    }
+    await assertPortFree(servePort);
+  }
+
+  // Shiki must be ready before any renderer runs (the highlighter
+  // singleton is shared across --watch rebuilds).
+  await initHighlighter();
 
   const onlyFlags =['--audience-only', '--print-only', '--print-notes-only', '--speaker-only'].filter(f => flags.has(f));
   if (onlyFlags.length > 1) {
@@ -34961,22 +35315,17 @@ async function main() {
   // The live prompter. Only with --watch, and that is not a convenience: the
   // cockpit reaches the sidecar over the watch socket and there is no other
   // channel, so a one-shot build would start something nothing could talk to.
-  const souffModelIdx = argv.indexOf('--prompter-model');
-  if (souffModelIdx >= 0 && !argv[souffModelIdx + 1]) {
-    const err = new Error('--prompter-model takes an OpenRouter model id, e.g. anthropic/claude-sonnet-5.');
-    err.userFacing = true;
-    throw err;
-  }
+  const souffModel = values.get('--prompter-model');
   // The model id is a setting of a prompter, and it is read nowhere else: on
   // its own it built an ordinary deck with no prompter in it and said nothing,
   // which is the silent no-op this CLI refuses everywhere else.
-  if (souffModelIdx >= 0 && !flags.has('--prompter')) {
+  if (souffModel && !flags.has('--prompter')) {
     const err = new Error(
       '--prompter-model without --prompter.\n'
       + '  The model id is only ever read by the prompter, so on its own it changes\n'
       + '  nothing about the build – no prompter would run.\n'
       + '  node build.js <source.md> --watch --prompter --prompter-model '
-      + argv[souffModelIdx + 1]);
+      + souffModel);
     err.userFacing = true;
     throw err;
   }
@@ -35002,19 +35351,10 @@ async function main() {
       throw err;
     }
     opts.souffleuse = {
-      model: souffModelIdx >= 0 ? argv[souffModelIdx + 1] : null,
+      model: souffModel || null,
       dryRun: flags.has('--prompter-dry-run'),
     };
   }
-
-  const absIn = path.resolve(inputPath);
-  if (!fs.existsSync(absIn)) {
-    console.error(`Input not found: ${absIn}`);
-    process.exit(1);
-  }
-
-  const portIdx = argv.indexOf('--port');
-  const servePort = portIdx >= 0 ? parseInt(argv[portIdx + 1], 10) || 0 : 0;
 
   // Parsed before the --watch branch, not after: --watch returns from main()
   // without ever reaching the build, so a check that sits below it never runs
@@ -35073,20 +35413,13 @@ async function main() {
   // inside the frame, the other says what it says. Its exit code is not the
   // command's - a description of the projection is not a verdict on it.
   if (flags.has('--squint')) {
-    const outIdx = argv.indexOf('--squint-out');
-    if (outIdx >= 0 && !argv[outIdx + 1]) {
-      console.error('--squint-out takes a path, or "-" for stdout.');
-      process.exit(1);
-    }
     const code = await runSquint(absIn, readViewportFlag(argv),
-      outIdx >= 0 ? argv[outIdx + 1] : null);
+      values.get('--squint-out') || null);
     if (code) process.exitCode = code;
   }
   // Pictures of every state, for the eyes the two probes above do not have.
   if (flags.has('--frames')) {
-    const fIdx = argv.indexOf('--frames');
-    const dirArg = argv[fIdx + 1] && !argv[fIdx + 1].startsWith('--') ? argv[fIdx + 1] : null;
-    const code = await runFrames(absIn, readViewportFlag(argv), dirArg);
+    const code = await runFrames(absIn, readViewportFlag(argv), values.get('--frames') || null);
     if (code) process.exitCode = code;
   }
   if (flags.has('--serve')) await runServe(path.dirname(absIn), servePort);

@@ -14,8 +14,23 @@ Status: released, 2.0.0, one maintainer. **From 1.0.0 the source format is the i
 # install deps (required once, also before running lectures from sibling content repos)
 npm install
 
-# build all four views next to source.md
+# build all four views next to source.md (or name the folder that holds it)
 node build.js lectures/tutorial/source.md
+node build.js lectures/tutorial
+
+# every flag, grouped, on stdout (exit 0); a bare `node build.js` prints the
+# same to stderr and exits 1. The flags are one table, CLI_FLAGS in build.js,
+# and the --help text is generated from it. A word that is not in it is
+# refused with the nearest name (`--wacth` -> did you mean --watch?), as is a
+# value in the wrong form (`--port=8080`, `--check-fit=true`), an option
+# without the flag that reads it (--port without --serve, --viewport without
+# --check-fit/--squint/--frames, --squint-out without --squint, --dry-run/
+# --all/--max-width without --optimize-images, --into without --new),
+# --check-fit/--squint/--frames with --watch, any other flag beside one of
+# the four commands that build nothing (--new, --optimize-images,
+# --prompter-replay, --integrate-annotations), and a second source. The `cli`
+# gate holds the table against what main() reads and against this block.
+node build.js --help                           # or -h
 
 # rebuild the three lectures whose views are tracked (tutorial, diagrams,
 # decoration) exactly as release.yml checks them: with --no-optimize-images,
@@ -114,6 +129,9 @@ node build.js <source.md> --integrate-annotations
 # serve the built lecture over http on loopback. Everything works from
 # file:// except third-party embeds: a file:// page has the origin `null`
 # and YouTube's player refuses it (Error 153). Serve, and it plays.
+# A --port outside 0-65535, or one already in use, is refused in one
+# sentence before anything is built (assertPortFree); the watch socket
+# takes a free port of its own and cannot collide.
 node build.js <source.md> --serve                 # build once, then serve
 node build.js <source.md> --serve --port 8080     # fixed port (default: free one)
 node build.js <source.md> --watch --serve         # live reload over http
@@ -258,13 +276,15 @@ node lint.js lectures/ --strict                # warnings → exit 2
 # two test suites, split by one question: can this be decided without a
 # browser? test/gates/ is everything about the figure language and the {…}
 # tail grammar that can, plus the cue-card grammar, the prompter's policy and
-# the PDF export's - twenty-three gates, about three seconds, no browser and no
+# the PDF export's - twenty-four gates, about three seconds, no browser and no
 # `npm install` (diagram-core.mjs, tails.mjs, cue-cards.mjs, souffleuse.mjs,
 # pdf-core.mjs, commands.mjs and lint.js are all zero-dep).
 # It is also where a hand-mirrored list one file keeps of another's belongs,
 # figures or not: `frontmatter` holds lint.js's KNOWN_FRONTMATTER_KEYS
 # against what build.js reads, and `image-refs` holds the two readers of the
-# image-reference set against the one collector both go through.
+# image-reference set against the one collector both go through, and `cli`
+# holds the command line's flag table against what main() reads and against
+# this block.
 # test/ is the things that only break in a built page - 57 specs, about four
 # minutes: six at a time by default (--jobs N, half the cores, at most six),
 # each in a child process with its own Chromium, and the nine that export
@@ -279,7 +299,9 @@ node lint.js lectures/ --strict                # warnings → exit 2
 # footnote, cols, slide, script, a divider) crossed with every line the parser reads
 # (`> note:`, `> annot:`, `---`, `#`, `##`, a multi-line comment, an unknown
 # `:::`), built and linted, asserting the two agree and nothing leaks onto
-# the projection – about 175 decks, five seconds.
+# the projection – about 175 decks, five seconds. And test/cli.mjs, the
+# command line's refusals, --help, a folder for a file and a busy port, by
+# spawning build.js – about five seconds.
 # `npm test` runs the gates first so a compiler regression fails in seconds
 # rather than in minutes; gates.yml runs them on push and PR. A spec waits
 # with `settle(page, cap)` from harness.mjs, not a fixed sleep, wherever the
@@ -423,7 +445,7 @@ document's pagination. The plan and its decisions per stage are in
 **`commands.mjs` is the sixth zero-dep module, and the one place a key is bound.** One entry per row of the `?` panel: a *command* has `keys` and is dispatched – **`keys: []` is a command with no key**, run from the palette alone, with `NO_KEY` and no `kbd` in its row (`isCommand`, `hasKey`; `pitchblack` is the first, and the gate's `NO_KEY_COMMANDS` is the reviewed list) – a *doc row* has none (a mouse gesture, or a key answered by a guard before the lookup – the overview board, the search field, a focused figure, the editor). `helpGroups` lists a view's commands first, section by section, and every doc row (and `?` itself) after them as a muted reference, so the palette's arrows, which walk the runnable rows, never pass over one they cannot select; there is no shared row any more (`Shift`-`C F A L` is four lines). `renderHelpOverlay` renders its rows through `helpGroups(view, {editor, prompter})`; the same text is spliced into both live views as `window.PSI_COMMANDS`, the `cue-cards.mjs` treatment, and the keydown listener in `AUDIENCE_JS` ends in `commandFor(keyMap(VIEW), e)` → `COMMAND_RUN[id](e)`. Each run function is the body of the `case` it replaced; `SPEAKER_JS` and `SOUFFLEUSE_JS` add the cockpit's commands by assigning into `COMMAND_RUN`, the way they set `viewHooks`. **The listener's head stays code** – text fields (`typingIn`, which lets the cockpit's notes field through while it is read-only, so a stray click into it cannot take a presenter remote), the panel's and the search's own keys, the link mark, any Cmd/Ctrl/Alt chord, the go-to prompt, the overview board's arrows – because those are rules about *where* a key is pressed, not about what a command is; so does the editor's `E` and everything under `dgeKeydown`, a modal that runs in capture ahead of the map. **A shifted press with no binding of its own falls back to the plain key**, which is what the switch's `case 'b': case 'B':` meant: `Shift`-`B` blanks, and `?` and `#`, which arrive with Shift held, reach their commands. The module asserts at load that no key is bound twice in one view; the `commands` gate holds a fixture of every press the switch answered, a run function for every command a view answers, and a row for every key – see `test/README.md`. **The `?` panel is also the command palette in both views**: `Cmd`/`Ctrl`-`K` is answered at the listener's head, ahead of the chord guard, and a row `runsFromPanel` allows runs through `runCommand(id)` – `COMMAND_RUN[id]` with an event shaped like its first key, never a second code path. With text in the field the panel shows a ranked list instead (`paletteScore`), in which a row that lists several commands is one runnable line per command. The same helper runs the projection's start menu (`START_MENU`, `renderStartMenu`, audience only, opening by itself only before the talk starts and folding to a `›` beside the `?` circle that opens it again; probes set `window.PSI_NO_START_MENU`).
 
 Navigate build.js by the `// ── section ──` banners – `grep -n '^// ── ' build.js`
-lists all seventy-one in order, which is the map that cannot go stale. Two of them carry
+lists all seventy-four in order, which is the map that cannot go stale. Two of them carry
 a decision the name does not:
 
 - `// ── math (KaTeX, rendered at build time) ──` – the family→class map is **parsed out of `katex.min.css`** (`node_modules/katex/dist/`, reached with `nodeRequire.resolve`), never hard-coded, so it survives a KaTeX upgrade; and the stylesheet is emitted only for views that actually contain a formula, because the inlined woff2 faces are 254 KB for the full set. The live views additionally carry `KATEX_TOGGLE_FAMS` (sans + typewriter, ~46 KB) so the maths can follow the `F` toggle; print passes no `fontToggle` flag and pays nothing extra.
@@ -984,7 +1006,7 @@ plan, its decisions and its build log are `docs/history/PLAN-electron-builder.md
 
 - `CONTRIBUTING.md` – **the build and release procedure** (§ Building and releasing): what the two workflows do, what has to be true before tagging, and why the release asset names cannot change. Follow it rather than improvising a release.
 - `SECURITY.md` – **what a deck someone sent can do, what the build refuses from a `source.md` someone else wrote, and what `--watch`, `--serve` and `--prompter` expose** – written for lecturers and evaluators, its claims checked against the code or in a browser. Change it in the same commit as a refusal, a `--serve` rule or a prompter data flow it describes.
-- `test/README.md` – **the two test suites and which one a thing belongs in**: what each of the twenty-three gates guards, the four browser-spec families, and the twenty-five specs that build a deck of their own rather than hunting shapes in a real one.
+- `test/README.md` – **the two test suites and which one a thing belongs in**: what each of the twenty-four gates guards, the four browser-spec families, and the twenty-five specs that build a deck of their own rather than hunting shapes in a real one.
 - `PRD.md` – §1 non-negotiables, §2 content model, §2.1 type vocabulary, §3 source format + parsing contract, §4 visual language, §7 speaker view, §9 build system. Read this before making design-shape changes.
 - `speaker.md` – speaker spec and the `window.postMessage` sync protocol (fields, direction, freeze gating, timer, localStorage recovery).
 - `editor.md` – the diagram editor: what it is for, the four decisions, the grammar contract it edits against, the drag policy, and **§15, a build log written while building** – what landed, what it cost, and what bit. Read §15 first if you are picking the work up. §13 answers the two questions the plan left open, from the running prototype, and §14 is how a picture gets into a figure.
