@@ -247,12 +247,39 @@ try {
   const r10 = start([path.join(prompted, 'source.md'), '--watch', '--prompter', '--prompter-dry-run']);
   await r10.wait(/^Watching /m);
   const e10 = await r10.stop('SIGINT');
-  const logs = fs.readdirSync(prompted).filter(f => /^prompter-\d{8}-\d{4}\.jsonl$/.test(f));
+  // G2: seconds in the name, so two runs started in one minute keep a file
+  // each, and `-dry` on a dry run's, so a debrief's default passes it over.
+  const logs = fs.readdirSync(prompted).filter(f => /^prompter-\d{8}-\d{6}-dry\.jsonl$/.test(f));
   const prompts = fs.readdirSync(prompted).filter(f => /^prompter-[0-9a-f]+\.prompt\.txt$/.test(f));
   ok(logs.length === 1 && prompts.length === 1, 'the run wrote its log and its prompt', fs.readdirSync(prompted).join(', '));
   ok(logs.length === 1 && new RegExp(`\\[prompter\\] this run's log: \\S*${logs[0]} · its prompt: \\S*${prompts[0]}\\n$`).test(e10.out),
     'Ctrl-C: one line naming both, and it is the last thing said', e10.out.slice(-300));
   ok(e10.signal === 'SIGINT' || e10.code === 130, 'and the run ends as Ctrl-C ends it', `${e10.code} ${e10.signal}`);
+  {
+    const recs = logs.length === 1 ? fs.readFileSync(path.join(prompted, logs[0]), 'utf8').trim().split('\n').map(l => JSON.parse(l)) : [];
+    const session = recs.find(r => r.type === 'session');
+    ok(session && session.dryRun === true, 'the dry run\'s session line says dryRun', JSON.stringify(session));
+    const last = recs[recs.length - 1];
+    ok(last && last.type === 'end' && last.how === 'SIGINT' && typeof last.elapsed === 'number',
+      'and its log closes with an end line saying how it stopped', JSON.stringify(last));
+  }
+  // A run with a key is not a dry run, and its name says nothing of one. The
+  // key is a fake and the endpoint a closed port: nothing is asked of it.
+  for (const f of fs.readdirSync(prompted)) if (/^prompter-/.test(f)) fs.rmSync(path.join(prompted, f));
+  const r10k = start([path.join(prompted, 'source.md'), '--watch', '--prompter'],
+    { env: { OPENROUTER_API_KEY: 'sk-test-not-a-key', OPENROUTER_BASE_URL: 'http://127.0.0.1:9/v1' } });
+  await r10k.wait(/^Watching /m);
+  const e10k = await r10k.stop('SIGTERM');
+  const keyed = fs.readdirSync(prompted).filter(f => /^prompter-\d{8}-\d{6}\.jsonl$/.test(f));
+  ok(keyed.length === 1, 'a run with a key writes prompter-YYYYMMDD-HHMMSS.jsonl', fs.readdirSync(prompted).join(', '));
+  if (keyed.length === 1) {
+    const recs = fs.readFileSync(path.join(prompted, keyed[0]), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+    const session = recs.find(r => r.type === 'session');
+    ok(session && session.dryRun === false, 'with dryRun: false on its session line', JSON.stringify(session));
+    ok(recs[recs.length - 1].type === 'end' && recs[recs.length - 1].how === 'SIGTERM',
+      'and SIGTERM closes it as Ctrl-C does', JSON.stringify(recs[recs.length - 1]));
+  }
+  ok(e10k.signal === 'SIGTERM' || e10k.code === 143, 'and the run ends as SIGTERM ends it', `${e10k.code} ${e10k.signal}`);
 
   // ── F8: --present ──
   const r11 = start([prompted, '--present']);

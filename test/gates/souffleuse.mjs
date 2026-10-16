@@ -26,6 +26,7 @@ import {
   cueTargets, flattenMarks, rebaseClock, replayAnswers, START_QUIET_S, CLOCK_JUMP_S,
   speechStats, paceVerdict, PACE_WPM, DELIVERY_MIN_SAMPLE_S,
   SEGMENT_MAX_CHARS, clampSpan,
+  debriefReport, debriefTranscript, logIsDryRun, logNameFacts, pickDebriefLog,
 } from '../../souffleuse.mjs';
 import { ROOT } from './harness.mjs';
 
@@ -702,6 +703,108 @@ export async function run({ report }) {
   ok(keptRows[1].show === false && keptRows[1].reason === 'standing',
      'and a dismiss of some other hint frees nothing', j(keptRows));
 
+  // ── the debrief (--prompter-debrief) ─────────────────────────────
+  // A deck with three marks: one at a minute's head, one an hour in written
+  // h:mm:ss – the content repo's debrief.sh read `@1:02:30` as 62 s – and one
+  // pinned to the second beat of its slide. The `@12:30` in the middle of a
+  // note's prose is not a mark: a mark heads a note or a card.
+  {
+    const marked = {
+      frontmatter: { title: 'Debrief', lang: 'de' },
+      columns: [{
+        heading: null, id: null, body: '',
+        chunks: [
+          chunk('free', 'a', 'A', ['Eins.'], ['@0:30 Start **eins**'], [null], [0]),
+          chunk('free', 'b', 'B', ['Zwei.'], ['Mitte **zwei** gegen @12:30 in der Prosa'], [null], [0]),
+          chunk('free', 'c', 'C', ['Drei.'], ['@1:02:30 Spät **drei**'], [null], [0]),
+          chunk('free', 'd', 'D', ['Vier.', 'Vier b.'], ['@1:05:00 **vier**'], [1], [null]),
+        ],
+      }],
+    };
+    const deck = deckPayload(marked, { notesToCards, lang: 'de' });
+    const log = [
+      { t: '2026-10-16T08:00:00.000Z', type: 'session', via: 'build', model: 'm', dryRun: false },
+      { t: '2026-10-16T08:00:01.000Z', type: 'move', chunkId: 'a', idx: 0, beat: 0, elapsed: 3 },
+      { t: '2026-10-16T08:00:02.000Z', type: 'say', text: 'the room filling', t0: 1, t1: 2, chunkId: 'a' },
+      { t: '2026-10-16T08:00:05.000Z', type: 'clock', why: 'the cockpit clock started', delta: 0, was: 5, now: 0 },
+      { t: '2026-10-16T08:00:05.100Z', type: 'move', chunkId: 'a', idx: 0, beat: 0, elapsed: 0 },
+      { t: '2026-10-16T08:00:09.000Z', type: 'say', text: 'Guten Morgen allerseits', t0: 1, t1: 4, chunkId: 'a' },
+      { t: '2026-10-16T08:00:45.000Z', type: 'move', chunkId: 'b', idx: 1, beat: 0, elapsed: 40 },
+      { t: '2026-10-16T08:00:48.000Z', type: 'say', text: 'zwei Worte', t0: 41, t1: 43, chunkId: 'b' },
+      { t: '2026-10-16T09:01:45.000Z', type: 'move', chunkId: 'c', idx: 2, beat: 0, elapsed: 3700 },
+      { t: '2026-10-16T09:01:55.000Z', type: 'hint', hintId: 'h1', kind: 'time', text: 'Weiter', severity: 'low', chunkId: 'c', at: 3710, why: 'drift' },
+      { t: '2026-10-16T09:01:58.000Z', type: 'dismiss', hintId: 'h1', how: 'esc' },
+      { t: '2026-10-16T09:02:00.000Z', type: 'suppressed', reason: 'cooldown', action: 'hint', kind: 'fact', text: 'Es waren zwei', why: 'Zahl' },
+      { t: '2026-10-16T09:02:01.000Z', type: 'suppressed', reason: 'nothing', action: 'nothing' },
+      { t: '2026-10-16T09:02:02.000Z', type: 'answer', durationMs: 1000, usage: { cost: 0.01 } },
+      { t: '2026-10-16T09:02:03.000Z', type: 'answer', durationMs: 3000, usage: { cost: 0.02 } },
+      { t: '2026-10-16T09:02:04.000Z', type: 'clock-set', why: 'the speaker set the clock', delta: 60, was: 3720, now: 3780 },
+      { t: '2026-10-16T09:02:24.000Z', type: 'move', chunkId: 'd', idx: 3, beat: 0, elapsed: 3800 },
+      { t: '2026-10-16T09:03:14.000Z', type: 'move', chunkId: 'd', idx: 3, beat: 1, elapsed: 3850 },
+      { t: '2026-10-16T09:04:04.000Z', type: 'tick', chunkId: 'd', idx: 3, beat: 1, elapsed: 3900 },
+      { t: '2026-10-16T09:04:14.000Z', type: 'end', how: 'SIGINT', elapsed: 3910 },
+    ];
+    const rep = debriefReport(log.map(l => JSON.stringify(l)).concat(['{not json', '']), { deck });
+    const rows = rep.table && rep.table.rows;
+    ok(rows && j(rows.map(r => [r.id, r.beat, r.mark])) === j([['a', 0, 30], ['c', 0, 3750], ['d', 1, 3900]]),
+       'debrief: the marks are the deck\'s – @1:02:30 is an hour in, a mark in prose is none, and a pinned one keeps its beat',
+       j(rows));
+    ok(rows && rows[0].arrived === 0 && rows[0].drift === -30 && rows[0].budget === 3720
+       && rows[0].spent === 3700 && rows[0].over === -20,
+       'debrief: a slide is reached after the clock started, not on the walk before it', j(rows && rows[0]));
+    ok(rows && rows[1].arrived === 3700 && rows[1].drift === -50 && rows[1].budget === 150 && rows[1].spent === 150,
+       'debrief: the time spent runs to the next mark that was reached', j(rows && rows[1]));
+    ok(rows && rows[2].arrived === 3850 && rows[2].budget === null && rows[2].spent === 50 && rows[2].over === null,
+       'debrief: a mark on the second beat is reached on that beat, and the last runs to the last thing the log heard',
+       j(rows && rows[2]));
+    ok(rep.table && rep.table.lastMark === 3900 && rep.table.over === -20,
+       'debrief: the plan to the last mark, and the time over budget on the marked slides', j(rep.table));
+    ok(rep.firstWords && rep.firstWords.text === 'Guten Morgen allerseits' && rep.talkFrom === '2026-10-16T08:00:05.000Z',
+       'debrief: the first words are the first after the clock started', j(rep.firstWords));
+    ok(rep.clocks.length === 2 && rep.clocks[1].type === 'clock-set' && rep.sessions.length === 1
+       && rep.sessions[0].dryRun === false && rep.dryRun === false,
+       'debrief: the clock lines and the session, and the run was not dry', j(rep.clocks));
+    ok(rep.end.how === 'SIGINT' && rep.end.stoppedAt === 3910 && rep.end.elapsed === 3900,
+       'debrief: a run that stopped cleanly says how, and the talk ends at its last word or move, not at the stop', j(rep.end));
+    const cut = debriefReport(log.slice(0, -1).concat([{ type: 'status', state: 'idle', why: 'switched off', elapsed: 3905 }]), { deck });
+    ok(cut.end.how === null && cut.end.why === 'switched off',
+       'debrief: and one with no closing line does not claim it, and says what its last line said', j(cut.end));
+    ok(rep.hints.length === 1 && rep.hints[0].went === 'esc' && rep.hints[0].at === 3710,
+       'debrief: a whisper, and how it went away', j(rep.hints));
+    ok(rep.held.length === 1 && rep.held[0].reason === 'cooldown' && rep.held[0].at === 3700,
+       'debrief: what the policy held back, on the clock it was held back on – and a plain nothing is not listed',
+       j(rep.held));
+    ok(rep.calls.count === 2 && rep.calls.avgMs === 2000 && Math.abs(rep.calls.cost - 0.03) < 1e-9,
+       'debrief: the calls, their time and their cost', j(rep.calls));
+    ok(debriefReport(log).table === null, 'debrief: without a deck there is no time table');
+    ok(logIsDryRun([{ type: 'session', dryRun: true }]) && logIsDryRun([{ type: 'answer', dryRun: true }])
+       && !logIsDryRun(log),
+       'debrief: a dry run is read off its session line, or off its answers in a log from before the field');
+
+    const tr = debriefTranscript(log);
+    ok(j(tr.slides.map(s => [s.chunkId, s.at, s.text])) === j([
+      ['a', 0, ['Guten Morgen allerseits']], ['b', 40, ['zwei Worte']], ['c', 3700, []], ['d', 3800, []],
+    ]), 'transcript: the words per slide from the clock\'s start on – the room filling is not in it', j(tr.slides));
+    ok(tr.words === 5 && tr.seconds === 3900 && tr.wpm === Math.round(5 / (3900 / 60)),
+       'transcript: words, seconds and words per minute', j(tr));
+
+    ok(j(logNameFacts('prompter-20261016-0033.jsonl')) === j({ stamp: '20261016003300', dry: false, legacy: false })
+       && j(logNameFacts('prompter-20261016-003312-dry.jsonl')) === j({ stamp: '20261016003312', dry: true, legacy: false })
+       && logNameFacts('souffleuse-20260922-0913.jsonl').legacy === true
+       && logNameFacts('prompter-8960e721.prompt.txt') === null && logNameFacts('notes.jsonl') === null,
+       'log names: minutes and seconds sort into one order, -dry marks a dry run, a prompt file is no log');
+    const names = ['prompter-20261016-0033.jsonl', 'prompter-20261016-003312-dry.jsonl',
+      'prompter-20261016-003301.jsonl', 'souffleuse-20260922-0913.jsonl', 'prompter-8960e721.prompt.txt', 'x.jsonl'];
+    const picked = pickDebriefLog(names);
+    ok(picked && picked.name === 'prompter-20261016-003301.jsonl' && j(picked.skipped) === j(['prompter-20261016-003312-dry.jsonl']),
+       'the default log: the newest by its name\'s stamp, past the dry runs named as such', j(picked));
+    const older = pickDebriefLog(names, n => n === 'prompter-20261016-003301.jsonl');
+    ok(older && older.name === 'prompter-20261016-0033.jsonl' && older.skipped.length === 2,
+       'and past a dry run from before the name said so', j(older));
+    ok(pickDebriefLog(['prompter-20261016-003312-dry.jsonl']) === null && pickDebriefLog([]) === null,
+       'and none when every log is a dry run');
+  }
+
   // ── the policy, row by row ───────────────────────────────────────
   const hint = (kind, text, severity = 'low') => ({ action: 'hint', kind, text, severity });
   const ctx = (extra) => Object.assign({ now: 900, elapsedSinceOn: 900, chunkId: 'vorgesetzter', cueTargets: ['kette'], timeHintAllowed: true }, extra);
@@ -940,8 +1043,9 @@ export async function run({ report }) {
   ok(j(exported.slice().sort()) === j([
     'CLOCK_JUMP_S', 'DELIVERY_MIN_SAMPLE_S', 'KINDS', 'MAX_WORDS', 'PACE_WPM',
     'SEGMENT_MAX_CHARS', 'SEVERITIES', 'START_QUIET_S', 'TOOL_SCHEMA',
-    'clampSpan', 'createPolicy', 'cueTargets', 'deckPayload', 'driftSeconds', 'flattenMarks',
-    'paceVerdict', 'parseAnswer', 'prefixHash', 'rebaseClock', 'replayAnswers',
+    'clampSpan', 'createPolicy', 'cueTargets', 'debriefReport', 'debriefTranscript', 'deckPayload',
+    'driftSeconds', 'flattenMarks', 'logIsDryRun', 'logNameFacts',
+    'paceVerdict', 'parseAnswer', 'pickDebriefLog', 'prefixHash', 'rebaseClock', 'replayAnswers',
     'shouldTick', 'speechStats', 'systemPrefix', 'tickMessage', 'timeHintAllowed',
     'wordCount',
   ]), 'the module exports exactly the names the sidecar reads', j(exported));

@@ -208,6 +208,94 @@ await refused([src, '--serve', '--port', '99999'], /^Error: --port takes a port 
   blocker.close();
 }
 
+// ── reading a run's log back (--prompter-debrief, --prompter-replay) ──
+// A synthetic run: written here, never a real log, whose spoken words are a
+// room's. Three logs beside the deck – the talk, a newer dry run named as
+// one, and an older dry run from before the name said so – and the default
+// has to find the talk.
+{
+  const talk = path.join(dir, 'debrief');
+  fs.mkdirSync(talk);
+  const tsrc = path.join(talk, 'source.md');
+  fs.writeFileSync(tsrc, '---\ntitle: Debrief\n---\n\n## statement: One {#one}\n\nA sentence.\n\n'
+    + '> note: @0:30 Start **here**\n\n## statement: Two {#two}\n\nAnother.\n\n'
+    + '> note: Then **this**, at @12:30 in the prose, which is no mark\n\n'
+    + '## statement: Three {#three}\n\nThe last.\n\n> note: @1:02:30 An hour **in**\n');
+  const at = (s) => new Date(Date.UTC(2026, 9, 16, 8, 0, s)).toISOString();
+  const lines = (ls) => ls.map(l => JSON.stringify(l)).join('\n') + '\n';
+  const talkLog = 'prompter-20261016-100005.jsonl';
+  fs.writeFileSync(path.join(talk, talkLog), lines([
+    { t: at(0), type: 'session', via: 'build', model: 'fake/model', dryRun: false },
+    { t: at(1), type: 'move', chunkId: 'one', idx: 0, beat: 0, elapsed: 2 },
+    { t: at(2), type: 'say', text: 'testing one two', t0: 1, t1: 2, chunkId: 'one' },
+    { t: at(5), type: 'clock', why: 'the cockpit clock started', delta: 0, was: 5, now: 0 },
+    { t: at(6), type: 'move', chunkId: 'one', idx: 0, beat: 0, elapsed: 0 },
+    { t: at(9), type: 'say', text: 'Good morning \u001b[31meveryone', t0: 1, t1: 4, chunkId: 'one' },
+    { t: at(50), type: 'move', chunkId: 'two', idx: 1, beat: 0, elapsed: 45 },
+    { t: at(52), type: 'say', text: 'the second slide', t0: 46, t1: 48, chunkId: 'two' },
+    { t: at(55), type: 'tick', chunkId: 'two', idx: 1, beat: 0, elapsed: 50, cueTargets: [], timeHintAllowed: false },
+    { t: at(56), type: 'answer', durationMs: 1200, usage: { cost: 0.01 },
+      body: { choices: [{ message: { tool_calls: [{ function: { name: 'advise',
+        arguments: JSON.stringify({ action: 'hint', kind: 'example', text: 'Name the bank case', why: 'abstract' }) } }] } }] } },
+    { t: at(57), type: 'suppressed', reason: 'start-quiet', action: 'hint', kind: 'example', text: 'Name the bank case', why: 'abstract' },
+    { t: at(58), type: 'end', how: 'SIGINT', elapsed: 53 },
+  ]));
+  fs.writeFileSync(path.join(talk, 'prompter-20261016-110000-dry.jsonl'), lines([
+    { t: at(0), type: 'session', via: 'build', dryRun: true },
+  ]));
+  fs.writeFileSync(path.join(talk, 'prompter-20261016-1030.jsonl'), lines([
+    { t: at(0), type: 'session', via: 'build' }, { t: at(1), type: 'answer', dryRun: true },
+  ]));
+  fs.writeFileSync(path.join(talk, 'prompter-0a1b2c3d.prompt.txt'), 'the prefix\n');
+
+  const r1 = await run([talk, '--prompter-debrief']);
+  ok(r1.code === 0, '--prompter-debrief on a lecture folder: exit 0', r1.err + r1.out);
+  ok(new RegExp(`log +\\S*${talkLog} \\(passed over 2 newer dry runs\\)`).test(r1.out),
+    'the default log is the newest that is not a dry run, by name or by content', r1.out);
+  ok(/^ {2}#one +0:30 +0:00 +-0:30 /m.test(r1.out),
+    'a slide is reached after the clock started, not on the walk before it', r1.out);
+  ok(/^ {2}#three +1:02:30 +\(not reached\)/m.test(r1.out) && !/#two +\d/.test(r1.out),
+    '@1:02:30 is an hour in, and a mark in the prose is none', r1.out);
+  ok(/first words after that: "Good morning {2}\[31meveryone"/.test(r1.out) && !/\u001b/.test(r1.out),
+    'the first words after the clock, with an escape sequence printed as a space', JSON.stringify(r1.out.slice(0, 600)));
+  ok(/stopped with SIGINT/.test(r1.out), 'a run stopped with Ctrl-C says so', r1.out);
+  ok(/== held back \(1\)\n {2}0:50 +example · "Name the bank case" · held back: start-quiet/.test(r1.out),
+    'what the policy held back', r1.out);
+  ok(/== 1 call to the model · 1200 ms each · \$0\.01/.test(r1.out), 'the calls and their cost', r1.out);
+  ok(/== the replay through today's policy\n\[replay\] /.test(r1.out), 'and the replay at the end', r1.out);
+
+  const r2 = await run([tsrc, '--prompter-debrief', '--no-replay']);
+  ok(r2.code === 0 && !/\[replay\]/.test(r2.out), '--no-replay leaves it out', r2.out);
+
+  const r3 = await run(['--prompter-debrief', 'prompter-20261016-1030.jsonl', tsrc, '--transcript']);
+  ok(r3.code === 0 && /^transcript of \S*prompter-20261016-1030\.jsonl, the whole log/m.test(r3.out),
+    'a log named by its bare name is read beside source.md, even a dry run', r3.err + r3.out);
+  const r4 = await run([tsrc, '--prompter-debrief', '--transcript']);
+  ok(r4.code === 0 && /^## #one {2}\[0:00\]\nGood morning {2}\[31meveryone\n\n## #two {2}\[0:45\]\nthe second slide\n/m.test(r4.out)
+    && !/testing one two/.test(r4.out),
+  '--transcript: the words per slide with the talk clock, from the clock\'s start on', r4.out);
+  ok(/^6 words in 0:50 · 7 words per minute$/m.test(r4.out), 'and words per minute', r4.out);
+
+  const r5 = await run([tsrc, '--prompter-replay', talkLog]);
+  ok(r5.code === 0 && /\[replay\] prompter-20261016-100005\.jsonl · cooldown \d+s · 1 answer\(s\)/.test(r5.out),
+    '--prompter-replay finds a bare log name beside source.md too', r5.err + r5.out);
+
+  await refused([tsrc, '--transcript'], /^Error: --transcript without --prompter-debrief\./, '--transcript alone');
+  await refused([tsrc, '--no-replay'], /^Error: --no-replay without --prompter-debrief\./, '--no-replay alone');
+  await refused([tsrc, '--prompter-debrief', '--transcript', '--no-replay'],
+    /^Error: --no-replay does nothing with --transcript/, '--transcript with --no-replay');
+  await refused([tsrc, '--prompter-debrief', '--watch'], /^Error: --watch does nothing with --prompter-debrief\./,
+    '--prompter-debrief beside --watch');
+  await refused([tsrc, '--prompter-debrief', 'prompter-19990101-0000.jsonl'],
+    /^--prompter-debrief: no log prompter-19990101-0000\.jsonl here, beside .* or in its old\/ folder\./, 'a log that is not there');
+  await refused(['--prompter-debrief'], /^--prompter-debrief needs the source\.md/, '--prompter-debrief without a source');
+  await refused([src, '--prompter-debrief'], /^No prompter log beside .*\. A run with --prompter writes one there\./,
+    'a lecture with no log');
+  fs.rmSync(path.join(talk, talkLog));
+  await refused([tsrc, '--prompter-debrief'], /^No prompter log beside .* but 2 dry runs; name one to read it:/,
+    'a lecture with dry runs only');
+}
+
 // ── and what still works ─────────────────────────────────────────────
 {
   clean();

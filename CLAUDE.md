@@ -39,8 +39,9 @@ node build.js lectures/tutorial
 # --check-fit/--squint/--frames, --squint-out without --squint, --dry-run/
 # --all/--max-width without --optimize-images, --into without --new),
 # --check-fit/--squint/--frames with --watch, any other flag beside one of
-# the four commands that build nothing (--new, --optimize-images,
-# --prompter-replay, --integrate-annotations), and a second source. The `cli`
+# the five commands that build nothing (--new, --optimize-images,
+# --prompter-replay, --prompter-debrief, --integrate-annotations), and a
+# second source. The `cli`
 # gate holds the table against what main() reads and against this block.
 node build.js --help                           # or -h
 
@@ -218,7 +219,9 @@ node build.js <source.md> --slides-pdf --print-pdf --print-notes-pdf   # one bro
 # at another OpenAI-compatible endpoint (and is how the spec's fake is
 # reached). Cockpit-local throughout: no field of the sync snapshot moves and
 # the projection learns nothing of it. Chrome only (Web Speech). One log per
-# run, prompter-<YYYYMMDD-HHMM>.jsonl beside source.md, is the debrief:
+# run, prompter-<YYYYMMDD-HHMMSS>.jsonl beside source.md (with -dry before
+# the .jsonl for a dry run; minute-precision names from before are read
+# the same), is the debrief:
 # every call, every hint, every hint the policy swallowed - and the spoken
 # words verbatim. Beside it, prompter-<prefix hash>.prompt.txt is the deck
 # as the model gets it, one file per build whose deck changed. This
@@ -245,7 +248,23 @@ node build.js <source.md> --watch --prompter --prompter-dry-run
 # policy and prints, per answer, what the model proposed and what the policy
 # would do with it now - which is how a threshold gets changed with evidence.
 # A log from before the rename, souffleuse-*.jsonl, is read the same way.
-node build.js <source.md> --prompter-replay prompter-YYYYMMDD-HHMM.jsonl
+# A relative path is also looked up beside source.md, a bare name in its
+# old/ too.
+node build.js <source.md> --prompter-replay prompter-YYYYMMDD-HHMMSS.jsonl
+#
+# the whole run read back for the person who gave the talk, ending in that
+# replay: the clock (when it started, the first words, whether the run
+# stopped cleanly – a Ctrl-C or SIGTERM writes an `end` line), the time
+# table against the @mm:ss marks in the notes (read by the cue-card grammar,
+# so @1:02:30 is an hour in and a mark in prose is none), what was whispered
+# and what the policy held back, the calls and their cost. LOG defaults to
+# the newest log beside source.md that is not a dry run (by its -dry name,
+# or by its content for a log from before). --transcript prints only the
+# spoken words per slide with the talk clock, from the clock's start on.
+# The figures are debriefReport / debriefTranscript in souffleuse.mjs.
+node build.js <source.md> --prompter-debrief [LOG]
+node build.js <source.md> --prompter-debrief --no-replay
+node build.js <source.md> --prompter-debrief --transcript
 
 # two questions only a rendered page can answer, so both drive the built
 # audience.html in a real browser with playwright-core and both degrade
@@ -468,7 +487,7 @@ document's pagination. The plan and its decisions per stage are in
 **`commands.mjs` is the sixth zero-dep module, and the one place a key is bound.** One entry per row of the `?` panel: a *command* has `keys` and is dispatched – **`keys: []` is a command with no key**, run from the palette alone, with `NO_KEY` and no `kbd` in its row (`isCommand`, `hasKey`; `pitchblack` is the first, and the gate's `NO_KEY_COMMANDS` is the reviewed list) – a *doc row* has none (a mouse gesture, or a key answered by a guard before the lookup – the overview board, the search field, a focused figure, the editor). `helpGroups` lists a view's commands first, section by section, and every doc row (and `?` itself) after them as a muted reference, so the palette's arrows, which walk the runnable rows, never pass over one they cannot select; there is no shared row any more (`Shift`-`C F A L` is four lines). `renderHelpOverlay` renders its rows through `helpGroups(view, {editor, prompter})`; the same text is spliced into both live views as `window.PSI_COMMANDS`, the `cue-cards.mjs` treatment, and the keydown listener in `AUDIENCE_JS` ends in `commandFor(keyMap(VIEW), e)` → `COMMAND_RUN[id](e)`. Each run function is the body of the `case` it replaced; `SPEAKER_JS` and `SOUFFLEUSE_JS` add the cockpit's commands by assigning into `COMMAND_RUN`, the way they set `viewHooks`. **The listener's head stays code** – text fields (`typingIn`, which lets the cockpit's notes field through while it is read-only, so a stray click into it cannot take a presenter remote), the panel's and the search's own keys, the link mark, any Cmd/Ctrl/Alt chord, the go-to prompt, the overview board's arrows – because those are rules about *where* a key is pressed, not about what a command is; so does the editor's `E` and everything under `dgeKeydown`, a modal that runs in capture ahead of the map. **A shifted press with no binding of its own falls back to the plain key**, which is what the switch's `case 'b': case 'B':` meant: `Shift`-`B` blanks, and `?` and `#`, which arrive with Shift held, reach their commands. The module asserts at load that no key is bound twice in one view; the `commands` gate holds a fixture of every press the switch answered, a run function for every command a view answers, and a row for every key – see `test/README.md`. **The `?` panel is also the command palette in both views**: `Cmd`/`Ctrl`-`K` is answered at the listener's head, ahead of the chord guard, and a row `runsFromPanel` allows runs through `runCommand(id)` – `COMMAND_RUN[id]` with an event shaped like its first key, never a second code path. With text in the field the panel shows a ranked list instead (`paletteScore`), in which a row that lists several commands is one runnable line per command. The same helper runs the projection's start menu (`START_MENU`, `renderStartMenu`, audience only, opening by itself only before the talk starts and folding to a `›` beside the `?` circle that opens it again; probes set `window.PSI_NO_START_MENU`).
 
 Navigate build.js by the `// ── section ──` banners – `grep -n '^// ── ' build.js`
-lists all seventy-four in order, which is the map that cannot go stale. Two of them carry
+lists all seventy-six in order, which is the map that cannot go stale. Two of them carry
 a decision the name does not:
 
 - `// ── math (KaTeX, rendered at build time) ──` – the family→class map is **parsed out of `katex.min.css`** (`node_modules/katex/dist/`, reached with `nodeRequire.resolve`), never hard-coded, so it survives a KaTeX upgrade; and the stylesheet is emitted only for views that actually contain a formula, because the inlined woff2 faces are 254 KB for the full set. The live views additionally carry `KATEX_TOGGLE_FAMS` (sans + typewriter, ~46 KB) so the maths can follow the `F` toggle; print passes no `fontToggle` flag and pays nothing extra.

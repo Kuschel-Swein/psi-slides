@@ -1592,3 +1592,247 @@ export function replayAnswers(lines, opts = {}) {
   }
   return rows;
 }
+
+// ── the debrief ──────────────────────────────────────────────────────
+
+// A log's name: `prompter-20261016-003312.jsonl` from the version that put
+// seconds in it, `prompter-20261016-0033.jsonl` before that (two runs started
+// in one minute shared a file), `souffleuse-…` before the rename, and `-dry`
+// before the extension for a dry run.
+const LOG_NAME = /^(prompter|souffleuse)-(\d{8})-(\d{4}|\d{6})(-dry)?\.jsonl$/;
+
+/**
+ * What a log's file name says about it, or null for a name no run writes.
+ * `stamp` is fourteen digits, seconds `00` for a minute-precision name, so
+ * the two spellings sort into one order.
+ */
+export function logNameFacts(name) {
+  const m = LOG_NAME.exec(String(name == null ? '' : name));
+  if (!m) return null;
+  return {
+    stamp: m[2] + (m[3].length === 4 ? m[3] + '00' : m[3]),
+    dry: !!m[4],
+    legacy: m[1] === 'souffleuse',
+  };
+}
+
+/**
+ * The newest log a debrief should read by default, out of a folder's names:
+ * newest by the stamp in the name, never one named as a dry run. `isDry` is
+ * asked of the rest in that order, for the logs written before the name
+ * carried the mark (a dry run's `answer` lines say `dryRun`), and is
+ * injected because reading a file is the caller's business.
+ *
+ * @returns {{name, skipped: string[]}|null}  skipped: the newer dry runs
+ */
+export function pickDebriefLog(names, isDry = () => false) {
+  const logs = (Array.isArray(names) ? names : [])
+    .map(n => ({ n: String(n), f: logNameFacts(n) }))
+    .filter(x => x.f)
+    .sort((a, b) => (a.f.stamp < b.f.stamp ? 1 : a.f.stamp > b.f.stamp ? -1
+      : a.n < b.n ? 1 : a.n > b.n ? -1 : 0));
+  const skipped = [];
+  for (const x of logs) {
+    if (x.f.dry || isDry(x.n)) { skipped.push(x.n); continue; }
+    return { name: x.n, skipped };
+  }
+  return null;
+}
+
+const logLines = (lines) => (Array.isArray(lines) ? lines : [])
+  .map(raw => (typeof raw === 'string' ? safeJson(raw) : raw))
+  .filter(l => l && typeof l === 'object');
+
+/**
+ * Was this run a dry run? Its `session` line says so from the version that
+ * wrote `dryRun` there; before that, the `answer` lines did.
+ */
+export function logIsDryRun(lines) {
+  return logLines(lines).some(l => (l.type === 'session' || l.type === 'answer') && l.dryRun === true);
+}
+
+// Where the talk begins in a log: after its last `clock` line. A `clock` line
+// is the cockpit clock starting or restarting, and what stands before the
+// last one is the room filling; a `clock-set` is the speaker moving the clock
+// mid-talk and does not count.
+function talkStart(ev) {
+  let at = -1;
+  ev.forEach((l, i) => { if (l.type === 'clock') at = i; });
+  return at;
+}
+
+/**
+ * A finished run, read back for the person who gave the talk: when the clock
+ * started, how the talk kept to the `@mm:ss` marks in its notes, what the
+ * prompter whispered and what the policy held back. The figures only; the
+ * words and the layout are the printer's (build.js).
+ *
+ * The marks are the deck's own – `flattenMarks(deck)`, read out of the notes
+ * by the cue-card grammar the cockpit's drift is measured with – so a mark is
+ * one at the head of a note or a card, and `@1:02:30` is an hour in. A mark
+ * is reached by the first `move` or `tick` after the talk began that stands
+ * on its slide at its beat or later; its budget runs to the next mark, and
+ * the time spent to the first later mark that was reached (or to the end of
+ * the log).
+ *
+ * @param {Array} lines  parsed JSONL objects, or the raw lines
+ * @param {object} opts  `deck`: what deckPayload returned for the source.md
+ *                       now (without one there is no time table)
+ */
+export function debriefReport(lines, opts = {}) {
+  const ev = logLines(lines);
+  const o = opts || {};
+  const deck = o.deck && Array.isArray(o.deck.chunks) ? o.deck : null;
+  const start = talkStart(ev);
+  const talk = ev.slice(start + 1);
+
+  const sessions = ev.filter(l => l.type === 'session').map(s => ({
+    t: s.t || null, via: s.via || null, model: s.model || null,
+    dryRun: s.dryRun === true, disabled: s.disabled || null,
+  }));
+  const clocks = ev.filter(l => l.type === 'clock' || l.type === 'clock-set').map(c => ({
+    t: c.t || null, type: c.type, why: c.why || null,
+    was: num(c.was, 0), now: num(c.now, 0), delta: num(c.delta, 0),
+  }));
+  const say = talk.find(l => l.type === 'say');
+  const firstWords = say
+    ? { t: say.t || null, text: String(say.text == null ? '' : say.text), at: num(say.t0, null) }
+    : null;
+
+  // The talk clock as the log runs on: every `elapsed`, and the end of every
+  // stretch of speech. Not the closing line's: the watcher may have been
+  // stopped long after the last word, and the talk ended with the last word.
+  let el = 0;
+  for (const l of talk) {
+    if (l.type === 'end') continue;
+    if (l.elapsed != null && isFinite(Number(l.elapsed))) el = Number(l.elapsed);
+    else if (l.type === 'say' && isFinite(Number(l.t1))) el = Math.max(el, Number(l.t1));
+  }
+  const endElapsed = el;
+  const last = ev.length ? ev[ev.length - 1] : null;
+  const endLine = ev.filter(l => l.type === 'end').pop() || null;
+
+  // ── the time table ──
+  let table = null;
+  if (deck) {
+    const rows = flattenMarks(deck).map(m => ({
+      id: String((deck.chunks[m.idx] || {}).id || ''), beat: m.beat, mark: m.at,
+      arrived: null, drift: null, budget: null, spent: null, over: null,
+    }));
+    for (const l of talk) {
+      if ((l.type !== 'move' && l.type !== 'tick') || l.chunkId == null) continue;
+      if (l.elapsed == null || !isFinite(Number(l.elapsed))) continue;
+      const beat = num(l.beat, 0);
+      for (const r of rows) {
+        if (r.arrived == null && r.id === String(l.chunkId) && beat >= r.beat) r.arrived = Number(l.elapsed);
+      }
+    }
+    let over = 0;
+    rows.forEach((r, k) => {
+      const next = rows[k + 1];
+      r.budget = next ? next.mark - r.mark : null;
+      if (r.arrived == null) return;
+      r.drift = r.arrived - r.mark;
+      const later = rows.slice(k + 1)
+        .filter(x => x.arrived != null && x.arrived >= r.arrived).map(x => x.arrived);
+      r.spent = (later.length ? Math.min(...later) : Math.max(endElapsed, r.arrived)) - r.arrived;
+      if (r.budget != null) { r.over = r.spent - r.budget; over += r.over; }
+    });
+    table = {
+      rows,
+      lastMark: rows.length ? Math.max(...rows.map(r => r.mark)) : null,
+      over,
+    };
+  }
+
+  // ── what the prompter said, and what it was not let say ──
+  const went = new Map(ev.filter(l => l.type === 'dismiss')
+    .map(l => [String(l.hintId), String(l.how == null ? '' : l.how)]));
+  const hints = ev.filter(l => l.type === 'hint').map(h => ({
+    at: num(h.at, 0), kind: h.kind || null, severity: h.severity || null,
+    chunkId: h.chunkId || null, text: String(h.text == null ? '' : h.text),
+    why: h.why == null ? null : String(h.why),
+    went: went.has(String(h.hintId)) ? went.get(String(h.hintId)) : null,
+  }));
+  const cues = ev.filter(l => l.type === 'cue' || l.type === 'card').map(c => ({
+    at: num(c.at, 0), chunkId: c.chunkId || c.target || null,
+    text: String(c.text == null ? '' : c.text), why: c.why == null ? null : String(c.why),
+  }));
+  const held = [];
+  let at = 0;
+  for (const l of ev) {
+    if (l.elapsed != null && isFinite(Number(l.elapsed))) at = Number(l.elapsed);
+    if (l.type === 'clock' || l.type === 'clock-set') at = num(l.now, at);
+    if (l.type !== 'suppressed' || !l.action || l.action === 'nothing') continue;
+    held.push({
+      at, action: String(l.action), kind: l.kind || null,
+      text: String(l.text == null ? '' : l.text), target: l.action === 'cue' ? (l.chunkId || null) : null,
+      reason: String(l.reason == null ? '' : l.reason), why: l.why == null ? null : String(l.why),
+    });
+  }
+  const answers = ev.filter(l => l.type === 'answer');
+  const sent = answers.filter(a => !a.dryRun);
+  const ms = sent.reduce((s, a) => s + num(Number(a.durationMs), 0), 0);
+  const cost = sent.reduce((s, a) => s + num(Number(a.usage && a.usage.cost), 0), 0);
+
+  return {
+    dryRun: logIsDryRun(ev),
+    sessions,
+    clocks,
+    talkFrom: start >= 0 ? (ev[start].t || null) : null,
+    firstWords,
+    end: {
+      t: last ? last.t || null : null,
+      elapsed: endElapsed,
+      how: endLine ? String(endLine.how == null ? '' : endLine.how) : null,
+      stoppedAt: endLine ? num(Number(endLine.elapsed), null) : null,
+      // What the last line said of itself – `switched off by the cockpit` –
+      // which is all a log without a closing line can say about its end.
+      why: last && last.why != null ? String(last.why) : null,
+    },
+    table,
+    hints,
+    cues,
+    held,
+    calls: {
+      count: answers.length,
+      dry: answers.length - sent.length,
+      avgMs: sent.length ? Math.round(ms / sent.length) : null,
+      cost,
+    },
+  };
+}
+
+/**
+ * The spoken words of a run, from the talk's start on, one group per slide
+ * with the talk clock at which the slide came up – the input for a review of
+ * the delivery. A slide begins a group when a `move` or `tick` stands on it
+ * and the last group is another slide's; every `say` goes into the group
+ * that is open, as the log ordered it.
+ *
+ * @returns {{slides: [{chunkId, at, text: string[]}], words, seconds, wpm}}
+ */
+export function debriefTranscript(lines) {
+  const ev = logLines(lines);
+  const talk = ev.slice(talkStart(ev) + 1);
+  const slides = [];
+  let cur = null;
+  let el = 0;
+  let words = 0;
+  for (const l of talk) {
+    if (l.type === 'end') continue;
+    if (l.elapsed != null && isFinite(Number(l.elapsed))) el = Number(l.elapsed);
+    if ((l.type === 'move' || l.type === 'tick') && l.chunkId != null && (!cur || cur.chunkId !== String(l.chunkId))) {
+      cur = { chunkId: String(l.chunkId), at: el, text: [] };
+      slides.push(cur);
+    }
+    if (l.type !== 'say') continue;
+    const text = String(l.text == null ? '' : l.text).trim();
+    if (isFinite(Number(l.t1))) el = Math.max(el, Number(l.t1));
+    if (!text) continue;
+    if (!cur) { cur = { chunkId: l.chunkId == null ? null : String(l.chunkId), at: num(l.t0, el), text: [] }; slides.push(cur); }
+    cur.text.push(text);
+    words += wordCount(text);
+  }
+  return { slides, words, seconds: el, wpm: el > 0 ? Math.round(words / (el / 60)) : null };
+}

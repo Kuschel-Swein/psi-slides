@@ -31230,14 +31230,17 @@ function terminalSafe(line) {
   return String(line).replace(/[\p{Cc}\u202a-\u202e\u2066-\u2069]/gu, (c) => (c === '\n' ? '\n' : ' '));
 }
 
-// One log per run of the watcher, beside source.md: the debrief. Minutes
-// rather than seconds in the name, because two watchers started in the same
-// minute is not a case worth a longer name.
-function souffleuseLogPath(absIn, when = new Date()) {
+// One log per run of the watcher, beside source.md: the debrief. Seconds in
+// the name, because two runs started in one minute – a rehearsal stopped and
+// started again – shared a file when it had minutes only, and a dry run says
+// so in its name, so the debrief's default can pass it over without opening
+// it. `--prompter-debrief` still reads the minute-precision names
+// (`logNameFacts` in souffleuse.mjs).
+function souffleuseLogPath(absIn, when = new Date(), { dry = false } = {}) {
   const p = (n) => String(n).padStart(2, '0');
   const stamp = `${when.getFullYear()}${p(when.getMonth() + 1)}${p(when.getDate())}`
-    + `-${p(when.getHours())}${p(when.getMinutes())}`;
-  return path.join(path.dirname(absIn), `prompter-${stamp}.jsonl`);
+    + `-${p(when.getHours())}${p(when.getMinutes())}${p(when.getSeconds())}`;
+  return path.join(path.dirname(absIn), `prompter-${stamp}${dry ? '-dry' : ''}.jsonl`);
 }
 
 // A path for the prompter's lines: relative to where the command runs when it
@@ -31337,7 +31340,6 @@ async function createSouffleuse({
   let key = found.key;
   const base = String(process.env.OPENROUTER_BASE_URL || SOUFFLEUSE_BASE_URL)
     .trim().replace(/\/+$/, '');
-  const logPath = souffleuseLogPath(absIn);
   // A key is printable ASCII and nothing else. One with a line break or a
   // space inside it - pasted with its neighbour, or with the shell's quote -
   // made the HTTP client throw an error that quoted the header, key and all,
@@ -31356,6 +31358,7 @@ async function createSouffleuse({
       ? `the key in ${found.from} is not usable – it contains a space, a line break or a character outside printable ASCII`
       : found.problem || 'no OpenRouter key';
   const dryRun = !!opts.dryRun || !!noKeyWhy;
+  const logPath = souffleuseLogPath(absIn, new Date(), { dry: dryRun });
 
   // Every string that leaves this function - a log line, a terminal line, an
   // event, a status on the cockpit's badge, a reply - goes through this, so
@@ -31518,6 +31521,7 @@ async function createSouffleuse({
       cues: cuesAllowed,
       stt,
       disabled: disabled ? disabled.why : null,
+      dryRun,
     });
   }
 
@@ -32344,6 +32348,14 @@ async function createSouffleuse({
     pendingReason = null;
   }
 
+  // The run's last line, on a clean stop (Ctrl-C or a SIGTERM): a log that
+  // ends without it is one whose process died, which the debrief says. Only
+  // into a log that exists – a run that never wrote one has nothing to close.
+  function end(how) {
+    if (!fs.existsSync(logPath)) return;
+    logLine('end', { how: String(how || ''), elapsed: nowElapsed() });
+  }
+
   // Said once, at the start, because it is the one thing about this flag a
   // person has to know before they use it. docs/history/PLAN-souffleuse.md § Privacy.
   //
@@ -32402,7 +32414,7 @@ async function createSouffleuse({
     return { log, prompt: prompt && fs.existsSync(prompt) ? prompt : null };
   }
 
-  return { onBuild, onMessage, say, setEnabled, close, logPath, files, dryRun };
+  return { onBuild, onMessage, say, setEnabled, close, end, logPath, files, dryRun };
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────
@@ -32958,17 +32970,18 @@ async function runWatch(absIn, only, baseOpts = {}, { serve = false } = {}) {
   // the process is going: a call left in flight is abandoned rather than
   // resolved into a socket nobody is holding any more.
   if (sidecar) process.on('exit', () => sidecar.close());
-  // Ctrl-C: where this run's debrief is, and then the signal's own end, as
-  // if there had been no handler (an exit code of 130 or 143 is what a shell
-  // and a test harness read). The log is written a line at a time with a
-  // synchronous append, so there is nothing to flush; abandoning the call in
-  // flight is all that is left to do.
+  // Ctrl-C: a closing line in the log, where this run's debrief is, and then
+  // the signal's own end, as if there had been no handler (an exit code of
+  // 130 or 143 is what a shell and a test harness read). The log is written a
+  // line at a time with a synchronous append, so there is nothing to flush;
+  // abandoning the call in flight is all that is left to do.
   if (sidecar) {
     const stop = (sig) => {
       process.removeListener('SIGINT', stop);
       process.removeListener('SIGTERM', stop);
       try {
         sidecar.close();
+        sidecar.end(sig);
         const { log, prompt } = sidecar.files();
         if (log) {
           process.stdout.write((process.stdout.isTTY ? '\n' : '')
@@ -35021,7 +35034,9 @@ function pdfJobsFrom(argv, flags, absIn) {
 //   value    absent: a switch, and `--name=x` is refused;
 //            'next': the value is the next word (--port 8080), required;
 //            'optional': the next word, unless it is a flag or names a .md
-//              file (--frames [DIR]);
+//              file (--frames [DIR]); with `accepts`, only a word ending in
+//              it (--prompter-debrief [LOG] takes a .jsonl and leaves a
+//              lecture folder after it to be the source);
 //            'equals': one word, `--name=value` (the --pdf-* options).
 //   need     what the value is, for the refusal when it is missing.
 //   needs    refused unless one of these is given too – nothing else reads it.
@@ -35166,6 +35181,21 @@ const CLI_FLAGS = [
       'prompter-*.jsonl (or an older souffleuse-*.jsonl)',
       'back and print, per answer, what the model',
       'proposed and what the policy would do now.'] },
+  { name: '--prompter-debrief', group: 'prompter', value: 'optional', accepts: '.jsonl', arg: '[LOG]',
+    mode: true, takes: ['--transcript', '--no-replay'],
+    does: 'reads a finished run\'s log back and exits; it builds nothing',
+    doc: [null, 'no watcher and no browser: read a run\'s log and',
+      'print the clock, the time table against the @mm:ss',
+      'marks in the notes, what the prompter whispered and',
+      'held back, then the replay. LOG defaults to the',
+      'newest log beside source.md that is not a dry run.'] },
+  { name: '--transcript', group: 'prompter', needs: ['--prompter-debrief'],
+    why: 'It says what --prompter-debrief prints',
+    doc: [null, 'with --prompter-debrief: only the spoken words, per',
+      'slide with the talk clock, from the clock\'s start on.'] },
+  { name: '--no-replay', group: 'prompter', needs: ['--prompter-debrief'],
+    why: 'It says what --prompter-debrief prints',
+    doc: [null, 'with --prompter-debrief: leave the replay out.'] },
 
   { name: '--events', group: 'events',
     doc: [null, 'emit build events as JSON lines on stdout and accept',
@@ -35246,6 +35276,7 @@ function helpText() {
     '                                         [--pdf-collapse=topic-bold|none] [--pdf-out=<path>]',
     '  node build.js <source.md> --print-pdf|--print-notes-pdf [--pdf-out=<path>]',
     '  node build.js <source.md> --prompter-replay FILE',
+    '  node build.js <source.md> --prompter-debrief [LOG] [--transcript | --no-replay]',
     '  node build.js <source.md> --integrate-annotations',
     '  node build.js <source.md> --optimize-images [--dry-run] [--all] [--max-width N]',
     '  node build.js --new <slug> [--into <dir>]',
@@ -35330,7 +35361,7 @@ function parseCommandLine(argv) {
     // than as a typo of the nearest flag.
     if (/^--souffleuse(-|$)/.test(name)) {
       throw cliError(`${name} is not a flag any more: the live prompter's flags are\n`
-        + '  --prompter, --prompter-model, --prompter-dry-run and --prompter-replay.\n'
+        + '  --prompter, --prompter-model, --prompter-dry-run, --prompter-replay and --prompter-debrief.\n'
         + `  ${name} is now ${name.replace('--souffleuse', '--prompter')}.`);
     }
     const f = CLI_FLAG.get(name);
@@ -35361,7 +35392,8 @@ function parseCommandLine(argv) {
       i++;
     } else if (f.value === 'optional') {
       const v = argv[i + 1];
-      if (v !== undefined && !isFlag(v) && !/\.md$/i.test(v)) { values.set(name, v); i++; }
+      if (v !== undefined && !isFlag(v) && !/\.md$/i.test(v)
+          && (!f.accepts || v.toLowerCase().endsWith(f.accepts))) { values.set(name, v); i++; }
     }
   }
   return { flags, values, positional };
@@ -35486,6 +35518,201 @@ function resolveSourceArg(arg) {
   process.exit(1);
 }
 
+// ── reading a run's log back (--prompter-replay, --prompter-debrief) ─
+
+// A log a command names: as given, then – a relative path – beside
+// source.md, and a bare file name also in an old/ folder there, where test
+// runs used to be put by hand.
+function resolveLogArg(arg, absIn, flag) {
+  const dir = path.dirname(absIn);
+  const tries = [path.resolve(arg)];
+  if (!path.isAbsolute(arg)) tries.push(path.join(dir, arg));
+  const bare = path.basename(arg) === arg;
+  if (bare) tries.push(path.join(dir, 'old', arg));
+  const hit = tries.find((p) => { try { return fs.statSync(p).isFile(); } catch { return false; } });
+  if (!hit) {
+    throw cliError(`${flag}: no log ${arg}`
+      + (bare ? ` here, beside ${shownPath(absIn)} or in its old/ folder.`
+        : tries.length > 1 ? ` here or beside ${shownPath(absIn)}.` : '.'));
+  }
+  return hit;
+}
+
+function readLogLines(file) {
+  return fs.readFileSync(file, 'utf8').split('\n')
+    .filter(l => l.trim()).map((l) => { try { return JSON.parse(l); } catch (e) { return null; } })
+    .filter(Boolean);
+}
+
+// The log a debrief reads when none is named: the newest beside source.md
+// that is not a dry run – named so since the name carries `-dry`, read so
+// in a log from before (`pickDebriefLog`).
+function newestLog(absIn, souff) {
+  const dir = path.dirname(absIn);
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { /* none */ }
+  const dryByContent = (n) => {
+    try { return souff.logIsDryRun(readLogLines(path.join(dir, n))); } catch { return false; }
+  };
+  const pick = souff.pickDebriefLog(names, dryByContent);
+  if (!pick) {
+    const dry = names.filter(n => souff.logNameFacts(n)).length;
+    throw cliError(`No prompter log beside ${shownPath(absIn)}`
+      + (dry ? ` but ${dry === 1 ? 'a dry run' : dry + ' dry runs'}; name one to read it:\n`
+        + `  node build.js ${shownPath(absIn)} --prompter-debrief ${names.filter(n => souff.logNameFacts(n)).sort().pop()}`
+        : '. A run with --prompter writes one there.'));
+  }
+  pickedLog = pick;
+  return path.join(dir, pick.name);
+}
+let pickedLog = null;
+
+// Every field below is the model's, the room's or the log's words, and a log
+// is a file somebody may have sent along with the deck: printed through
+// terminalSafe, so an escape sequence in any of them reaches the terminal as
+// a space, and on one line, so a line break in one cannot forge another.
+const logField = (x) => terminalSafe(String(x == null ? '' : x).replace(/\s+/g, ' ').trim());
+
+function printReplay(absIn, logFile, souff, { formatClock }) {
+  const settings = souffleuseSettings(safeMatter(fs.readFileSync(absIn, 'utf8')).data || {});
+  const rows = souff.replayAnswers(readLogLines(logFile), { cooldown: settings.cooldown });
+  console.log(`[replay] ${logField(path.basename(logFile))} · cooldown ${settings.cooldown}s`
+    + ` · ${rows.length} answer(s) the model gave`);
+  const t = logField;
+  for (const r of rows) {
+    const what = r.action === 'cue' ? `cue → #${t(r.target)}` : t(r.kind || r.action);
+    console.log(`  ${String(r.n).padStart(3)} · ${formatClock(r.at)} · #${t(r.chunkId || '?')}`
+      + ` · ${what}${r.text ? `: "${t(r.text)}"` : ''}`
+      + `\n        → ${r.show ? 'shown' : 'held back (' + t(r.reason) + ')'}`
+      + (r.why ? ` · the model: ${t(r.why)}` : ''));
+  }
+  const shown = rows.filter(r => r.show).length;
+  console.log(`[replay] ${shown} would be whispered, ${rows.length - shown} held back.`);
+}
+
+// The wall clock of a log line, in this machine's time zone.
+function logWallTime(iso) {
+  const d = new Date(iso);
+  if (!iso || isNaN(d)) return '--:--:--';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+function printDebrief(absIn, logFile, souff, cards, { transcript = false, replay = true } = {}) {
+  const { formatClock, notesToCards } = cards;
+  const lines = readLogLines(logFile);
+  const t = logField;
+  const clock = (s) => formatClock(Number(s) || 0);
+  const signed = (s) => (s > 0 ? '+' : s < 0 ? '-' : '±') + formatClock(Math.abs(s));
+  const out = (line = '') => console.log(line);
+
+  if (transcript) {
+    const tr = souff.debriefTranscript(lines);
+    const rep = souff.debriefReport(lines);
+    out(`transcript of ${t(shownPath(logFile))}`
+      + (rep.talkFrom ? `, from the clock's start at ${logWallTime(rep.talkFrom)}` : ', the whole log (the clock never started)'));
+    for (const sl of tr.slides) {
+      out('');
+      out(`## #${t(sl.chunkId || '?')}  [${clock(sl.at)}]`);
+      for (const w of sl.text) out(t(w));
+    }
+    out('');
+    out(`${tr.words} words in ${clock(tr.seconds)}`
+      + (tr.wpm != null ? ` · ${tr.wpm} words per minute` : ''));
+    return;
+  }
+
+  const fm = safeMatter(fs.readFileSync(absIn, 'utf8')).data || {};
+  const settings = souffleuseSettings(fm);
+  const deck = souff.deckPayload(parseLecture(fs.readFileSync(absIn, 'utf8')), {
+    notesToCards, durationS: talkDuration(fm), lang: settings.language || lectureLang(fm),
+  });
+  const rep = souff.debriefReport(lines, { deck });
+
+  out(`lecture  ${t(shownPath(absIn))}`);
+  out(`log      ${t(shownPath(logFile))}`
+    + (pickedLog && pickedLog.skipped.length
+      ? ` (passed over ${pickedLog.skipped.length === 1 ? 'a newer dry run' : pickedLog.skipped.length + ' newer dry runs'})`
+      : ''));
+  if (rep.dryRun) out('         a dry run: nothing went to a model.');
+  out('');
+
+  // ── 1. the clock ──
+  out('== the clock');
+  for (const s of rep.sessions) {
+    out(`  ${logWallTime(s.t)}  session via ${t(s.via)}${s.model ? ' · ' + t(s.model) : ''}`
+      + (s.dryRun ? ' · dry run' : '') + (s.disabled ? ' · off: ' + t(s.disabled) : ''));
+  }
+  for (const c of rep.clocks) {
+    out(`  ${logWallTime(c.t)}  ${c.type}: ${t(c.why)} · was ${clock(c.was)} → ${clock(c.now)}`);
+  }
+  if (!rep.talkFrom) out('  the cockpit clock never started: every time below is on the clock as it ran');
+  if (rep.firstWords) {
+    out(`  ${logWallTime(rep.firstWords.t)}  first words${rep.talkFrom ? ' after that' : ''}: `
+      + `"${t(rep.firstWords.text).slice(0, 80)}"`);
+  }
+  out(`  ${logWallTime(rep.end.t)}  log ends at ${clock(rep.end.elapsed)} on the talk clock · `
+    + (rep.end.how
+      ? `stopped with ${t(rep.end.how)}`
+      : (rep.end.why ? t(rep.end.why) + ' · ' : '')
+        + 'no closing line (the process ended without Ctrl-C, or before the engine wrote one)'));
+  out('');
+
+  // ── 2. the time table ──
+  const rows = rep.table ? rep.table.rows : [];
+  if (!rows.length) {
+    out('== no @mm:ss marks in the notes, so no time table');
+  } else {
+    out('== the time table: mark vs arrival, budget vs time spent (until the next marked slide)');
+    const label = (r) => '#' + r.id + (r.beat ? ` ·${r.beat}` : '');
+    const w = Math.max(18, ...rows.map(r => t(label(r)).length + 2));
+    const pad = (s, n) => String(s).padEnd(n);
+    const rpad = (s, n) => String(s).padStart(n);
+    out('  ' + pad('slide', w) + rpad('mark', 8) + rpad('arrived', 9) + rpad('drift', 8)
+      + rpad('budget', 8) + rpad('spent', 8) + rpad('over', 8));
+    for (const r of rows) {
+      const head = '  ' + pad(t(label(r)), w) + rpad(clock(r.mark), 8);
+      if (r.arrived == null) { out(head + '  (not reached)'); continue; }
+      out(head + rpad(clock(r.arrived), 9) + rpad(signed(r.drift), 8)
+        + rpad(r.budget != null ? clock(r.budget) : '', 8) + rpad(clock(r.spent), 8)
+        + rpad(r.over != null ? signed(r.over) : '', 8));
+    }
+    out(`  planned to the last mark ${clock(rep.table.lastMark)} · talk clock at the end ${clock(rep.end.elapsed)}`
+      + ` · over budget on marked slides ${signed(rep.table.over)}`);
+  }
+  out('');
+
+  // ── 3. what the prompter said ──
+  out(`== whispered (${rep.hints.length})`);
+  for (const h of rep.hints) {
+    out(`  ${clock(h.at)}  ${t(h.kind)}${h.chunkId ? ' · #' + t(h.chunkId) : ''} · "${t(h.text)}"`
+      + (h.went ? ` · went away: ${t(h.went)}` : ''));
+    if (h.why) out(`          the model: ${t(h.why)}`);
+  }
+  if (rep.cues.length) {
+    out(`== cards laid (${rep.cues.length})`);
+    for (const c of rep.cues) out(`  ${clock(c.at)}  → #${t(c.chunkId || '?')} · "${t(c.text)}"`);
+  }
+  out(`== held back (${rep.held.length})`);
+  for (const h of rep.held) {
+    const what = h.action === 'cue' ? `cue → #${t(h.target || '?')}` : t(h.kind || h.action);
+    out(`  ${clock(h.at)}  ${what} · "${t(h.text)}" · held back: ${t(h.reason)}`);
+    if (h.why) out(`          the model: ${t(h.why)}`);
+  }
+  const c = rep.calls;
+  out(c.dry === c.count && c.count
+    ? `== ${c.count} call${c.count === 1 ? '' : 's'} a dry run did not send`
+    : `== ${c.count - c.dry} call${c.count - c.dry === 1 ? '' : 's'} to the model`
+      + (c.avgMs != null ? ` · ${c.avgMs} ms each` : '')
+      + (c.cost ? ` · $${c.cost.toFixed(2)}` : ''));
+
+  if (replay) {
+    out('');
+    out('== the replay through today\'s policy');
+    printReplay(absIn, logFile, souff, cards);
+  }
+}
+
 async function main() {
   guardConsole();
   const argv = process.argv.slice(2);
@@ -35536,47 +35763,36 @@ async function main() {
     return;
   }
 
-  // Reading a finished run's debrief back through today's policy. No watcher,
-  // no browser, no renderer and no network: one log, one frontmatter, and one
-  // line per answer saying what the model proposed and what the policy would
-  // do with it now. It is how a threshold gets changed with evidence.
-  if (flags.has('--prompter-replay')) {
-    const logFile = values.get('--prompter-replay');
-    if (!fs.existsSync(logFile)) {
-      const err = new Error('--prompter-replay takes a prompter-*.jsonl written by an'
-        + ' earlier run.\n  node build.js <source.md> --prompter-replay prompter-20260911-1015.jsonl');
-      err.userFacing = true;
-      throw err;
+  // Reading a finished run's log back. No watcher, no browser, no renderer
+  // and no network: one log, one frontmatter (and for the debrief the notes'
+  // marks), and lines on stdout. --prompter-replay says per answer what the
+  // policy would do with it now, which is how a threshold gets changed with
+  // evidence; --prompter-debrief is the whole run for the person who gave
+  // the talk, and ends in the same replay.
+  if (flags.has('--prompter-replay') || flags.has('--prompter-debrief')) {
+    const flag = flags.has('--prompter-replay') ? '--prompter-replay' : '--prompter-debrief';
+    if (flags.has('--transcript') && flags.has('--no-replay')) {
+      throw cliError('Error: --no-replay does nothing with --transcript, which prints no replay.\n'
+        + '  Drop one of the two.');
     }
     if (!positional[0]) {
-      const err = new Error('--prompter-replay needs the source.md the log was written beside:'
-        + ' its\n  `prompter:` block is what the policy is rebuilt from.');
-      err.userFacing = true;
-      throw err;
+      throw cliError(flag === '--prompter-replay'
+        ? '--prompter-replay needs the source.md the log was written beside:'
+          + ' its\n  `prompter:` block is what the policy is rebuilt from.'
+        : '--prompter-debrief needs the source.md the log was written beside:'
+          + ' its notes\n  carry the @mm:ss marks, and the log is looked for beside it.\n'
+          + '  node build.js <source.md> --prompter-debrief [LOG]');
     }
     const absIn = resolveSourceArg(positional[0]);
     const souff = await import('./souffleuse.mjs');
-    const { formatClock } = await import('./cue-cards.mjs');
-    const settings = souffleuseSettings(safeMatter(fs.readFileSync(absIn, 'utf8')).data || {});
-    const lines = fs.readFileSync(logFile, 'utf8').split('\n')
-      .filter(l => l.trim()).map((l) => { try { return JSON.parse(l); } catch (e) { return null; } });
-    const rows = souff.replayAnswers(lines, { cooldown: settings.cooldown });
-    console.log(`[replay] ${path.basename(logFile)} · cooldown ${settings.cooldown}s`
-      + ` · ${rows.length} answer(s) the model gave`);
-    // Every field below is the model's or the log's words, and a log is a
-    // file somebody may have sent along with the deck: printed through
-    // terminalSafe, so an escape sequence in either reaches the terminal as a
-    // space.
-    const t = (x) => terminalSafe(String(x).replace(/\n/g, ' '));
-    for (const r of rows) {
-      const what = r.action === 'cue' ? `cue → #${t(r.target)}` : t(r.kind || r.action);
-      console.log(`  ${String(r.n).padStart(3)} · ${formatClock(r.at)} · #${t(r.chunkId || '?')}`
-        + ` · ${what}${r.text ? `: "${t(r.text)}"` : ''}`
-        + `\n        → ${r.show ? 'shown' : 'held back (' + t(r.reason) + ')'}`
-        + (r.why ? ` · the model: ${t(r.why)}` : ''));
-    }
-    const shown = rows.filter(r => r.show).length;
-    console.log(`[replay] ${shown} would be whispered, ${rows.length - shown} held back.`);
+    const cards = await import('./cue-cards.mjs');
+    const logPath = values.get(flag)
+      ? resolveLogArg(values.get(flag), absIn, flag)
+      : newestLog(absIn, souff);
+    if (flag === '--prompter-replay') printReplay(absIn, logPath, souff, cards);
+    else printDebrief(absIn, logPath, souff, cards, {
+      transcript: flags.has('--transcript'), replay: !flags.has('--no-replay'),
+    });
     return;
   }
 

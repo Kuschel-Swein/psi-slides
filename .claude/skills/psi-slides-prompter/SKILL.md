@@ -1,6 +1,6 @@
 ---
 name: psi-slides-prompter
-description: 'The live prompter in the psi-slides cockpit (`--prompter`, internal codename Souffleuse) – the pure half in `souffleuse.mjs` (`deckPayload`, `systemPrefix`, `tickMessage`, `parseAnswer`, `driftSeconds`, `shouldTick`, `createPolicy`, `TOOL_SCHEMA`), the Node sidecar `createSouffleuse` in build.js with its OpenRouter request, backoff and JSONL log, the `souffleuse-*` messages on the watch socket, the cockpit''s ear and `#psiINT-souffleuse-strip` under `Shift`-`S`, and the config surface (`--prompter`, `--prompter-model`, `--prompter-dry-run`, `--prompter-replay`, `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, the `prompter:` frontmatter block, `SOUFFLEUSE_SPEC`, top-level `duration:`). Use when changing any of those, their `lint.js` mirrors, `test/gates/souffleuse.mjs` or `test/souffleuse.mjs`, or when the prompter says nothing, says too much, or shows a badge.'
+description: 'The live prompter in the psi-slides cockpit (`--prompter`, internal codename Souffleuse) – the pure half in `souffleuse.mjs` (`deckPayload`, `systemPrefix`, `tickMessage`, `parseAnswer`, `driftSeconds`, `shouldTick`, `createPolicy`, `TOOL_SCHEMA`), the Node sidecar `createSouffleuse` in build.js with its OpenRouter request, backoff and JSONL log, the `souffleuse-*` messages on the watch socket, the cockpit''s ear and `#psiINT-souffleuse-strip` under `Shift`-`S`, and the config surface (`--prompter`, `--prompter-model`, `--prompter-dry-run`, `--prompter-replay`, `--prompter-debrief`, `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, the `prompter:` frontmatter block, `SOUFFLEUSE_SPEC`, top-level `duration:`). Use when changing any of those, their `lint.js` mirrors, `test/gates/souffleuse.mjs` or `test/souffleuse.mjs`, or when the prompter says nothing, says too much, or shows a badge.'
 ---
 
 # The live prompter (`--prompter`)
@@ -11,7 +11,7 @@ the way*, the record of where the code and the plan parted company; where the tw
 disagree the code is right.
 
 **“Souffleuse” is the internal codename, and it survives only where nobody
-types it.** Every author-facing name says *prompter*: the four `--prompter*`
+types it.** Every author-facing name says *prompter*: the five `--prompter*`
 flags, the `prompter:` frontmatter block, the `prompter-*.jsonl` log and
 `prompter-*.prompt.txt`, the `prompter` `--events` type and stdin command, and
 the `unknown-prompter-setting` lint code. File and identifier names keep the
@@ -19,8 +19,9 @@ codename – `souffleuse.mjs`, `SOUFFLEUSE_*`, `createSouffleuse`,
 `souffleuseCues`, the `souffleuse-*` socket messages, the `psi-slides:souffleuse*`
 storage keys, the `#souffleuse-*` cockpit ids, `test/souffleuse.mjs` and
 `test/gates/souffleuse.mjs`. Logs written before the rename are called
-`souffleuse-*.jsonl`, and `--prompter-replay` reads them the same way: it
-takes whatever file it is given and never checks the prefix.
+`souffleuse-*.jsonl`, and `--prompter-replay` and `--prompter-debrief` read
+them the same way: a named file is taken whatever its prefix, and the
+debrief's default looks for both (`logNameFacts`).
 
 It is a prompter in the theatre sense: whispers from the box, briefly, only when
 needed, and the room notices nothing. What it may be about is six kinds – the
@@ -45,7 +46,7 @@ into the prompt, that is the thing you are giving up.
 
 | where | what |
 |---|---|
-| `souffleuse.mjs` | everything pure: `KINDS`, `SEVERITIES`, `MAX_WORDS`, `START_QUIET_S`, `CLOCK_JUMP_S`, `PACE_WPM`, `DELIVERY_MIN_SAMPLE_S`, `TOOL_SCHEMA`, `wordCount`, `prefixHash`, `deckPayload`, `flattenMarks`, `cueTargets`, `systemPrefix`, `speechStats`, `paceVerdict`, `tickMessage`, `parseAnswer`, `driftSeconds`, `timeHintAllowed`, `rebaseClock`, `shouldTick`, `createPolicy`, `replayAnswers`. Zero imports, zero Node APIs, and the gate asserts both plus the exact export list |
+| `souffleuse.mjs` | everything pure: `KINDS`, `SEVERITIES`, `MAX_WORDS`, `START_QUIET_S`, `CLOCK_JUMP_S`, `PACE_WPM`, `DELIVERY_MIN_SAMPLE_S`, `TOOL_SCHEMA`, `wordCount`, `prefixHash`, `deckPayload`, `flattenMarks`, `cueTargets`, `systemPrefix`, `speechStats`, `paceVerdict`, `tickMessage`, `parseAnswer`, `driftSeconds`, `timeHintAllowed`, `rebaseClock`, `shouldTick`, `createPolicy`, `replayAnswers`, and the debrief's figures: `logNameFacts`, `pickDebriefLog`, `logIsDryRun`, `debriefReport`, `debriefTranscript`. Zero imports, zero Node APIs, and the gate asserts both plus the exact export list |
 | `build.js` § `// ── souffleuse (--prompter) ──` | `createSouffleuse({absIn, opts, sendToCockpit, emitEvent, log})` → `{onBuild, onMessage, say, setEnabled, close, logPath}`, plus `souffleuseLogPath` and the constants. Both modules are imported **dynamically here**, so no other build reads either file |
 | `build.js` § `// ── the live prompter's CSS and runtime (--prompter only) ──` | `SOUFFLEUSE_CSS` and `SOUFFLEUSE_JS`: the cockpit's Web Speech adapter, switch, strip, badge, history, interim line and cue merge, and the rules that dress them. **Two literals of their own because they are spliced only under the flag**, the way `editorPayload` is – `${SPEAKER_CSS}${souffleuseCss}` inside the same `<style>`, `${SPEAKER_JS}${souffleuseRuntime}` inside the same `<script>`. The runtime must be in that script element: it reads `flatChunks`, `state`, `viewHooks`, `cueSync`, `cueOn`, `cuePosition`, `souffleuseCues`, `applyCueMode`, `flashMode`, `escText`, `elapsedSeconds`, `tStart` and `PSI_CARDS` out of `SPEAKER_JS`'s scope. Before the split, 36 KB of prompter rode in every `speaker.html` anybody ever built |
 | `build.js`, `SPEAKER_JS` § cue cards | the two pieces a cockpit carries either way: `const souffleuseCues = new Map()` and the merge at the end of `cueCardsFor`. The rail is drawn from them, and drawing it cannot depend on a literal that may not have been spliced; over an empty Map both are free. Everything else the prompter touches in this window is *chained* from `SOUFFLEUSE_JS` – `viewHooks.onActiveChange`, `onStateChange`, and `applyCueMode` (which is how `cuePlaceStrip` gets called without a line inside it) |
@@ -70,6 +71,7 @@ knows the cue-card grammar, and this keeps it that way.
 | `--prompter-model ID` | an OpenRouter model id; beats the frontmatter and the default. **Refused without `--prompter`** (or `--present`), because it is read nowhere else: on its own it built an ordinary deck with no prompter and said nothing |
 | `--prompter-dry-run` | everything but the one call. The ear, the socket, the moves, the tick scheduler, the policy and the log all run; `ask` is skipped and logged as `answer {dryRun: true}`, **between a `thinking` and a `listening`**, so the cockpit's heartbeat counts the calls that would have gone out – a dry run that only ever said `listening` showed that one word for a whole talk, in the mode whose job is answering "is this wired up". **It needs no key** – which is the point of it: it is the rehearsal tool, and the way to read a `tick` message, with its state line and its window, on a machine with no account. Refused without `--prompter`, like the model id |
 | `--prompter-replay FILE` | no watcher, no browser, no renderer, no network: read a finished run's `prompter-*.jsonl` back through **today's** parser and **today's** policy and print, per answer, what the model proposed and what the policy would do with it now. `node build.js <source.md> --prompter-replay prompter-20260911-1015.jsonl`. It is how a threshold gets changed with evidence rather than by feel; the pure half is `replayAnswers` in `souffleuse.mjs`. **A `dismiss` line is applied** (`policy.dismissed`), mapped through the `hint` line that named the live id onto the replay's own hint for the same answer – skipped, a slot the speaker had emptied stayed full and every low hint after it read `standing` |
+| `--prompter-debrief [LOG]` | the whole run, read back for the person who gave the talk, with no watcher, browser or network: the clock (sessions, `clock` / `clock-set` lines, the first words after the last `clock`, the end and whether it was clean), the time table against the notes' `@mm:ss` marks – the deck's own, `flattenMarks(deckPayload(parseLecture(src), {notesToCards}))`, so a mark heads a note or a card and `@1:02:30` is an hour in – with arrival, drift, budget to the next mark and time spent, then what was whispered (and how it went away), the cards laid, what the policy held back, the calls and their cost, and last the replay (`--no-replay` leaves it out). **LOG defaults to the newest log beside source.md that is not a dry run** (`pickDebriefLog`: by the `-dry` name, else by `logIsDryRun` on the content); a relative path is also looked up beside source.md and a bare name in its `old/` (`resolveLogArg`), for `--prompter-replay` too. `--transcript` prints only the spoken words per slide with the talk clock, from the last `clock` line on – the input for a review of the delivery. A slide is reached by the first `move` or `tick` after the clock started that stands on it at the mark's beat or later: a walk through the deck before the talk is not an arrival. The figures are `debriefReport` / `debriefTranscript` in `souffleuse.mjs`, the printing `printDebrief` in build.js, every field through `terminalSafe`. It replaces the content repo's `debrief.sh` |
 | `OPENROUTER_API_KEY` | the key. **Without a usable key the run is a dry run** (`noKeyWhy` in `createSouffleuse`), said in one line that names the key file – it used to start `disabled`, which logged the transcript and sent nothing but named no fix, and a rehearsal without a key wants the ticks and the policy running anyway. The cockpit then shows the dry-run toast, because the `hello` reply carries `dryRun`. **A key that is not printable ASCII (`SOUFFLEUSE_KEY_RE`, `/^[\x21-\x7e]+$/`) is the same dry run**, said in words that do not contain it, and never put into a header: one with a line break in it made undici throw an error quoting the header, and the key went to the log, the terminal, the badge and `--events`. Beyond that, **every string the sidecar writes anywhere goes through `redact`** – `log`, `emit`, `sendToCockpit` and `logLine` are wrapped at the top of `createSouffleuse`, so an endpoint that echoes the request cannot put the key on a badge either |
 | the key file | `~/.config/psi-slides/openrouter.key`, or `$XDG_CONFIG_HOME/psi-slides/openrouter.key` when that is absolute (`prompterKeyFile`). Read by `resolvePrompterKey` **only when `OPENROUTER_API_KEY` is empty, and never under `--prompter-dry-run`**: the key alone, or an `OPENROUTER_API_KEY=…` line (`export` and quotes allowed, `#` lines skipped, other `NAME=` lines ignored). Opened, then `fstat`ed: refused when it is not a file, not owned by this uid, has any group/other bit (`mode & 0o077`), or is over 4 KB – as ssh refuses a private key; each refusal is the dry run with that sentence. **Nothing but the key is read from it, and no `.env` is read anywhere**: `OPENROUTER_BASE_URL` decides where the deck, the notes and the transcript go, and a `.env` beside a lecture someone sent could name the sender's own endpoint. The start says where the key came from (`[prompter] the key: …`). `test/present.mjs` points `XDG_CONFIG_HOME` at a folder of its own |
 | `OPENROUTER_BASE_URL` | another OpenAI-compatible endpoint, default `https://openrouter.ai/api/v1`. This is how the spec's fake OpenRouter is reached. One that is not `https` and not loopback is warned about at start: the deck, the transcript and the key would cross the network in the clear |
@@ -510,14 +512,20 @@ sidecar another (`souffSideWhy`), and `souffPaintBadge` paints from the pair.
 
 ## The log
 
-`prompter-<YYYYMMDD-HHMM>.jsonl` beside `source.md`, one per run of the
-watcher, created mode `0o600` through `appendOutputFile` – it holds the room's
+`prompter-<YYYYMMDD-HHMMSS>.jsonl` beside `source.md`, one per run of the
+watcher, and `prompter-<YYYYMMDD-HHMMSS>-dry.jsonl` for a dry run (asked for,
+or no usable key). Seconds because two runs started in one minute – a
+rehearsal stopped and started again – shared one file when the name had
+minutes only; the `-dry` so a debrief's default can pass a test run over
+without anyone moving it into an `old/` folder by hand. Minute-precision names
+from before are still read, and sort with the new ones (`logNameFacts`). One
+per run of the watcher, created mode `0o600` through `appendOutputFile` – it holds the room's
 words – like `prompter-<hash>.prompt.txt` through `writeOutputFile`. `--serve`
 refuses both, by name. Every line carries `t` and `type`:
 
 | type | body |
 |---|---|
-| `session` | `via` (`build` / `hello`), `model`, `base`, `prefixHash`, `prefixChars`, `chunkCount`, `lang`, `durationS`, `cadence`, `cooldown`, `cues`, `stt`, `disabled`. `stt` carries `engine`, `local`, and – from the hello – `onDevice`, Chrome's verdict for each spelling of the language that was tried (`en: downloadable`, `en-US: available`), plus `installing`, the tag a download was actually asked for. Without those two the log could not say why a machine with the model installed was still talking to a server |
+| `session` | `via` (`build` / `hello`), `model`, `base`, `prefixHash`, `prefixChars`, `chunkCount`, `lang`, `durationS`, `cadence`, `cooldown`, `cues`, `stt`, `disabled`, `dryRun` (a log from before the field marks a dry run only by its `answer {dryRun: true}` lines, which is what `logIsDryRun` falls back on). `stt` carries `engine`, `local`, and – from the hello – `onDevice`, Chrome's verdict for each spelling of the language that was tried (`en: downloadable`, `en-US: available`), plus `installing`, the tag a download was actually asked for. Without those two the log could not say why a machine with the model installed was still talking to a server |
 | `say` | `text`, `t0`, `t1`, `chunkId`, `idx`, `beat` |
 | `move` | `idx`, `chunkId`, `sentId`, `beat`, `elapsed` |
 | `tick` | `reason`, `idx`, `chunkId`, `beat`, `elapsed`, `drift`, `rough`, `timeHintAllowed`, `cueTargets`, and the **user message** – never the prefix, which is the same 20 to 60 KB on every line and is already in the build |
@@ -531,6 +539,7 @@ refuses both, by name. Every line carries `t` and `type`:
 | `clock-set` | the speaker moved the clock – a minute back or forward, or to the planned start (`clockDelta` on a `souffleuse-move`): the same fields as `clock`, either sign, nothing dropped. A type of its own because a `clock` line is read as the talk beginning; every `elapsed` before it is on the old reading and every one after it on the new. `replayAnswers` rebases its policy on both |
 | `warn` | something the sidecar carried on through and a person should know: today, only a slide index past the end of the deck |
 | `cue-dropped` | a card whose slide this build no longer has |
+| `end` | the run stopped cleanly – `how` (`SIGINT` for Ctrl-C, `SIGTERM`) and `elapsed` – written by the watcher's signal handler (`sidecar.end`) before it prints where the log is. A log without it is one whose process died, or one from before the line; the debrief says which it cannot tell. Its `elapsed` is when the watcher was stopped, which may be long after the last word, so the debrief ends the talk at the last line before it |
 
 **Beside it, one file per build whose deck changed:**
 `prompter-<prefixHash>.prompt.txt`, the system prefix exactly as it is sent.
@@ -802,7 +811,7 @@ something does.
 
 ## What the tests cover, and what neither can
 
-**`test/gates/souffleuse.mjs`** (188 assertions; in the gate suite, no browser,
+**`test/gates/souffleuse.mjs`** (246 assertions; in the gate suite, no browser,
 no `npm install`): `deckPayload` against a hand-built `lecture` object of the shape
 `parseLecture` returns – built in the file, so a re-worded lecture cannot fail a
 compiler gate – prefix stability and the hash, `tickMessage` (`NEW`, the window,
@@ -832,7 +841,14 @@ sample), `beforeFirst` at both of its references with the *ahead* branch of
 saying so where the number is, and `policy.rebase` – the refusal that outlived
 a restarted clock, the ages surviving the move, the history rows moving exactly
 once because the standing hint is one of them, and a delta of nothing moving
-nothing.
+nothing. Since the debrief: `debriefReport` over an inline log and a deck with
+three marks (`@1:02:30` an hour in, a mark in prose none, a pinned one reached
+on its beat, arrival only after the last `clock` line, the time spent to the
+next mark reached, a closing `end` line or its absence), `debriefTranscript`,
+`logNameFacts` on both name spellings and `pickDebriefLog` past dry runs named
+as such and dry runs read so. The command line around them is
+`test/cli.mjs`; the log's name, `dryRun` and the `end` line on a real run are
+`test/present.mjs`.
 
 **`test/souffleuse.mjs`** (113 assertions; the browser suite, the ninth spec that
 builds a deck of its own): a real `node build.js … --watch --serve --prompter --events`

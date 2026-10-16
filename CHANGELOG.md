@@ -135,7 +135,33 @@ from building the same way is a major version.
   labels at twice the body type. Nothing changes for a deck that does not
   write them.
 
+- **`--prompter-debrief [LOG]` reads a talk back.** No watcher, no browser,
+  no network: when the cockpit clock started and the first words after it,
+  whether the run stopped cleanly, a time table against the `@mm:ss` marks
+  in the speaker notes (the mark, the arrival, the drift, the budget to the
+  next mark and the time actually spent), what the prompter whispered and
+  how each hint went away, the cards it laid, what its rules held back, the
+  calls and their cost – and then the replay `--prompter-replay` prints
+  (`--no-replay` leaves it out). `--transcript` prints only the spoken words,
+  per slide with the talk clock, from the clock's start on. Without LOG it
+  reads the newest log beside `source.md` that is not a dry run. The marks
+  are read by the cue-card grammar the cockpit's drift uses, so `@1:02:30`
+  is an hour in and a time in the middle of a note's prose is no mark. This
+  is what the content repository's `debrief.sh` did; that script read
+  `@1:02:30` as 62 seconds and counted a walk through the deck before the
+  clock started as arriving on its slides.
+
 ### Changed
+
+- **The prompter's log names carry seconds, and a dry run says so.**
+  `prompter-YYYYMMDD-HHMMSS.jsonl`, and `prompter-YYYYMMDD-HHMMSS-dry.jsonl`
+  for a dry run, where two runs started in one minute used to share one
+  file and a dry run was told from a talk only by opening it. The `session`
+  line carries `dryRun`, and a run stopped with Ctrl-C or SIGTERM ends its
+  log with an `end` line, so a log without one is a run that did not stop
+  cleanly. Logs with the old names are read as before; the `.gitignore`
+  patterns (`prompter-*.jsonl`) cover the new ones. `--prompter-replay` now
+  also finds a log named relative to `source.md`.
 
 - **A lecture is served on a port of its own.** Without `--port`, `--serve`
   takes a port derived from where the lecture's `source.md` is (41000–44999),

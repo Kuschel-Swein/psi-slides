@@ -57,13 +57,17 @@ pair someone thought of. About 175 decks, five seconds, eight at a time;
 build.js and drives no browser. It is the command line as an author meets it
 – a typo'd flag (`--wacth` must name `--watch`), a value in the wrong form
 (`--port=8080`, `--check-fit=true`, `--pdf-zoom 1.2`), a flag read as a value,
-an option without the flag that reads it, a flag beside one of the four
+an option without the flag that reads it, a flag beside one of the five
 commands that build nothing, `--watch` with `--check-fit`, two sources, `-h`
 and `--help` (stdout, exit 0; a bare `node build.js` on stderr, exit 1), a
 folder for a file, `--port abc` and `--port 99999`, and a port that is taken.
 Each refusal must exit 1, say its sentence, carry no stack trace and write no
 view; the help must have a row for every flag in `CLI_FLAGS` that is not
-hidden, which is the half the `cli` gate cannot run. About 170 assertions,
+hidden, which is the half the `cli` gate cannot run. It also reads a
+synthetic prompter log back – `--prompter-debrief` picking the newest log that
+is not a dry run (by name and by content), the time table, `--transcript`, an
+escape sequence printed as a space, a bare log name beside `source.md` for
+`--prompter-replay` too, and the debrief's refusals. About 220 assertions,
 five seconds.
 
 `test/present.mjs` follows it, for the same reason, and is the start of a
@@ -73,9 +77,11 @@ restart, a `run` message that tells a page of the first run it is stale (a
 socket of its own, not a browser), the line when a port is taken, `--open`,
 the key (none, the key file, the environment over the file, a file others can
 read, a `.env` beside the lecture that must not be read), the line Ctrl-C
-prints, and `--present` with what it refuses. Every run gets `PSI_OPEN=print`,
+prints, the log's name (seconds, `-dry` on a dry run), `dryRun` on its
+`session` line and the `end` line Ctrl-C and SIGTERM close it with, and
+`--present` with what it refuses. Every run gets `PSI_OPEN=print`,
 so `--open` prints what it would open, and an `XDG_CONFIG_HOME` of its own,
-so the key file is never the machine's. About 50 assertions, half a minute.
+so the key file is never the machine's. About 55 assertions, half a minute.
 The page half of a restart – a tab of the old run reloads itself, once – is
 the last section of `watch-resume.mjs`.
 
@@ -123,7 +129,7 @@ seconds.
 | `inlined` | the two characters that mean something else inside build.js's own template literals |
 | `tails` | the one `{…}` tail parser, the `::: draw` opener parser and the code-fence rule in `tails.mjs`: every code, the written-default rule, the formatter round trip, CommonMark's fence case by case, and no hand-written fence regex left in build.js or lint.js |
 | `legacy-draw-syntax` | the old braced `::: draw` opener stays out of every `source.md`; every other survivor is on the reviewed allowlist `legacy-draw-syntax.txt` |
-| `souffleuse` | the live prompter's pure half in `souffleuse.mjs`: the deck payload built off a hand-made `lecture`, the byte-stable system prefix, the tick message, the answer parser (a control character in a hint is refused), the drift arithmetic, every row of the restraint policy, and what a page cannot make it do: a megabyte segment cut to the window, a claimed minute of speech held to the wall clock (`clampSpan`) |
+| `souffleuse` | the live prompter's pure half in `souffleuse.mjs`: the deck payload built off a hand-made `lecture`, the byte-stable system prefix, the tick message, the answer parser (a control character in a hint is refused), the drift arithmetic, every row of the restraint policy, and what a page cannot make it do: a megabyte segment cut to the window, a claimed minute of speech held to the wall clock (`clampSpan`); and the debrief's figures over an inline log (`debriefReport`, `debriefTranscript`, the log names and the default log) |
 | `frontmatter` | `lint.js`'s `KNOWN_FRONTMATTER_KEYS` against every top-level key `build.js` actually reads |
 | `xheight` | every text face in `BUNDLED_FONTS` carries the measured x-height that sizes inline code against the prose around it, and the roster agrees with `tools/font-playground/xheights.json` |
 | `image-refs` | every way a `source.md` names a picture – the Markdown spellings (inline, angle brackets, the three reference forms, a path with a query) as well as the directive and frontmatter ones – and the collectors both readers of that set go through, with lint.js's mirror of the Markdown one held to the same list: what the inline cap refuses and what `--optimize-images` can fix have to be the same list |
