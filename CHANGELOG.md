@@ -153,6 +153,17 @@ from building the same way is a major version.
 
 ### Changed
 
+- **A deck full of photographs builds as fast as one without, from the
+  second build on.** A PNG or JPEG inlined into a view is encoded to WebP once
+  per machine rather than once per run: the encodes are kept in the user cache
+  folder (`~/Library/Caches/psi-slides/webp`, `~/.cache/psi-slides/webp`),
+  named by a hash of the picture, the encoder, its version and its settings,
+  never in the lecture's folder; `PSI_CACHE_DIR` moves it and
+  `PSI_CACHE_DIR=off` turns it off. The first build runs the encodes side by
+  side instead of one after another. Measured on two lectures of 14 and 16
+  photographs: 1.88 → 0.58 s on the first build, 0.29 s after; the output is
+  the same bytes in every case, and the encoder's settings are unchanged.
+
 - **A live view is about 0.9 MB lighter: the comments stay in the source.**
   The runtime, the diagram compiler, the editor and the stylesheets carried
   their documentation into every view – a third of a small deck's

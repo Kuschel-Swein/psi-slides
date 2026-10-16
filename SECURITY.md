@@ -145,7 +145,15 @@ files, and its message says why:
   arrived as a link to your shell profile is therefore replaced, and your
   profile is left alone; for `source.md` the build says that it replaced a
   link. The prompter's log, the one file that is appended to, refuses a link
-  at its path.
+  at its path. The one place outside the lecture's folder it writes to is
+  its own cache of WebP pictures, in your user cache folder
+  (`~/Library/Caches/psi-slides/webp` on a Mac, `~/.cache/psi-slides/webp`
+  on Linux, `PSI_CACHE_DIR` to move it, `PSI_CACHE_DIR=off` to turn it off):
+  created readable by you alone, written the same way, never through a
+  `webp` folder that is a link, and an entry read only when it is a whole
+  WebP file and not a link. An entry is named by a hash of the picture's
+  bytes and the encoder's version and settings, so a lecture chooses no
+  name in that folder.
 - **`--optimize-images` outside the lecture's own folder.** That command
   replaces and deletes pictures. It converts only files inside the lecture's
   folder and lists the others as shared or refused.

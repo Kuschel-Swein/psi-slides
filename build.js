@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import crypto from 'node:crypto';
 import os from 'node:os';
@@ -497,11 +497,14 @@ let noOptimizeImages = false;    // --no-optimize-images
 const WEBP_INLINE_EXTS = new Set(['png', 'jpg', 'jpeg']);
 let webpEncoder;                 // undefined = not probed, null = none found
 let webpNoticeShown = false;
-// absPath -> { hash, out }. Keyed on the bytes as well as the path, and kept
-// across --watch rebuilds on purpose, so an unchanged picture is encoded once
-// a session. A path alone kept the old pixels of a picture replaced under the
-// same name - by hand, or by the editor's upload with `replace` - for as long
-// as the watch ran.
+// absPath -> { hash, out, outcome, noted }. Keyed on the bytes as well as the
+// path, and kept across --watch rebuilds on purpose, so an unchanged picture
+// is encoded once a session. A path alone kept the old pixels of a picture
+// replaced under the same name - by hand, or by the editor's upload with
+// `replace` - for as long as the watch ran. `outcome` is what the summary
+// says about it, entered when the render first uses it (`noted`), so a
+// picture the pre-pass encoded is reported in the order the deck uses it,
+// as one encoded during the render always was.
 const webpInlineCache = new Map();
 let webpInlineCount = 0, webpInlineSaved = 0;
 
@@ -520,43 +523,185 @@ function webpInlineBytes(absPath, buf) {
   if (noOptimizeImages) return null;
   const ext = path.extname(absPath).slice(1).toLowerCase();
   if (!WEBP_INLINE_EXTS.has(ext)) return null;
-  const origBytes = buf.length;
+  const key = path.resolve(absPath);
   const hash = crypto.createHash('sha256').update(buf).digest('hex');
-  const hit = webpInlineCache.get(absPath);
-  if (hit && hit.hash === hash) return hit.out;
-  if (webpEncoder === undefined) webpEncoder = detectWebpEncoder();
-  if (!webpEncoder) {
-    if (!webpNoticeShown) {
-      webpNoticeShown = true;
-      console.log('[images] no cwebp or magick on PATH, so PNG and JPEG go in as they are.'
-        + ' Install one (brew install webp) and they shrink to roughly a sixth.');
+  let entry = webpInlineCache.get(key);
+  if (!entry || entry.hash !== hash) {
+    if (webpEncoder === undefined) webpEncoder = detectWebpEncoder();
+    if (!webpEncoder) {
+      if (!webpNoticeShown) {
+        webpNoticeShown = true;
+        console.log('[images] no cwebp or magick on PATH, so PNG and JPEG go in as they are.'
+          + ' Install one (brew install webp) and they shrink to roughly a sixth.');
+      }
+      entry = { hash, out: null, outcome: { orig: buf.length, note: 'original bytes (no encoder)' } };
+    } else {
+      let webp = readWebpCache(hash);
+      let failed = false;
+      if (!webp) {
+        const tmp = path.join(os.tmpdir(), 'psi-webp-' + crypto.randomBytes(6).toString('hex') + '.webp');
+        try {
+          webpEncoder.encode(absPath, tmp, null);
+          webp = fs.readFileSync(tmp);
+          writeWebpCache(hash, webp);
+        } catch (e) {
+          failed = true;
+        } finally {
+          try { fs.unlinkSync(tmp); } catch (e) { /* never existed */ }
+        }
+      }
+      entry = webpEntry(hash, buf.length, failed ? null : webp);
     }
-    noteImageOutcome(absPath, { orig: origBytes, note: 'original bytes (no encoder)' });
-    webpInlineCache.set(absPath, { hash, out: null });
-    return null;
+    webpInlineCache.set(key, entry);
   }
-  const tmp = path.join(os.tmpdir(), 'psi-webp-' + crypto.randomBytes(6).toString('hex') + '.webp');
-  let out = null;
+  if (!entry.noted) {
+    entry.noted = true;
+    noteImageOutcome(key, entry.outcome);
+    if (entry.out) { webpInlineCount++; webpInlineSaved += entry.outcome.orig - entry.out.length; }
+  }
+  return entry.out;
+}
+
+// What one encode means for the output. Only a WebP that actually wins goes
+// in: a small flat PNG - a diagram exported as a raster, a screenshot of a
+// terminal - can come out larger as WebP, and shipping a bigger file to
+// honour a default is not an optimisation.
+function webpEntry(hash, origBytes, webp) {
+  if (!webp) return { hash, out: null, outcome: { orig: origBytes, note: 'original bytes (encode failed)' } };
+  if (webp.length >= origBytes) {
+    return { hash, out: null, outcome: { orig: origBytes, out: webp.length, note: 'original bytes (WebP larger)' } };
+  }
+  return { hash, out: webp, outcome: { orig: origBytes, out: webp.length } };
+}
+
+// ── the inline encodes: on disk across runs, side by side in one ──────
+//
+// An encode at -m 6 -sharp_yuv takes 0.1-0.3 s a picture, and a cold build
+// used to do them one after another - 1.8 s for a deck of fourteen photographs
+// against 0.3 s for one without - and again on every run, because the cache
+// above lives as long as the process. Two things take that away, and neither
+// changes a byte of the output:
+//
+// - **A cache on disk**, in the user's cache folder (~/Library/Caches/
+//   psi-slides/webp, $XDG_CACHE_HOME/psi-slides/webp or ~/.cache/…,
+//   %LOCALAPPDATA%\psi-slides\Cache\webp), never in the lecture's folder.
+//   An entry is named by a hash of the picture's bytes, the encoder, its
+//   version and its arguments, so another cwebp, other settings or other
+//   pixels are another entry and never a stale one. It is written the way an
+//   output is (a fresh name, then a rename; a linked folder is not written
+//   into), read without following a link, and checked to be a whole WebP
+//   before it is used; anything wrong with it is an encode, never a failed
+//   build. PSI_CACHE_DIR names another folder, and PSI_CACHE_DIR=off turns
+//   it off. Nothing prunes it: an entry is the size of the picture in the
+//   output, and the folder is the operating system's to clear.
+// - **A pre-pass** (prewarmWebp) that encodes the pictures the build is going
+//   to inline before the render asks for them, several at once - the render
+//   is synchronous and meets them one by one. It reads exactly what the
+//   inline scan reads, and does nothing when that scan says the pictures will
+//   not be inlined, so it encodes nothing the render would not have.
+let webpCacheDirMemo;              // undefined = not resolved, null = off
+let webpCacheNoticeShown = false;
+function webpCacheDir() {
+  if (webpCacheDirMemo !== undefined) return webpCacheDirMemo;
+  const env = process.env.PSI_CACHE_DIR;
+  let base;
+  if (env === 'off') base = null;
+  else if (env) base = path.resolve(env);
+  else if (process.platform === 'darwin') base = path.join(os.homedir(), 'Library', 'Caches', 'psi-slides');
+  else if (process.platform === 'win32') base = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'psi-slides', 'Cache');
+  else base = path.join(process.env.XDG_CACHE_HOME && path.isAbsolute(process.env.XDG_CACHE_HOME)
+    ? process.env.XDG_CACHE_HOME : path.join(os.homedir(), '.cache'), 'psi-slides');
+  webpCacheDirMemo = base ? path.join(base, 'webp') : null;
+  return webpCacheDirMemo;
+}
+// The cache is off for a run whose lecture would hold it: a cache inside the
+// author's folder is a cache in their repository.
+function webpCacheUsable() {
+  const dir = webpCacheDir();
+  return !!dir && !(currentSourceDir && pathWithin(path.resolve(currentSourceDir), dir));
+}
+function webpCacheKey(hash) {
+  return crypto.createHash('sha256')
+    .update(JSON.stringify([webpEncoder.name, webpEncoder.version, webpEncoder.argv('<in>', '<out>', null), hash]))
+    .digest('hex');
+}
+// RIFF, a length that is the file's, WEBP: a whole file, not half of one.
+const isWholeWebp = (b) => b.length > 12 && b.toString('latin1', 0, 4) === 'RIFF'
+  && b.toString('latin1', 8, 12) === 'WEBP' && b.readUInt32LE(4) + 8 === b.length;
+function readWebpCache(hash) {
+  if (!webpCacheUsable()) return null;
+  const p = path.join(webpCacheDir(), webpCacheKey(hash) + '.webp');
+  let fd;
   try {
-    webpEncoder.encode(absPath, tmp, null);
-    const buf = fs.readFileSync(tmp);
-    // Only when it actually wins. A small flat PNG - a diagram exported as a
-    // raster, a screenshot of a terminal - can come out larger as WebP, and
-    // shipping a bigger file to honour a default is not an optimisation.
-    if (buf.length < origBytes) out = buf;
-    else noteImageOutcome(absPath, { orig: origBytes, out: buf.length, note: 'original bytes (WebP larger)' });
+    fd = fs.openSync(p, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    if (!fs.fstatSync(fd).isFile()) return null;
+    const buf = fs.readFileSync(fd);
+    return isWholeWebp(buf) ? buf : null;
+  } catch { return null; }
+  finally { if (fd !== undefined) try { fs.closeSync(fd); } catch { /* closed */ } }
+}
+function writeWebpCache(hash, webp) {
+  if (!webpCacheUsable() || !isWholeWebp(webp)) return;
+  const dir = webpCacheDir();
+  try {
+    let st = null;
+    try { st = fs.lstatSync(dir); } catch { /* not there yet */ }
+    if (st && !st.isDirectory()) throw new Error(`${dir} is not a folder (a link is not followed)`);
+    if (!st) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    writeOutputFile(path.join(dir, webpCacheKey(hash) + '.webp'), webp, 0o600);
   } catch (e) {
-    out = null;
-    noteImageOutcome(absPath, { orig: origBytes, note: 'original bytes (encode failed)' });
-  } finally {
-    try { fs.unlinkSync(tmp); } catch (e) { /* never existed */ }
+    if (!webpCacheNoticeShown) {
+      webpCacheNoticeShown = true;
+      console.log(`[images] the WebP cache is not written this run: ${e.message}. The output is the same; the next build encodes again.`);
+    }
   }
-  if (out) {
-    webpInlineCount++; webpInlineSaved += origBytes - out.length;
-    noteImageOutcome(absPath, { orig: origBytes, out: out.length });
-  }
-  webpInlineCache.set(absPath, { hash, out });
-  return out;
+}
+
+async function prewarmWebp(absIn, opts = {}) {
+  if (noOptimizeImages || opts.inlineImages === false) return;
+  const dir = path.dirname(absIn);
+  let src;
+  try { src = fs.readFileSync(absIn, 'utf8'); } catch { return; }
+  // The scan resolves a shorthand against the lecture's folder, as the build
+  // does; buildOnce sets and clears both again before it renders.
+  currentSourceDir = dir;
+  imgResolveCache.clear();
+  const scan = scanReferencedImages(src, dir);
+  if (opts.inlineImages === undefined && (scan.count === 0 || scan.total > AUTO_INLINE_BUDGET)) return;
+  if (scan.oversized.some(o => !isVideoExt(o.abs))) return;   // the build refuses the deck
+  const todo = [...new Set(scan.images.map(p => path.resolve(p)))]
+    .filter(p => WEBP_INLINE_EXTS.has(path.extname(p).slice(1).toLowerCase()));
+  if (!todo.length) return;
+  if (webpEncoder === undefined) webpEncoder = detectWebpEncoder();
+  if (!webpEncoder) return;
+  const one = async (abs) => {
+    let buf;
+    try { buf = fs.readFileSync(abs); } catch { return; }
+    const hash = crypto.createHash('sha256').update(buf).digest('hex');
+    const had = webpInlineCache.get(abs);
+    if (had && had.hash === hash) return;
+    let webp = readWebpCache(hash);
+    if (!webp) {
+      const tmp = path.join(os.tmpdir(), 'psi-webp-' + crypto.randomBytes(6).toString('hex') + '.webp');
+      try {
+        await webpEncoder.encodeAsync(abs, tmp);
+        webp = fs.readFileSync(tmp);
+        writeWebpCache(hash, webp);
+      } catch {
+        return;   // left to the render, which tries once more and says so
+      } finally {
+        try { fs.unlinkSync(tmp); } catch { /* never existed */ }
+      }
+    }
+    webpInlineCache.set(abs, webpEntry(hash, buf.length, webp));
+  };
+  // cwebp is single-threaded, so as many at once as there are cores, and no
+  // more than eight: each holds a decoded picture in memory.
+  const width = Math.max(1, Math.min(8, (os.availableParallelism ? os.availableParallelism() : os.cpus().length) || 1));
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(width, todo.length) }, async () => {
+    while (next < todo.length) await one(todo[next++]);
+  }));
 }
 
 // Said once per build, after the inlining decision, because a reader wants the
@@ -904,6 +1049,9 @@ function scanReferencedImages(src, sourceDir) {
   // Assets past the per-image cap are collected rather than merely counted:
   // buildOnce refuses to emit a half-inlined output (see assertInlinable).
   const oversized = [];
+  // The images, by absolute path, in the order the deck names them: what the
+  // inline pre-pass encodes ahead of the render (prewarmWebp).
+  const images = [];
   for (const href of refs) {
     let abs = null;
     const isShorthand = !/[\\/]/.test(href) && !/\.[a-z0-9]+$/i.test(href);
@@ -928,6 +1076,7 @@ function scanReferencedImages(src, sourceDir) {
       if (!isVideoExt(abs)) {
         total += stat.size;
         count += 1;
+        images.push(abs);
       } else {
         clips += 1;
         clipList.push({ abs: path.resolve(abs), size: stat.size });
@@ -935,7 +1084,7 @@ function scanReferencedImages(src, sourceDir) {
       if (stat.size > inlineCapFor(abs)) oversized.push({ abs, size: stat.size });
     } catch { /* missing assets surface elsewhere as figure-missing */ }
   }
-  return { total, count, clips, clipList, oversized };
+  return { total, count, clips, clipList, oversized, images };
 }
 
 // Refuse to emit an output that claims to be single-file and is not.
@@ -30938,33 +31087,50 @@ function detectWebpEncoder() {
     try { execFileSync(bin, args, { stdio: 'ignore' }); return true; }
     catch (e) { return e.code !== 'ENOENT'; }
   };
+  // The version is part of what the inline cache keys an encode by (see
+  // webpCacheKey): another cwebp may write other bytes for the same picture.
+  const version = (bin) => {
+    try { return String(execFileSync(bin, ['-version'], { stdio: ['ignore', 'pipe', 'ignore'] })).split('\n')[0].trim(); }
+    catch { return ''; }
+  };
+  // One argument list per encoder, run either way: encode() blocks, as
+  // --optimize-images and a picture met mid-render want, and encodeAsync()
+  // is what the inline pre-pass runs several of at once. The same list in
+  // both is what keeps the bytes the same whichever ran.
+  const make = (name, argv) => ({
+    name,
+    version: version(name),
+    argv,
+    encode(src, dst, resizeTo) {
+      execFileSync(name, argv(src, dst, resizeTo), { stdio: 'ignore' });
+    },
+    encodeAsync(src, dst) {
+      return new Promise((resolve, reject) => {
+        execFile(name, argv(src, dst, null), { stdio: 'ignore' }, (err) => (err ? reject(err) : resolve()));
+      });
+    },
+  });
   if (probe('cwebp', ['-version'])) {
-    return {
-      name: 'cwebp',
-      encode(src, dst, resizeTo) {
-        const args = ['-quiet', '-q', String(WEBP_QUALITY), '-m', '6', '-sharp_yuv'];
-        // Height 0 keeps the aspect ratio. The caller has already decided
-        // that resizeTo is smaller than the source.
-        if (resizeTo) args.push('-resize', String(resizeTo), '0');
-        execFileSync('cwebp', [...args, src, '-o', dst], { stdio: 'ignore' });
-      },
-    };
+    return make('cwebp', (src, dst, resizeTo) => {
+      const args = ['-quiet', '-q', String(WEBP_QUALITY), '-m', '6', '-sharp_yuv'];
+      // Height 0 keeps the aspect ratio. The caller has already decided
+      // that resizeTo is smaller than the source.
+      if (resizeTo) args.push('-resize', String(resizeTo), '0');
+      return [...args, src, '-o', dst];
+    });
   }
   if (probe('magick', ['-version'])) {
-    return {
-      name: 'magick',
-      encode(src, dst, resizeTo) {
-        // The decoder is named, not guessed. ImageMagick picks one from the
-        // file's content, and a "photo.png" that is really an MVG or an SVG
-        // script can tell it to read any file on the machine into the picture
-        // (`text:/path/to/key`). With `png:` in front it is a PNG or it is an
-        // error. The output is named too: the caller's dst ends in .tmp.
-        const args = [magickInput(src), '-quality', String(WEBP_QUALITY)];
-        // The trailing > is belt-and-braces: the caller already filtered.
-        if (resizeTo) args.push('-resize', `${resizeTo}x>`);
-        execFileSync('magick', [...args, `webp:${dst}`], { stdio: 'ignore' });
-      },
-    };
+    return make('magick', (src, dst, resizeTo) => {
+      // The decoder is named, not guessed. ImageMagick picks one from the
+      // file's content, and a "photo.png" that is really an MVG or an SVG
+      // script can tell it to read any file on the machine into the picture
+      // (`text:/path/to/key`). With `png:` in front it is a PNG or it is an
+      // error. The output is named too: the caller's dst ends in .tmp.
+      const args = [magickInput(src), '-quality', String(WEBP_QUALITY)];
+      // The trailing > is belt-and-braces: the caller already filtered.
+      if (resizeTo) args.push('-resize', `${resizeTo}x>`);
+      return [...args, `webp:${dst}`];
+    });
   }
   return null;
 }
@@ -33359,6 +33525,7 @@ async function runWatch(absIn, only, baseOpts = {}, { serve = false } = {}) {
     });
   });
 
+  await prewarmWebp(absIn, opts);
   rebuild('initial');
   console.log(`Watching ${path.relative(process.cwd(), absIn)} – `
     + (serve ? 'every save rebuilds and reloads the open views' : 'live-reload active (open the HTML files in Chrome)'));
@@ -36072,6 +36239,7 @@ async function main() {
   // have got without the export flag, plus the PDF.
   emitEvent({ type: 'build-start', reason: 'manual' });
   oneShotStart = Date.now();
+  await prewarmWebp(absIn, opts);
   const { written, shape, stats, sourceModifiedMs } = buildOnce(absIn, pdf ? undefined : only, opts);
   reportWebpInline();
   console.log(`Wrote ${written.join(', ')} (${shape})`);

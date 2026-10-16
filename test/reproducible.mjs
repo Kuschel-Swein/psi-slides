@@ -126,5 +126,90 @@ const note = (line) => console.log('    ' + line);
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// The WebP cache on disk (see prewarmWebp in build.js): a PNG or JPEG
+// inlined into a view is encoded once per machine rather than once per run,
+// and the pre-pass encodes several at once. Neither may change a byte, so the
+// same deck is built with the cache off, cold and warm, from a damaged entry
+// and against a cache folder that is a link - and the four views compared
+// each time. Skipped, and said so, on a machine with no encoder: then there is
+// nothing to cache and the original bytes go in either way.
+{
+  const enc = ['cwebp', 'magick'].find(b => spawnSync(b, ['-version'], { stdio: 'ignore' }).status === 0);
+  if (!enc) {
+    note('no cwebp or magick on PATH - the WebP cache has nothing to cache here, skipped');
+  } else {
+    const dir = tmpDir('psi-repro-webp-');
+    fs.mkdirSync(path.join(dir, 'assets'));
+    // A photograph WebP shrinks, a screenshot, and a 282-byte swatch that
+    // comes out larger as WebP - the third outcome, cached all the same.
+    fs.copyFileSync(path.join(ROOT, 'lectures/frame-lab/assets/photo.jpg'), path.join(dir, 'assets/photo.jpg'));
+    fs.copyFileSync(path.join(ROOT, 'lectures/python-intro/assets/rendered-demo.png'), path.join(dir, 'assets/demo.png'));
+    fs.copyFileSync(path.join(ROOT, 'lectures/diagrams/assets/swatch.png'), path.join(dir, 'assets/swatch.png'));
+    fs.writeFileSync(path.join(dir, 'source.md'), `---\ntitle: T\n---\n\n## title: {#title}\n\n`
+      + `## figure: One {#one}\n\n![](photo)\n\n## figure: Two {#two}\n\n![](demo)\n\n## figure: Three {#three}\n\n![](swatch)\n`);
+    const cacheRoot = tmpDir('psi-repro-cache-');
+    const VIEWS = ['audience', 'speaker', 'print', 'print-notes'];
+    const build = (cache) => {
+      for (const v of VIEWS) fs.rmSync(path.join(dir, v + '.html'), { force: true });
+      const r = spawnSync(process.execPath, [path.join(ROOT, 'build.js'), path.join(dir, 'source.md')],
+        { cwd: ROOT, encoding: 'utf8', env: { ...process.env, PSI_CACHE_DIR: cache } });
+      if (r.status !== 0) throw new Error('build failed: ' + (r.stdout || '') + (r.stderr || ''));
+      return { views: VIEWS.map(v => fs.readFileSync(path.join(dir, v + '.html'), 'utf8')), log: r.stdout };
+    };
+    const entries = (d) => { try { return fs.readdirSync(d).filter(f => f.endsWith('.webp')); } catch { return []; } };
+    const same = (a, b) => a.views.every((v, i) => v === b.views[i]);
+
+    const off = build('off');
+    ok(/image\/webp;base64/.test(off.views[0]), `the fixture inlines a picture as WebP (${enc})`);
+    const store = path.join(cacheRoot, 'webp');
+    const cold = build(cacheRoot);
+    ok(same(off, cold), 'a build that fills the cache writes the same four views as one with the cache off');
+    ok(entries(store).length === 3, 'and leaves one entry per picture, the one WebP makes larger included',
+       entries(store).join(', '));
+    const mode = fs.statSync(store).mode & 0o777;
+    ok(process.platform === 'win32' || mode === 0o700, 'the cache folder is the user\'s alone', mode.toString(8));
+    const warm = build(cacheRoot);
+    ok(same(off, warm), 'a build from the cache writes the same four views');
+    ok(warm.log.includes('[images]') && warm.log.replace(/\d+(\.\d+)? ?s\b/g, '') === cold.log.replace(/\d+(\.\d+)? ?s\b/g, ''),
+       'and says the same about its pictures');
+
+    // Equal views would also come from a cache nobody reads. Two whole
+    // entries swapped must show up in the output - then put back.
+    {
+      const [a, b] = entries(store).map(f => path.join(store, f))
+        .sort((x, y) => fs.statSync(y).size - fs.statSync(x).size);
+      const ba = fs.readFileSync(a), bb = fs.readFileSync(b);
+      fs.writeFileSync(a, bb); fs.writeFileSync(b, ba);
+      ok(!same(off, build(cacheRoot)), 'the warm build did read the cache: two entries swapped change the views');
+      fs.writeFileSync(a, ba); fs.writeFileSync(b, bb);
+    }
+
+    // A damaged entry is an encode, never a build that fails or a picture
+    // that is half there: cut every entry in half and build again.
+    for (const f of entries(store)) {
+      const p = path.join(store, f);
+      fs.writeFileSync(p, fs.readFileSync(p).subarray(0, 40));
+    }
+    ok(same(off, build(cacheRoot)), 'a cache whose entries are cut short is read past, and the views are the same');
+    const whole = entries(store).every(f => fs.statSync(path.join(store, f)).size > 40);
+    ok(whole, 'and the entries are whole again afterwards');
+
+    // A cache folder that is a link is not written through.
+    const elsewhere = tmpDir('psi-repro-elsewhere-');
+    const linked = tmpDir('psi-repro-linked-');
+    let linkMade = true;
+    try { fs.symlinkSync(elsewhere, path.join(linked, 'webp'), 'dir'); } catch { linkMade = false; }
+    if (linkMade) {
+      const viaLink = build(linked);
+      ok(same(off, viaLink), 'with the cache folder a link, the views are the same');
+      ok(fs.readdirSync(elsewhere).length === 0, 'and nothing is written where the link points',
+         fs.readdirSync(elsewhere).join(', '));
+      ok(/the WebP cache is not written this run/.test(viaLink.log), 'and the build says the cache was not written');
+    } else {
+      note('could not make a symbolic link here - the linked-cache case is skipped');
+    }
+  }
+}
+
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) process.exit(1);

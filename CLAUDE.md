@@ -80,11 +80,18 @@ node build.js <source.md> --inline-images       # force inline regardless of tot
 node build.js <source.md> --no-inline-images    # force external asset paths
 
 # a PNG or JPEG that IS inlined is transcoded to WebP q92 on the way in, and
-# this is on by default. It touches nothing on disk: the asset stays a PNG and
+# this is on by default. It touches none of the author's files: the asset stays a PNG and
 # source.md is not rewritten, which is the whole difference from
 # --optimize-images below. No cwebp/magick on PATH is not an error - the
 # original bytes go in and the build says so once. Nor is a PNG that comes out
 # larger as WebP, which small flat images do: the original is kept.
+# The encodes run several at once before the render (prewarmWebp) and are
+# cached on disk by a hash of the picture, the encoder, its version and its
+# arguments - ~/Library/Caches/psi-slides/webp, $XDG_CACHE_HOME or ~/.cache,
+# never the lecture's folder - so a second cold build of a photo-heavy deck
+# costs what a deck without pictures does. The bytes are the same either way
+# (test/reproducible.mjs). PSI_CACHE_DIR=<dir> moves it, PSI_CACHE_DIR=off
+# turns it off.
 node build.js <source.md> --no-optimize-images  # inline the original bytes
 
 # shrink assets that blow the per-image cap: converts referenced PNG/JPEG to
@@ -336,7 +343,9 @@ node lint.js lectures/ --strict                # warnings → exit 2
 # neither: it builds a lecture under a partial flag and under a full one and
 # asserts the shared view is the same bytes, because release.yml's
 # tracked-output check is only meaningful if a rebuild is a function of the
-# source alone. And test/containers.mjs, which needs no browser either: every
+# source alone - and builds a deck with a JPEG and two PNGs with the WebP
+# cache off, cold, warm, damaged and behind a link, the same bytes each time.
+# And test/containers.mjs, which needs no browser either: every
 # container a body has (cards, rows, side, flip, overlay, dock, expand, pulse,
 # footnote, cols, slide, script, a divider) crossed with every line the parser reads
 # (`> note:`, `> annot:`, `---`, `#`, `##`, a multi-line comment, an unknown

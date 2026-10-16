@@ -388,7 +388,7 @@ export async function run({ report }) {
   let threw = false;
   try { mg.magickInput('/a/b.svg'); } catch { threw = true; }
   ok(threw, 'and a file with no named decoder is refused rather than sniffed');
-  ok(/execFileSync\('magick', \[\.\.\.args, `webp:\$\{dst\}`\]/.test(buildSrc),
+  ok(/make\('magick', \(src, dst, resizeTo\) => \{[\s\S]{0,900}?return \[\.\.\.args, `webp:\$\{dst\}`\];/.test(buildSrc),
      'the output is named webp: too – the temporary name ends in .tmp, which magick cannot read a format from');
 
   // ── 5. a name made from the live page ─────────────────────────────
