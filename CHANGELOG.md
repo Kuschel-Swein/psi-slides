@@ -153,6 +153,16 @@ from building the same way is a major version.
 
 ### Changed
 
+- **A stepped figure's beats and a figure's pictures travel lighter.** Each
+  beat of a stepped figure was written out whole, repeating every position
+  and visibility of the figure; now every beat after the first carries only
+  what changed, and the page makes them whole again on load – the same
+  frames, key for key. And the editor's copy of a figure's raster pictures no
+  longer repeats the picture: it reads it back off the drawing. On a 77-slide
+  course deck with 37 figures that is 400 KB off each live view (frames 270 →
+  83 KB, the editor's picture table 266 → 54 KB); 210 KB on
+  `lectures/network-security`.
+
 - **A deck full of photographs builds as fast as one without, from the
   second build on.** A PNG or JPEG inlined into a view is encoded to WebP once
   per machine rather than once per run: the encodes are kept in the user cache

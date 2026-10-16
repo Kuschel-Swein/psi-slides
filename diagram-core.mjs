@@ -3248,6 +3248,67 @@ export function dgLabelVariants(model) {
   return index;
 }
 
+// The slot imageTable() leaves where a raster's data: URI was; the editor
+// fills it from the drawn <image> (dgeCollectFigures). NUL-delimited like the
+// other three, because nothing in an SVG contains one.
+export const DG_HREF_SLOT = '\u0000HREF\u0000';
+
+// ── step frames on the wire ──────────────────────────────────────────
+// A stepped figure's payload holds one frame per beat, and a beat usually
+// moves two or three things: written out whole, every frame repeated every
+// visibility, class, label and vector of the figure - 263 KB of a course
+// deck's live view, 315 KB of network-security's. So the first frame is
+// whole and every later one is what changed since the one before
+// (`d: 1`, the four maps holding only changed or new keys, `x` the keys
+// that went), and dgFullFrames turns them back into whole frames on load.
+//
+// The decoded frames are the frames: same keys, same values, same key order,
+// because dgDiffFrames decodes each diff it writes and keeps the whole frame
+// wherever the two would differ (a key that comes back in another position).
+// So nothing that reads a frame - the step runtime, the preview thumbnails,
+// the editor's step pane - can tell, and the runtime is unchanged.
+const DG_FRAME_MAPS = ['vis', 'cls', 'lab', 'geom'];
+export function dgDiffFrames(frames) {
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const out = frames.length ? [frames[0]] : [];
+  for (let k = 1; k < frames.length; k++) {
+    const prev = frames[k - 1], cur = frames[k];
+    const diff = { d: 1 };
+    for (const m of DG_FRAME_MAPS) {
+      const a = prev[m] || {}, b = cur[m] || {};
+      const changed = {}, gone = [];
+      for (const key in b) if (!(key in a) || !same(a[key], b[key])) changed[key] = b[key];
+      for (const key in a) if (!(key in b)) gone.push(key);
+      if (Object.keys(changed).length) diff[m] = changed;
+      if (gone.length) (diff.x || (diff.x = {}))[m] = gone;
+    }
+    const back = dgFullFrames({ frames: [prev, diff] }).frames[1];
+    out.push(same(back, cur) && JSON.stringify(diff).length < JSON.stringify(cur).length ? diff : cur);
+  }
+  return out;
+}
+// Whole frames again, in place, and idempotent: a frame that is already whole
+// is left alone, so every reader may call it. Self-contained, because the
+// live runtime carries it as text (DIAGRAM_JS) in views with no compiler.
+export function dgFullFrames(data) {
+  const fr = data && data.frames;
+  if (!fr) return data;
+  for (let k = 1; k < fr.length; k++) {
+    const diff = fr[k];
+    if (!diff || diff.d !== 1) continue;
+    const prev = fr[k - 1], whole = {};
+    for (const m of ['vis', 'cls', 'lab', 'geom']) {
+      const o = Object.assign({}, prev[m]);
+      const gone = diff.x && diff.x[m];
+      if (gone) for (const key of gone) delete o[key];
+      if (diff[m]) Object.assign(o, diff[m]);
+      whole[m] = o;
+    }
+    fr[k] = whole;
+  }
+  return data;
+}
+
 export function dgPathD(nums) {
   let d = '';
   for (let i = 0; i < nums.length; i += 2) {
@@ -9175,9 +9236,23 @@ export function createDiagramCompiler(env = {}) {
       // so the payload has to carry the drawing itself rather than a pointer
       // at one. Without this the first commit from the editor emptied every
       // vector image in the figure and reported nothing.
-      const named = assetMarkup({ ...n, alt: '\u0000ALT\u0000' }, '\u0000ID\u0000', '\u0000GEO\u0000', { standalone: true });
-      const bare = assetMarkup({ ...n, alt: '' }, '\u0000ID\u0000', '\u0000GEO\u0000', { standalone: true });
+      let named = assetMarkup({ ...n, alt: '\u0000ALT\u0000' }, '\u0000ID\u0000', '\u0000GEO\u0000', { standalone: true });
+      let bare = assetMarkup({ ...n, alt: '' }, '\u0000ID\u0000', '\u0000GEO\u0000', { standalone: true });
       if (!named) continue;
+      // A raster's markup is one <image> whose href is the picture itself, as
+      // a data: URI - the same bytes the drawing beside this table already
+      // carries in that very element. So the href is left out and the editor
+      // reads it back off the drawn element (`from`, the node whose
+      // `<prefix><from>--i` holds it): on a course deck with seven pictures
+      // in its figures that was 207 KB per live view, twice. Only an href
+      // that needs no escaping is lifted, so putting it back is a splice.
+      const lift = /^<image\b[^>]* href="(data:[^"&<>']{256,})"/.exec(named);
+      let from = null;
+      if (lift && bare.includes(lift[1])) {
+        named = named.replace(lift[1], () => DG_HREF_SLOT);
+        bare = bare.replace(lift[1], () => DG_HREF_SLOT);
+        from = n.id;
+      }
       // One copy, not two. The markup is the whole asset – a data: URI or a
       // spliced vector file – so shipping both shapes doubled the heaviest
       // thing in the payload for the sake of one construct that is present
@@ -9193,6 +9268,7 @@ export function createDiagramCompiler(env = {}) {
         markup: named,
         drop: [a, named.length - z - a],
         aspect: n.aspect ?? null,
+        ...(from ? { from } : {}),
       };
     }
     return out;
@@ -9635,12 +9711,12 @@ export function createDiagramCompiler(env = {}) {
       n: frameCount,
       kinds,
       names: model.steps.map(s => s.name),
-      frames: frames.map(f => ({
+      frames: dgDiffFrames(frames.map(f => ({
         vis: Object.fromEntries(f.vis),
         cls: Object.fromEntries(f.cls),
         lab: Object.fromEntries(f.lab),
         geom: Object.fromEntries([...f.geom].map(([k, v]) => [k, v.map(n => Math.round(n * 100) / 100)])),
-      })),
+      }))),
     };
 
     const svgId = `${prefix}root`;

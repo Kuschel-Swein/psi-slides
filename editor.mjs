@@ -33,6 +33,40 @@ const DGE_WARNINGS = [];
 const DGE_ID_SLOT = '\u0000ID\u0000';
 const DGE_GEO_SLOT = '\u0000GEO\u0000';
 const DGE_ALT_SLOT = '\u0000ALT\u0000';
+// Where a raster's data: URI was. The build leaves it out of the table,
+// because the drawn <image> already carries it, and names the node whose
+// element does (`from`); dgeImageHrefs puts it back. Same text as
+// DG_HREF_SLOT in diagram-core.mjs.
+const DGE_HREF_SLOT = '\u0000HREF\u0000';
+// figure id + '|' + asset ref -> href, read off the build's own drawing the
+// first time a figure is collected. Kept for the page's life: by the next
+// collection the element may be gone - deleted in the editor, or the figure
+// replaced by a kept edit - and an undo must still be able to draw it.
+const DGE_HREFS = new Map();
+function dgeImageHrefs(figId, prefix, images) {
+  for (const ref of Object.keys(images)) {
+    const e = images[ref];
+    if (!e || !e.from || typeof e.markup !== 'string' || !e.markup.includes(DGE_HREF_SLOT)) continue;
+    const key = figId + '|' + ref;
+    if (!DGE_HREFS.has(key)) {
+      const el = document.getElementById(prefix + e.from + '--i');
+      const href = el ? el.getAttribute('href') : null;
+      if (href && /^data:/.test(href)) DGE_HREFS.set(key, href);
+    }
+    const href = DGE_HREFS.get(key);
+    // Not found is an asset this page cannot draw: the compiler then draws
+    // the missing-picture box, as for a file that is not there.
+    if (!href) { delete images[ref]; continue; }
+    // The range to cut for an element with no accessible name was measured
+    // on the markup with the slot in it; past the slot it moves with it.
+    const at = e.markup.indexOf(DGE_HREF_SLOT);
+    if (e.drop && e.drop[0] >= at + DGE_HREF_SLOT.length) {
+      e.drop = [e.drop[0] + href.length - DGE_HREF_SLOT.length, e.drop[1]];
+    }
+    e.markup = e.markup.slice(0, at) + href + e.markup.slice(at + DGE_HREF_SLOT.length);
+  }
+  return images;
+}
 
 function dgeEscapeHtml(s = '') {
   return String(s)
@@ -124,6 +158,7 @@ function dgeCollectFigures() {
       'script.psi-diagram-assets[data-for="' + sc.dataset.for + '"]');
     let images = {};
     if (assetsEl) { try { images = JSON.parse(assetsEl.textContent); } catch (e) {} }
+    dgeImageHrefs(sc.dataset.for, sc.dataset.for.replace(/root$/, ''), images);
     const chunkEl = svg.closest('[id]');
     DGE_FIGURES.push({
       svg,
@@ -1004,7 +1039,7 @@ function dgePaintArt(html) {
   const payload = fig ? fig.querySelector('script.psi-diagram-frames') : null;
   if (payload) {
     try {
-      const data = JSON.parse(payload.textContent);
+      const data = window.dgFullFrames(JSON.parse(payload.textContent));
       // Kept, not discarded. dgStateAt answers what the ops say; only these
       // frames carry the *resolved* visibility, after an edge has followed its
       // ends and a container its members. The step pane needs both, and the

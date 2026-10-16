@@ -30,7 +30,7 @@ import katex from 'katex';
 // and in the browser when the editor re-lays-out a figure after a drag.
 // Imported for the build; its *text* is also read and inlined into the live
 // views, the same way bundledFaces() reads woff2 out of node_modules.
-import { createDiagramCompiler, parseDiagramDefaults, dgShapeD, dgSplineD, dgPathD, DG_SHAPE_CLASSES, dgBarFillCss, DG_SOFT_GROUND, DG_FONT, DG_UNIT } from './diagram-core.mjs';
+import { createDiagramCompiler, parseDiagramDefaults, dgShapeD, dgSplineD, dgPathD, dgFullFrames, DG_SHAPE_CLASSES, dgBarFillCss, DG_SOFT_GROUND, DG_FONT, DG_UNIT } from './diagram-core.mjs';
 // The PDF export's option checks, so --slides-pdf refuses a bad value before a
 // browser starts and in the words the desktop app uses too. Zero imports; the
 // export itself (pdf-export.mjs, which needs playwright-core) stays a dynamic
@@ -4667,6 +4667,10 @@ const DG_SHAPES = ${JSON.stringify(Object.fromEntries([...DG_SHAPE_CLASSES].map(
 ${dgShapeD.toString()}
 ${dgPathD.toString()}
 ${dgSplineD.toString()}
+// Every frame after the first arrives as what changed since the one before;
+// this makes them whole again, in place, once (see diagram-core.mjs). Called
+// by every reader here, and by the editor and the figures page through them.
+${dgFullFrames.toString()}
 
 // A live view shows the box that holds every beat, and - on an ordinary
 // figure chunk - the canvas the slide reserves for a drawing, which is wider
@@ -4768,6 +4772,7 @@ function dgApplyGeom(d, from, to, f) {
 // than through getElementById, because a clone carries duplicate ids and
 // the document would hand back the original every time.
 function dgRenderInto(root, d, step) {
+  dgFullFrames(d.data);
   const frame = d.data.frames[Math.max(0, Math.min(d.data.n - 1, step))];
   if (!frame) return;
   for (const id in frame.vis) {
@@ -4792,6 +4797,7 @@ function dgRenderInto(root, d, step) {
 }
 
 function dgStep(d, step, instant) {
+  dgFullFrames(d.data);
   step = Math.max(0, Math.min(d.data.n - 1, step | 0));
   const frame = d.data.frames[step];
   const same = d.step === step && d.cur;

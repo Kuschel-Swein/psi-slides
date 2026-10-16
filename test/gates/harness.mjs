@@ -28,7 +28,7 @@ import { tmpDir } from '../tmp.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { createDiagramCompiler, createSpanTable } from '../../diagram-core.mjs';
+import { createDiagramCompiler, createSpanTable, dgFullFrames } from '../../diagram-core.mjs';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -88,7 +88,9 @@ export function spans(body) {
 /** The per-beat payload a stepped figure carries, as parsed JSON, or null. */
 export function frames(out) {
   const m = out.match(/<script[^>]*class="psi-diagram-frames"[^>]*>([\s\S]*?)<\/script>/);
-  if (m) { try { return JSON.parse(m[1]); } catch (e) { return null; } }
+  // Whole frames, as every reader in a page sees them: on the wire each one
+  // after the first is a diff against the one before (dgDiffFrames).
+  if (m) { try { return dgFullFrames(JSON.parse(m[1])); } catch (e) { return null; } }
   return null;
 }
 
