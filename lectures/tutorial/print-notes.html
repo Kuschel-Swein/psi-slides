@@ -5,15 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>psi-slides – a guided tour – print + notes</title>
 <style>
-
-/* A reveal marker below the top level (BEAT_MARK): print shows every beat at once. */
 .beat-mark { display: none !important; }
 :root {
   --heading-scale: 1;
   --body-scale: 1;
-  /* The live views' ladder, same two values and the same reasoning (see
-     --radius-card there): a corner is a proportion of the type it holds,
-     and --body-scale moves that type here too. */
   --radius-card:  0.3em;
   --radius-tight: 0.1em;
   --ink: #1f1f24;
@@ -21,29 +16,11 @@
   --paper: #fafaf7;
   --rule: #c8c8c0;
   --emph: #8b2e00;
-  /* The hue style: {neutrals} moves the greys onto. Print has no themes -
-     one palette, no A key - so there is one hue here and not five, and it
-     is the print accent's own: #8b2e00 is about hue 40 in oklch. */
   --accent-h: 40;
-  /* Same three families as the live views, and the same order, so all four
-     outputs are one typographic set. The first entry of each is bundled and
-     embedded, so these resolve even where the machine has nothing installed
-     and even in Safari, which does not expose installed fonts to a page. */
   --serif: 'Literata', 'Source Serif 4', Georgia, serif;
   --sans: 'IBM Plex Sans', 'Inter', system-ui, sans-serif;
   --mono: 'JetBrains Mono', Menlo, monospace;
 }
-/* ── neutrals on paper (style: {neutrals}) ─────────────────────────
-   styleBodyAttrs writes data-neutrals onto this body too, so the rules have
-   to exist here or the attribute is a silent no-op on print.html - the
-   thing this format refuses everywhere else. Print's palette is already
-   warm (#fafaf7 paper, #c8c8c0 rule) where the live one is cool at chroma
-   0, so cool moves more on paper than warm does; that is a property of
-   the two palettes and not of the key. Written in oklch though the palette
-   above is hex, because a hue is what this key changes and hex cannot say
-   it. No terminal guard: print has no terminal themes to guard. And the
-   quiet fills are not re-mixed the way the live views' are, because a
-   printed card is a 1px rule and no fill - there is nothing there to tint. */
 body[data-print-neutrals=warm] { --accent-h: 70; }
 body[data-print-neutrals=cool] { --accent-h: 250; }
 body:is([data-print-neutrals=tinted], [data-print-neutrals=warm], [data-print-neutrals=cool]) {
@@ -52,7 +29,6 @@ body:is([data-print-neutrals=tinted], [data-print-neutrals=warm], [data-print-ne
   --paper:    oklch(0.985 0.007 var(--accent-h));
   --rule:     oklch(0.81 0.013 var(--accent-h));
 }
-
 @page {
   size: A4;
   margin: 2.2cm 2.5cm 2.8cm;
@@ -63,80 +39,33 @@ body:is([data-print-neutrals=tinted], [data-print-neutrals=warm], [data-print-ne
     color: #888;
   }
 }
-
 * { box-sizing: border-box; }
 html { font-family: var(--serif); font-size: 10pt; color: var(--ink); line-height: 1.6; background: var(--paper); text-rendering: optimizeLegibility; }
 body { margin: 0; }
-/* style: {print-body: sans}. One declaration on <body> is the whole switch:
-   it beats what body inherits from html, and everything below that should
-   stay a sans or a mono names its own family already, so only what actually
-   inherited the serif moves - the running text, the chunk and column
-   headings, a blockquote. The page number in @page is outside the document
-   tree and was never the serif. */
 body[data-print-body=sans] { font-family: var(--sans); }
-
 main { max-width: 42rem; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
-
 h1, h2, h3 { font-weight: 500; letter-spacing: -0.01em; break-after: avoid; page-break-after: avoid; }
-/* A heading is a phrase, so a greedy line breaker leaving one word alone on
-   the second line is always wrong; balance evens the lines instead. Prose is
-   not balanced - a paragraph wants its measure kept and only its last line
-   protected, which is what pretty does. Both degrade to nothing where the
-   browser does not know the value, so neither needs a fallback. */
-/* Balanced headings and protected last lines. Landed after 1.0.0, and it
-   moves where lines break in a finished deck - so layout: 1.0 turns it
-   off rather than leaving an old lecture to re-wrap under its author. */
 body:not([data-wrap=none]) :is(h1, h2, h3, h4, .chunk-heading, .hd-sub, .section-heading, figcaption) { text-wrap: balance; }
 body:not([data-wrap=none]) :is(p, li, dd) { text-wrap: pretty; }
-/* The same question answered on one chunk, from a .wrap-none / .wrap-balance
-   in its attribute tail. Both directions, because under a deck-wide
-   wrap: none the only way left to ask for balancing is to ask for it here.
-   text-wrap: wrap is the initial value of the shorthand, so the off switch hands the
-   line back to the browser's plain greedy breaker rather than naming a third
-   behaviour. Written as one rule per direction with the whole family inside
-   an :is(), which is also what keeps the off switch specific enough to beat
-   the two rules above it. */
 .chunk[data-wrap=none] :is(h1, h2, h3, h4, .chunk-heading, .hd-sub, .section-heading, figcaption, p, li, dd) { text-wrap: wrap; }
 .chunk[data-wrap=balance] :is(h1, h2, h3, h4, .chunk-heading, .hd-sub, .section-heading, figcaption) { text-wrap: balance; }
 .chunk[data-wrap=balance] :is(p, li, dd) { text-wrap: pretty; }
 p { margin: 0.4em 0 0.9em; orphans: 3; widows: 3; }
-
-/* Hyphenation. On here by default and off in the live views by default:
-   a hyphenated word on a projection reads badly, and the live views reflow
-   constantly anyway. style.hyphenate is the author's say over both halves –
-   none takes it out of the document too, all puts it into the projection,
-   and the wrapper below is what makes the first of those reachable.
-   The browser picks its dictionary from the lang attribute on html, which
-   comes from the frontmatter lang key – so this does nothing useful for a
-   German lecture until the author sets lang: de, and German is exactly the
-   case where a 42rem measure needs it most.
-   Limited to prose: hyphenating an identifier in code, a heading, or a URL
-   would be actively wrong, and the hyphens property is inherited.
-   (No backticks in this comment: one would end the template literal.) */
 body:not([data-hyphenate=none]) :is(p, li, blockquote, figcaption, .speaker-note) {
   hyphens: auto;
   -webkit-hyphens: auto;
-  /* Keep a two-letter stub off the next line where the browser supports it. */
   hyphenate-limit-chars: 6 3 3;
 }
 h1, h2, h3, h4, code, pre, pre *, .chunk-num, a[href^="http"] {
   hyphens: manual;
   -webkit-hyphens: manual;
 }
-/* A statement chunk's paragraphs join that list, because they are heading
-   lines that happen to be marked up as paragraphs: same face, same size,
-   same weight, and a break across two lines reads as a fault in exactly the
-   way it does in a heading. The selector has to name the paragraph, since
-   the rule above reaches elements and this one is a p. */
 .chunk-statement > p {
   hyphens: manual;
   -webkit-hyphens: manual;
 }
 strong { color: var(--emph); font-weight: 600; }
 em { font-style: italic; }
-/* style.print-bold - the look of a bold the derivation reads, default bold
-   in the ink. See BOLD_LOOKS and DERIVED_STRONG. A bold outside that scope -
-   a row's term, a tight list's item, a card's lead - keeps the rule above. */
 body[data-print-bold=plain] .chunk:not(.chunk-title, .chunk-section) p:not(:is(.slide-explicit, .script-only, .cards, .overlay-card, aside:not(.marginalia)) p) strong:not(.card-lead) { font-weight: inherit; color: inherit; font-style: inherit; }
 .chunk:not(.chunk-title, .chunk-section) p:not(:is(.slide-explicit, .script-only, .cards, .overlay-card, aside:not(.marginalia)) p) strong:not(.card-lead) { font-weight: 600; color: inherit; font-style: inherit; }
 body[data-print-bold=italic] .chunk:not(.chunk-title, .chunk-section) p:not(:is(.slide-explicit, .script-only, .cards, .overlay-card, aside:not(.marginalia)) p) strong:not(.card-lead) { font-weight: inherit; color: inherit; font-style: italic; }
@@ -144,30 +73,16 @@ body[data-print-bold=accent] .chunk:not(.chunk-title, .chunk-section) p:not(:is(
 body[data-print-bold=accent-bold] .chunk:not(.chunk-title, .chunk-section) p:not(:is(.slide-explicit, .script-only, .cards, .overlay-card, aside:not(.marginalia)) p) strong:not(.card-lead) { font-weight: 600; color: var(--emph); font-style: inherit; }
 body[data-print-bold=accent-italic] .chunk:not(.chunk-title, .chunk-section) p:not(:is(.slide-explicit, .script-only, .cards, .overlay-card, aside:not(.marginalia)) p) strong:not(.card-lead) { font-weight: inherit; color: var(--emph); font-style: italic; }
 body:not([data-print-bold=accent-bold]) .chunk:not(.chunk-title, .chunk-section) p:not(:is(.slide-explicit, .script-only, .cards, .overlay-card, aside:not(.marginalia)) p) strong:not(.card-lead) em { font-style: normal; font-weight: 600; color: var(--emph); }
-
 ul, ol { margin: 0.4em 0 0.9em 1.4em; }
 li { margin: 0.2em 0; orphans: 2; widows: 2; }
 li > p:first-child { margin-top: 0; }
 li > p:last-child { margin-bottom: 0.3em; }
-
 code { font-family: var(--mono); font-size: 0.92em; }
-/* Set by the codespan renderer on a span with no space in it – see the note
-   there. Keeps a three-hyphen separator, or an arrow token, from being split
-   across a line break. No backtick in this comment: PRINT_CSS is a template
-   literal and one would end it. */
 code.nb { white-space: nowrap; }
-/* style: {code} on paper. Same three looks and the same reasoning as in
-   AUDIENCE_CSS – read the note there – with two differences that belong to
-   the medium. The selector is the bare element minus a listing and a
-   heading, because print wraps prose in no .chunk-body. And the tint is
-   mixed out of print's own --ink, which style: {print-neutrals} moves, so a
-   deck that warms the page warms the ground behind its code with it. */
 code:not(pre code):not(.chunk-heading code):not(.nb) {
   margin: 0 0.25em;
   word-spacing: -0.28em;
 }
-/* A span that opens its block keeps the right-hand margin only: on the left
-   it would indent the line. Marked by the build, see CODE_LEAD_RE. */
 code:not(pre code):not(.chunk-heading code):not(.nb).lead { margin-left: 0; }
 body[data-code=tint] code:not(pre code):not(.chunk-heading code) {
   margin: 0;
@@ -186,26 +101,11 @@ pre {
   line-height: 1.45;
 }
 pre code { font-size: inherit; }
-/* A monospaced face with programming ligatures – JetBrains Mono, the
-   bundled one, is such a face – draws the two characters -> as a single
-   arrow glyph, and <-, <->, --, != and :: the same way. A listing is source
-   a reader retypes, so the characters have to be the characters. The value
-   is none and not no-contextual: the arrows live in the contextual set
-   (calt) and the rest in liga, and only none covers both. No backtick in
-   this comment, escaped or otherwise – see the template-literal rule in
-   CLAUDE.md. */
-/* Ligature policy, from the ligatures: frontmatter key. "text" is the
-   default and is what this rule always did: none in code, ordinary fi and
-   fl in prose. "all" puts the code ligatures back - JetBrains Mono draws
-   "->" as one arrow glyph, which is pleasant in an editor and wrong on a
-   slide, where the listing is source a reader is meant to retype. "none"
-   takes them out of prose as well. */
 body:not([data-liga=all]) code,
 body:not([data-liga=all]) pre,
 body:not([data-liga=all]) kbd,
 body:not([data-liga=all]) samp { font-variant-ligatures: none; }
 body[data-liga=none] { font-variant-ligatures: none; }
-
 table {
   border-collapse: collapse;
   margin: 0.6em 0 1.1em;
@@ -221,10 +121,8 @@ th, td {
   vertical-align: top;
 }
 th { font-weight: 600; color: var(--emph); border-bottom-width: 1pt; }
-
 a { color: inherit; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 0.15em; }
 a:hover { text-decoration-color: var(--ink); }
-
 .toc {
   margin: 0 0 4rem;
   padding: 1.2rem 0 1.8rem;
@@ -243,15 +141,8 @@ a:hover { text-decoration-color: var(--ink); }
 .toc ol { list-style: decimal; padding-left: 2em; }
 .toc li { margin: 0.4em 0; font-size: 1rem; }
 .toc a { text-decoration: none; }
-
 .column { margin: 0 0 2rem; }
 .column-anon { margin-top: 0; }
-/* The agenda on paper. An outline: chunk is a slide the author wrote, so
-   it prints - unlike a section divider, which is an auto-inserted camera
-   stop and has never printed. Same markup, same grid, and the live item is
-   still marked, because "we are here" is as true in a hand-out as on a
-   projection; only the scale steps back, since a document is read at
-   arm's length rather than from the back of a room. */
 .section-outline {
   list-style: none;
   margin: 0.7rem 0 0;
@@ -276,9 +167,6 @@ a:hover { text-decoration-color: var(--ink); }
 .section-outline li[data-state=now] { font-size: 1.22em; }
 .section-outline li[data-state=now] .so-text { font-weight: 600; }
 .chunk-outline { break-inside: avoid; page-break-inside: avoid; }
-/* What the author wrote under a column heading. The divider slide itself is
-   an audience-only camera stop; these are the author's own words and they
-   belong in the document, set as a lede under the part title. */
 .column-lede {
   margin: 0 0 2.2rem;
   max-width: 34rem;
@@ -294,15 +182,8 @@ a:hover { text-decoration-color: var(--ink); }
 }
 .column-lede > :first-child { margin-top: 0; }
 .column-lede > :last-child { margin-bottom: 0; }
-
 .column-heading {
   font-size: 1.9rem;
-  /* The white above the heading is what ends one part and starts the
-     next, so no rule has to say it again. The one rule stands under the
-     heading as its foot - near enough to belong to it, and further from the
-     slide below than from the heading, since the heading belongs to what
-     follows. The body's line-height of 1.6 would add half a line of
-     invisible leading round a 1.9rem heading and undo that order by eye. */
   line-height: 1.15;
   margin: 5rem 0 1.5rem;
   padding-bottom: 0.45rem;
@@ -310,29 +191,14 @@ a:hover { text-decoration-color: var(--ink); }
   break-after: avoid;
   page-break-after: avoid;
 }
-/* A part heading draws the one rule a part change needs. It used to draw
-   two, and a principle or definition opening the part added its own a line
-   later - three rules of three weights in five lines. The first slide of a
-   part leaves its rule to the heading. */
 .column:not(.column-anon) > .chunk:first-of-type {
   border-top: 0;
   padding-top: 0;
   margin-top: 0;
   --num-top: 0rem;
 }
-
 .chunk {
   margin: 1.6rem 0 2.2rem;
-  /* A chunk flows across a page break like any other prose.
-     It used to say break-inside: avoid, which is right for a picture and
-     wrong for a run of text: a chunk that does not fit in what is left of a
-     page moves whole, and the white it leaves behind is however much was
-     left - a third of a sheet under a part heading, repeatedly, in a
-     document whose chunks are mostly paragraphs. The reader loses the thread
-     to a page turn that nothing on the page asked for.
-     What must stay together says so itself and is small enough to mean it:
-     figure, .chunk-outline, the card list, a heading and the line under it.
-     orphans and widows keep the break off the first and last lines. */
   break-inside: auto;
   page-break-inside: auto;
   orphans: 3;
@@ -355,26 +221,12 @@ main p, main li, main dd, main blockquote { orphans: 3; widows: 3; }
   color: var(--ink-soft);
   margin: 0 0 0.15rem;
 }
-/* Unobtrusive slide number in the outer margin, aligned with the chunk
-   heading. Sits to the left of the text column so it never disturbs
-   line wrap; vertical writing mode keeps the marker thin against tall
-   chunks and matches the audience badge orientation.
-   It is centred on the chunk's first line - the type label where there is
-   one, the heading otherwise - by eye rather than by box: --num-font is that
-   line's type size, the number is as tall as its line box, starts below
-   whatever padding the type puts over its content, and drops a further
-   0.16 of the size, because a line's optical middle is the middle of its
-   x-height and that sits below the middle of the box. Measured on the ink
-   at three sizes (label, heading, statement): 0.15-0.17 each time. At
-   top: 0 and its own 0.72rem it hung above the line it numbers. */
 .chunk {
   --num-top: 0rem;
   --num-font: calc(1.12rem * var(--heading-scale));
 }
 .chunk:has(> .chunk-label) { --num-font: 0.82rem; }
 .chunk-statement { --num-font: 1.5rem; }
-/* A figure's heading is a caption under the picture; its first line is the
-   picture's top edge, so the number takes a small line there. */
 .chunk-figure { --num-font: 0.82rem; }
 .chunk-num {
   position: absolute;
@@ -393,18 +245,8 @@ main p, main li, main dd, main blockquote { orphans: 3; widows: 3; }
 }
 .chunk-num i { font-style: normal; }
 .chunk-title .chunk-num { display: none; }
-/* Mirrors the live views: the frontmatter key travels into print too, so a
-   lecture that turns the markers off does not get them back in the handout. */
 body[data-slide-nums=horizontal] .chunk-num { flex-direction: row; gap: 0.08em; }
 body[data-slide-nums=off] .chunk-num { display: none; }
-/* Beside the type label the number shares its baseline instead of its
-   middle. Both are the sans, so the eye compares the two baselines, and
-   lining figures centred on small capitals stand out above and below them
-   and read as dropped. An absolute box has no baseline to share, so the
-   number carries a strut set exactly as the label is - its size, its
-   line-height, its family - at the label's top, and the digits sit on the
-   strut's baseline. The negative margin takes back the gap the strut adds
-   as one more flex item. */
 body[data-slide-nums=horizontal] .chunk:has(> .chunk-label) > .chunk-num {
   top: var(--num-top);
   height: auto;
@@ -416,7 +258,6 @@ body[data-slide-nums=horizontal] .chunk:has(> .chunk-label) > .chunk-num::before
   line-height: 1.6;
   margin-right: calc(-0.08 * 0.72rem);
 }
-
 .chunk-principle {
   border-top: 2.5pt solid var(--ink);
   padding-top: 1rem;
@@ -425,13 +266,11 @@ body[data-slide-nums=horizontal] .chunk:has(> .chunk-label) > .chunk-num::before
 }
 .chunk-principle .chunk-heading { font-size: 1.25rem; }
 .chunk-principle p { font-size: 1.05rem; }
-
 .chunk-definition {
   border-top: 0.5pt solid var(--rule);
   padding-top: 0.7rem;
   --num-top: 0.7rem;
 }
-
 .chunk-question {
   margin: 2.5rem 0;
   padding: 0.8rem 0;
@@ -441,27 +280,10 @@ body[data-slide-nums=horizontal] .chunk:has(> .chunk-label) > .chunk-num::before
   font-size: 1.5rem;
   font-style: italic;
 }
-
-/* A statement chunk on paper. The projection sets its heading and its
-   paragraphs at one size because they are one utterance; the document
-   keeps that and pays what a document can afford for it, which is the
-   question chunk's 1.5rem rather than the slide's 2.1em. Nearest of the
-   two neighbours the type was measured against: principle was the other
-   candidate and brings a 2.5pt rule with it, and this type has no rule -
-   a bar over three lines of speech makes them a specimen.
-   No eyebrow either: renderChunk leaves statement out of labelTag.
-   The face is the heading's, which here means the document's own, so
-   nothing is declared for it - print sets no separate heading family, and
-   writing one would give this type a face the deck never chose. */
 .chunk-statement {
   margin: 2.2rem 0;
 }
 .chunk-statement .chunk-heading { font-size: 1.5rem; margin-bottom: 0.35rem; }
-/* 500 and -0.01em are the h1, h2, h3 rule at the head of this stylesheet,
-   written out rather than inherited because a paragraph is not a heading
-   and no selector would hand it the heading's declarations. If that rule's
-   weight moves, this one moves with it, or the first line of a statement
-   stops matching the three under it. */
 .chunk-statement > p {
   font-size: 1.5rem;
   font-weight: 500;
@@ -469,18 +291,6 @@ body[data-slide-nums=horizontal] .chunk:has(> .chunk-label) > .chunk-num::before
   line-height: 1.2;
   margin: 0 0 0.35rem;
 }
-/* Nothing here about a bold inside one of these lines: style.print-bold
-   reaches it through DERIVED_STRONG at (0,4,3), and a rule written at this
-   selector's specificity would lose to it silently. */
-/* The quiet register, and the document carries it because it is what the
-   line *is* rather than how the projection shows it: a paragraph written
-   entirely in italic is the definition a claim answers or the source under
-   it, not a statement line with a stress mark on it. Half the size, the
-   document's own body weight, --ink-soft - the same three steps back the
-   projection takes, in the document's numbers. Hyphenation is deliberately
-   not touched: the rule above takes every statement paragraph out of the
-   dictionary, and a quiet line is one or two lines of type, so letting it
-   back in would only put a hyphen where nothing needed one. */
 .chunk-statement > p.quiet-line {
   font-size: 0.85rem;
   font-weight: 400;
@@ -488,19 +298,13 @@ body[data-slide-nums=horizontal] .chunk:has(> .chunk-label) > .chunk-num::before
   line-height: 1.4;
   color: var(--ink-soft);
 }
-
 .chunk-exercise .chunk-heading { font-style: italic; }
 .chunk-exercise .chunk-label { color: var(--emph); }
-
-/* Math (PRD §2). Print has no collapse, so both inline and display formulas
-   simply render. Display math stays centred and is allowed to scroll rather
-   than widen the text column, which would break the page for PDF export. */
 .katex { font-size: 1.05em; color: inherit; }
 .math-display { margin-block: 0.9em; overflow-x: auto; overflow-y: hidden; }
 .math-display .katex-display { margin: 0; }
 .math-display .katex { font-size: 1.15em; }
 .math-error { color: var(--emph); font-family: var(--mono, ui-monospace, monospace); }
-
 .chunk-figure .chunk-heading {
   font-family: var(--sans);
   font-size: 0.82rem;
@@ -511,8 +315,6 @@ body[data-slide-nums=horizontal] .chunk:has(> .chunk-label) > .chunk-num::before
   order: 2;
 }
 .chunk-figure pre { background: transparent; padding: 0; margin: 0 0 0.4rem; }
-
-/* Expansions (::: expand <label>) inlined into the print stream. */
 .chunk-expansion {
   margin: 1.1rem 0 0.6rem;
   padding: 0.1rem 0 0.1rem 1.1rem;
@@ -532,12 +334,6 @@ body[data-slide-nums=horizontal] .chunk:has(> .chunk-label) > .chunk-num::before
 .chunk-expansion > :first-child { margin-top: 0; }
 .chunk-expansion > :last-child { margin-bottom: 0; }
 .chunk-expansion strong { color: var(--ink); }
-
-/* Chunk-attached asides. Two flavors share layout and differ only in color:
-   .presentation-note (warm) – live annotation typed during the lecture
-     and committed back via "> annot:" integration.
-   .speaker-note (cool) – author-written "> note:" text, emitted only by
-     the print-with-notes target. */
 .presentation-note,
 .speaker-note {
   margin: 0.9rem 0 0.4rem;
@@ -575,22 +371,10 @@ body[data-slide-nums=horizontal] .chunk:has(> .chunk-label) > .chunk-num::before
   --note-bg:     oklch(0.97 0.018 240);
   --note-label:  oklch(0.46 0.09 240);
 }
-
-/* Title slide: lower-left-third per PRD §4.4 */
-/* The document opens with its title, not with a screen of paper. This block
-   used to be a full-height cover with the title pinned to the bottom edge –
-   right for a printed title page, wrong for the thing people actually look
-   at, which is print.html in a browser: you opened a document and saw
-   nothing. The cover treatment now lives in @media print, where it belongs,
-   and the screen gets an ordinary masthead. */
 .chunk-title {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  /* The size of the pair's loud line, so that headline: eyebrow can hand it
-     to whichever line is carrying the weight. In rem here and in em there,
-     because print is not zoomed - the mechanism is the same and only the
-     unit differs. */
   --title-lead: 2.6rem;
   padding: 0 0 1.8rem;
   margin: 0 0 2.6rem;
@@ -622,10 +406,6 @@ body[data-slide-nums=horizontal] .chunk:has(> .chunk-label) > .chunk-num::before
   margin: -0.9rem 0 1.2rem;
   color: var(--ink-soft);
 }
-/* The foot is a row on the projection because the slide is a frame with two
-   edges to hang things on. On paper the page has a measure and no such
-   edges, and an address pushed to the right margin of a document reads as a
-   mistake - so the two run together on one line instead, in source order. */
 .chunk-title .title-foot {
   display: flex;
   flex-wrap: wrap;
@@ -660,39 +440,13 @@ body[data-headline=eyebrow] .chunk-title .title-subtitle {
   max-width: 20em;
   margin: 0 0 0.8rem;
 }
-
-/* The style: frontmatter block, on paper. Same two selectors as the live
-   views; the two scales ride on custom properties emitted per build. */
 body[data-headings=left] .chunk-heading,
 body[data-headings=left] .title-main { text-align: left; }
 body[data-headings=center] .chunk-heading { text-align: center; }
-
 body[data-rules=off] .chunk-principle,
 body[data-rules=off] .chunk-definition { border-top: 0; }
-/* The document view labels every tagged chunk, which is where most of
-   these eyebrows actually live - the projection generates only EXERCISE. */
-/* The link mark is a control, and a control on paper is a smudge: there is
-   nothing to click and nothing to scan. Note what this does not do - the
-   document does not print the address either, so a link in a handout is a
-   phrase whose target the reader cannot reach. That is how it has always
-   been here; printing every href would change every existing handout, and it
-   is a separate decision from making the code findable on screen. */
 .link-code { display: none; }
-
 body[data-labels=off] .chunk-label { display: none; }
-
-/* style.blocks, on paper. Two of the three families it reaches exist here -
-   a figure with its caption and a display formula - and the third does not:
-   a code block in the document sits inside the 42rem measure with nothing to
-   break out of, so it is already flush with the prose and there is nothing
-   for left to move.
-
-   It reaches print at all because block alignment is typography rather than
-   stagecraft. The .bare and .center classes stop at the projection because where
-   words sit on a slide is not a question a printed page asks; where a
-   formula sits relative to the paragraph that introduced it is the same
-   question on both, and style.wrap - the other key the chunk classes
-   mirror - has been in this stylesheet since it landed. */
 body[data-blocks=left] figure.figure-img,
 body[data-blocks=left] figure.figure-video,
 body[data-blocks=left] figure.figure-embed,
@@ -703,19 +457,11 @@ body[data-blocks=left] .math-display .katex-display,
 body[data-blocks=left] .math-display .katex-display > .katex,
 .chunk[data-blocks=left] .math-display .katex-display,
 .chunk[data-blocks=left] .math-display .katex-display > .katex { text-align: left; }
-/* And back, for one chunk in a document that set blocks: left. */
 .chunk[data-blocks=center] figure.figure-img,
 .chunk[data-blocks=center] figure.figure-video,
 .chunk[data-blocks=center] figure.figure-embed { text-align: center; }
 .chunk[data-blocks=center] .math-display .katex-display,
 .chunk[data-blocks=center] .math-display .katex-display > .katex { text-align: center; }
-
-/* Cover, backdrop, overlay and card grid in the document view. Print is a
-   document, not a slide: composition over a picture is the one thing paper
-   cannot have, so the backdrop becomes a banner band at the head of the
-   chunk and an overlay an ordinary block under it. The treatments survive
-   (an ink card is still an inverted card on the page); only the placement
-   is dropped, because there is nothing to place it over. */
 .chunk-title .title-subtitle {
   font-size: 1.35rem;
   line-height: 1.3;
@@ -723,11 +469,6 @@ body[data-blocks=left] .math-display .katex-display > .katex,
   margin: -0.35rem 0 0.9rem;
   max-width: 28em;
 }
-/* On paper a cover is a masthead whatever variant the projection uses:
-   the compositions above are all answers to "how does this fill a 16:9
-   frame", and a page is neither 16:9 nor a thing anybody projects. Two of
-   them survive because they are treatments rather than placements - the
-   reversed field, and the title at display size. */
 .chunk-title[data-cover=panel] {
   background: color-mix(in oklab, var(--emph) 62%, var(--ink));
   border-bottom: 0;
@@ -749,11 +490,6 @@ body[data-blocks=left] .math-display .katex-display > .katex,
   line-height: 1.02;
   letter-spacing: -0.03em;
 }
-
-/* The closing slide is a page like the cover is a page, and it carries the
-   same rule under it that every other chunk does - it is the last thing in
-   the document rather than the first, so a page break *after* it would be
-   a blank sheet. */
 .chunk-title[data-closing] {
   page-break-after: auto;
   page-break-before: always;
@@ -765,11 +501,6 @@ body[data-blocks=left] .math-display .katex-display > .katex,
   max-width: 34em;
 }
 .chunk-title[data-closing] .closing-body > :first-child { margin-top: 0; }
-/* Both selectors above weigh the same, and this one is written last in
-   the file, so on paper the panel's reversed body lost to the soft ink and
-   the closing slide's text came out grey on a brown plate. The live
-   stylesheet happens to order the two the other way round and was correct
-   by luck. Naming both attributes settles it by specificity instead. */
 .chunk-title[data-cover=panel][data-closing] .closing-body {
   color: color-mix(in oklch, var(--paper) 78%, transparent);
 }
@@ -782,10 +513,6 @@ body[data-blocks=left] .math-display .katex-display > .katex,
   margin-bottom: 1.4rem;
   order: -1;
 }
-/* A divider's picture is emitted inside its <section class="column">, not
-   inside a .chunk, so a selector scoped to .chunk left it with no height and
-   no background-size - the author wrote a picture for the part opener and
-   the paper showed nothing. Both hosts, one rule. */
 :is(.chunk, .column) > .chunk-backdrop {
   width: 100%;
   aspect-ratio: 16 / 7;
@@ -800,8 +527,6 @@ body[data-blocks=left] .math-display .katex-display > .katex,
 :is(.chunk, .column) > .chunk-backdrop.bd-top { background-position: center top; }
 :is(.chunk, .column) > .chunk-backdrop.bd-bottom { background-position: center bottom; }
 .overlay-layer { display: block; margin: 0.9rem 0; }
-/* A dock prints as the same kind of box an overlay card does: the frame is
-   what the paper cannot have, the treatment is kept. */
 :is(.overlay-card, .dock) {
   padding: 0.75rem 0.95rem;
   border-radius: var(--radius-card);
@@ -818,9 +543,6 @@ body[data-blocks=left] .math-display .katex-display > .katex,
 :is(.overlay-card, .dock).ov-accent { background: var(--emph); color: #fff; }
 :is(.overlay-card, .dock).ov-clear  { padding: 0; background: none; border: 0; }
 .dock.ov-tint { background: color-mix(in oklch, var(--ink) 4%, transparent); }
-/* Ink and accent grounds on paper: a bold keeps its accent on a light
-   card and loses it on a dark or accent one, or it vanishes (measured:
-   "Merke:" gone on an accent band, lead-ins dark red on black). */
 :is(.overlay-card, .dock).ov-ink strong, :is(.overlay-card, .dock).ov-ink b,
 :is(.overlay-card, .dock).ov-accent strong, :is(.overlay-card, .dock).ov-accent b,
 .cards.cg-accent strong, .cards.cg-accent b { color: currentColor; }
@@ -847,18 +569,11 @@ body[data-blocks=left] .math-display .katex-display > .katex,
   font-size: calc(1em * var(--card-fs, 1));
   text-align: var(--card-align, left);
 }
-/* The document is read at the reader's own pace, so the size difference is
-   damped: on paper a row of single words at 1.4x is shouting. The
-   alignment is kept, because that is composition rather than emphasis. */
 .cards.cs-large  { --card-fs: 1.15; }
 .cards.cs-medium { --card-fs: 1; }
 .cards.cs-small  { --card-fs: 0.92; }
 .cards.ca-left   { --card-align: left; }
 .cards.ca-center { --card-align: center; }
-/* The five grounds on paper. accent and paper are the two that carry a
-   real fill, so they are the two the reader's printer will actually be
-   asked for; the rest stay hairlines, which is the right default for a
-   document that may be printed in black and white. */
 .cards.cg-panel > ul > li, .cards.cg-panel > ol > li, .cards.cg-panel > :not(ul):not(ol) {
   background: color-mix(in oklch, var(--ink) 4%, transparent); border-color: transparent;
 }
@@ -872,8 +587,6 @@ body[data-blocks=left] .math-display .katex-display > .katex,
   background: #fff;
 }
 .cards.ck-square > ul > li, .cards.ck-square > ol > li, .cards.ck-square > :not(ul):not(ol) { border-radius: 0; }
-/* No data-collapse in a document, so the second level is always here -
-   which is the point of writing one. */
 .cards li ul, .cards li ol {
   margin: 0.3rem 0 0;
   padding-left: 1.05em;
@@ -886,22 +599,6 @@ body[data-blocks=left] .math-display .katex-display > .katex,
 .cards > ul > li::marker, .cards > ol > li::marker { content: none; }
 .cards li > :first-child { margin-top: 0; }
 .cards li > :last-child { margin-bottom: 0; }
-
-/* ::: rows on paper. The emitter writes a row as a strong element holding
-   the term followed immediately by span.row-body holding the body, with no
-   separator between them, because in the live views the span is a grid item
-   and a separator would be a stray anonymous item in the same grid. That
-   made the span's placement load-bearing – and it existed only in
-   AUDIENCE_CSS, so on paper the two ran together and every row in every
-   lecture read "§ 202aObtaining specially protected data…".
-   (No backticks in this comment: one would end the template literal.)
-
-   The fix is a grid here too, but a smaller one than the live view's: the
-   li keeps its box, so its border, padding and break-inside: avoid all
-   still do their jobs and a row cannot be split across a page. Only the
-   inside of the row becomes two columns. Baseline rather than the live
-   view's centre, because a document is read line by line and a term
-   hanging half a line above its first word reads as a mistake on paper. */
 .cards.rows > ul > li, .cards.rows > ol > li {
   display: grid;
   grid-template-columns: minmax(5.5em, 0.3fr) minmax(0, 1fr);
@@ -910,33 +607,14 @@ body[data-blocks=left] .math-display .katex-display > .katex,
 }
 .cards.rows li > :is(strong, b):first-child { grid-column: 1; }
 .cards.rows li > .row-body { grid-column: 2; text-align: left; min-width: 0; }
-/* A term is a name and not a measure, so it does not hyphenate here either.
-   The rule above this one turns hyphens on for every li, and it inherits -
-   so without this a document set with lang: de broke "Zuständigkeit" across
-   two lines of a 5.5em column, where the live views now refuse to. The body
-   beside it is prose and keeps the hyphenation it was given.
-   What print does NOT copy from the live views is the term column itself:
-   there the grid is one grid for the whole block, so a max-content track is
-   the longest term in it; here the grid is per row, because the li has to
-   keep its box for break-inside: avoid, and fit-content would then give
-   every row a term column of its own width - a ragged left edge down the
-   page, which is worse than the share it replaced. */
 .cards.rows li > :is(strong, b):first-child,
 .cards li .card-lead,
 .cards li > :is(strong, b):first-child {
   hyphens: manual;
   -webkit-hyphens: manual;
 }
-/* A markdown line break between the term and its body would otherwise be a
-   third item in the two-column grid and push the body onto its own row. */
 .cards.rows li > br { display: none; }
-/* The detail level under a row belongs beside the body, not under the term. */
 .cards.rows li > :is(ul, ol) { grid-column: 2; }
-
-/* Two-line action heading – the sub-line reads like a subtitle in
-   print, italicized and quieter. The space between the spans (see
-   renderHeadingHtml) keeps the two lines separated visually when
-   they collapse inline. */
 .chunk-heading.has-sub .hd-main { display: block; }
 .chunk-heading.has-sub .hd-sub {
   display: block;
@@ -948,8 +626,6 @@ body[data-blocks=left] .math-display .katex-display > .katex,
   margin-top: 0.05em;
   letter-spacing: -0.005em;
 }
-/* Code spans inside a heading (renderInlineMd) – keep them upright and a
-   touch smaller so an identifier does not outweigh the heading itself. */
 .chunk-heading code {
   font-family: var(--mono);
   font-size: 0.86em;
@@ -957,10 +633,6 @@ body[data-blocks=left] .math-display .katex-display > .katex,
   font-weight: inherit;
   margin: 0 0.09em;
 }
-
-/* Layout primitives reflow to linear prose in print. The goal is a
-   readable document: columns collapse, side panes stack, marginalia
-   sits inline as a quiet aside. */
 .cols, .cols-2, .cols-3 { column-count: auto; }
 .cols { margin: 0.8em 0 1.05em; }
 .cols > p, .side-a > p, .side-b > p { margin: 0.4em 0 0.9em; }
@@ -977,11 +649,6 @@ body[data-blocks=left] .math-display .katex-display > .katex,
 }
 .marginalia > :first-child { margin-top: 0; }
 .marginalia > :last-child { margin-bottom: 0; }
-
-/* Explicit-slide blocks (§4.5). Print shows both halves in source order –
-   it is the reading copy, and losing either would defeat the point. The
-   slide block keeps a hairline marker so a reader can tell what the room
-   actually saw; the script block is the narration around it. */
 .slide-explicit {
   margin: 0.5em 0;
   padding-left: 0.9rem;
@@ -990,159 +657,43 @@ body[data-blocks=left] .math-display .katex-display > .katex,
 .slide-explicit > :first-child { margin-top: 0; }
 .slide-explicit > :last-child { margin-bottom: 0; }
 .script-only { margin: 0.4em 0; }
-
-/* Baseline: any raw <img> (e.g. direct-path Markdown images that bypass
-   the figure.figure-img wrapper) is constrained to the page measure so
-   high-resolution screenshots cannot overflow A4. */
 img { max-width: 100%; height: auto; }
-
-/* figure-img: single-column figure with caption below. Both <img> and
-   inlined <svg> need an explicit max-width — SVGs spliced via
-   inlineSvg() preserve their intrinsic width="…" attribute and would
-   otherwise overflow the page measure. */
 figure.figure-img { margin: 1rem 0; text-align: center; }
-/* A clip renders as a real player in the reading copy too – print.html is
-   an HTML document people read in a browser, and only an actual paper print
-   loses the video, which nothing can help. */
 figure.figure-video { margin: 1rem 0; text-align: center; }
 figure.figure-video video { max-width: 100%; height: auto; }
-/* An embed in the reading copy: the frame still works in a browser, and the
-   address underneath is what survives on paper. */
 figure.figure-embed { margin: 1rem 0; text-align: center; }
 figure.figure-embed .embed-frame { aspect-ratio: 16 / 9; width: 100%; background: #eee; }
 figure.figure-embed .embed-frame iframe { width: 100%; height: 100%; border: 0; }
 figure.figure-embed .embed-source { font-family: var(--sans); font-size: 0.72rem; color: var(--ink-soft); margin-top: 0.3rem; overflow-wrap: anywhere; }
 @media print {
-  /* A frame prints as an empty rectangle; the address is the useful part. */
   figure.figure-embed .embed-frame { display: none; }
   figure.figure-embed .embed-source { font-size: 0.8rem; }
 }
 figure.figure-img img,
 figure.figure-img svg { max-width: 100%; height: auto; }
-
-/* ── how tall a figure may be in a document ──────────────────────────
-   Width has always been answered (the measure), height never was, and the
-   two are not independent: every figure here keeps its aspect ratio, so an
-   uncapped height is whatever the measure multiplied by the ratio happens
-   to be. A ::: draw block makes that worst: it carries width="2000" so
-   max-width binds on every page, and python-intro's #scanner-pipeline
-   (1.56 tall per unit wide) resolved to 944px inside a 933px A4 text area -
-   taller than the sheet, and then moved onto a page of its own by the
-   break-inside: avoid that keeps a picture whole. A raster figure reaches
-   the same place from a portrait screenshot.
-   In rem rather than vh, and for a drawing the same number on screen and on
-   paper (a picture is capped on paper only, see below): what a
-   viewport unit means inside a page box is not something the engines agree
-   on, and print.html is printed by whichever browser the reader has. 34rem
-   at the 10pt root is about half the A4 text height - a figure may be the
-   largest thing on a page without being the only thing on it.
-   The selectors are (0,1,1) on purpose: DIAGRAM_CSS is concatenated after
-   this stylesheet, so a bare .psi-diagram here would lose to its 62vh on
-   screen and to its max-height: none on paper. */
 main .psi-diagram,
 figure.figure-video video { max-height: 34rem; }
-/* A picture is capped on paper only. On a screen the reader scrolls, and a
-   tall screenshot held to 34rem came out as a narrow strip in the middle of
-   the measure (a full page of an application is two to six times as tall as
-   it is wide; only up to about 0.87 did it get the full width), with its
-   type far below the running text's. So the screen gives it the measure and
-   the page keeps the half-sheet rule. The drawing keeps the cap everywhere:
-   its width is derived from it (--dg-box-w below), and a video keeps it
-   because a portrait clip with its controls must not outgrow the window. */
 @media print {
   figure.figure-img img,
   figure.figure-img svg { max-height: 34rem; }
 }
-
-/* ── how large a drawing is in a document ────────────────────────────
-   A slide answers this by filling the frame: the figure IS the slide, and
-   what that does to the label type does not matter, because nothing else is
-   on the wall to compare it with. A page has running text three lines above
-   the picture, and there the answer is the opposite - the type inside a
-   figure belongs to the same typographic set as the type around it.
-
-   Filling the measure gets that wrong by a different amount for every
-   figure, because a label's size is DG_FONT scaled by the measure over the
-   viewBox width, and the viewBox is however many grid units the author
-   happened to draw in. Measured before this rule: 47 of 81 figures in the
-   corpus carried type larger than the running text, from 0.53x to 2.97x -
-   a spread of 5.6, invisible to the author, and nothing in the source says
-   which end a given figure lands on.
-
-   So the width is derived from the type instead. --dg-type-w is the viewBox
-   width measured in base labels (diagram-core emits it), and multiplying by
-   --dg-fig-size gives the width at which a base label lands at exactly that
-   size. Every figure in the document then carries one label size, the way
-   every figure in a book does. The third term converts the height budget
-   into a width so a tall figure shrinks proportionally rather than sitting
-   letterboxed in a box the height cap left too wide, and 100% keeps a
-   figure with more units than the measure can serve from overflowing - that
-   one lands under the target size, which is the one case nothing can fix.
-
-   The box now hugs the drawing rather than spanning the measure, so
-   style.blocks finally means something here: the rules below are the same
-   ones figure-img has had all along, and a diagram was the one figure kind
-   that could not honour them because its box was always full width. */
 main .psi-diagram {
   --dg-fig-size: 0.9rem;
   --dg-box-w: min(100%, calc(var(--dg-type-w, 100000) * var(--dg-fig-size)),
                   calc(34rem * var(--dg-ar, 1)));
   width: var(--dg-box-w);
-  /* The default is centre, matching figure.figure-img's text-align above.
-     styleBodyAttrs writes data-blocks only when it is left, so the centre
-     case has to be the bare rule - a body[data-blocks=center] selector would
-     never match anything and every deck would quietly go flush left. */
   margin-inline: auto;
 }
-/* Flush left means the *drawing* is flush left, not the box around it. The
-   box is the viewBox, and the viewBox is the drawing plus DG_MARGIN on every
-   side - so a figure set flush left used to stop a fixed reserve short of the
-   heading above it, the same few pixels on every figure in the deck. Measured
-   on a real keynote: heading at x 223, first box at 243. A gap of twenty
-   pixels is not an alignment anyone chose; it is a near-miss, and a near-miss
-   reads worse than an honest indent. --dg-ink-x is that reserve as a fraction
-   of the box (diagram-core emits it, and the live runtime rewrites it when it
-   swaps in the viewBox that holds every beat), so the negative start margin
-   pulls the reserve back out into the gutter and the ink lands on the text's
-   own edge.
-
-   Centre is untouched: the reserve is symmetric, so a centred box is a centred
-   drawing already, and nothing moves in a deck that did not ask.
-
-   And centre stays the DEFAULT, which is the question this rule was asked
-   twice. The case for flush left by default is that a figure under a heading
-   should share that heading's edge - but where the heading sits is already a
-   key, and the two lectures answer it differently. Measured at 1600x900:
-   lectures/diagrams sets no headings key, so a figure chunk's heading is
-   centred (heads at 465-739 px in a 96-1504 column) and the drawing under it
-   is centred with it; flush left by default would pull thirty figures away
-   from their own headings. lectures/tutorial sets headings: left, every
-   heading stands at the column edge, and the centred figures sit 56-860 px
-   inside it - which is the complaint, and blocks: left is the answer to it,
-   now that it lands on the edge rather than a reserve short of it. So the
-   default follows the blocks key, as documented, and a deck that ranges its
-   headings left says so once in the same block. */
 body[data-blocks=left] main .psi-diagram,
 .chunk[data-blocks=left] .psi-diagram {
   margin-inline: calc(-1 * var(--dg-ink-x, 0) * var(--dg-box-w)) auto;
 }
 .chunk[data-blocks=center] .psi-diagram { margin-inline: auto; }
-
 @media print {
-  /* The same sentence DIAGRAM_CSS says about a diagram - one picture, and
-     splitting it makes two useless halves - is true of a photograph, and
-     only the diagram was hearing it. It is reachable rather than theoretical:
-     .chunk avoids breaking, so a figure inside a chunk that fits a page was
-     never at risk, but a chunk taller than a page cannot honour that and
-     breaks wherever it must. lectures/tutorial #images is 1073px on a 933px
-     page and holds a 365px figure that was free to split down the middle,
-     with the caption landing on the next sheet. Includes the caption by
-     sitting on the <figure>, which is the whole unit a reader needs at once. */
   figure.figure-img,
   figure.figure-video,
   figure.figure-embed { break-inside: avoid; page-break-inside: avoid; }
 }
-
 figure.figure-img figcaption {
   font-family: var(--sans);
   font-size: 0.78rem;
@@ -1157,96 +708,21 @@ figure.figure-missing {
   font-family: var(--mono);
   padding: 0.8em 1em;
 }
-
-/* Shiki code blocks in print: transparent background, inline color */
 pre.shiki { background: transparent !important; padding: 0; margin: 0.4em 0 0.9em; }
 pre.shiki code { font-size: inherit; }
-/* Force inline on .line: white-space:pre already breaks lines via the
-   
- text nodes shiki leaves between spans. Block would double the gap. */
 pre.shiki .line { display: inline; }
-
-/* Width classes are a live-view concern; in print the column runs
-   at a single reading measure. We still expose them on the DOM for
-   future CSS. */
-
 @media print {
   body { background: white; }
-  /* Smaller and tighter than the screen copy, and both halves matter.
-     10pt over 1.6 is a reading size for a lit screen at arm's length; on
-     paper it set the text so loosely that a chunk of four paragraphs filled
-     most of a sheet, which is what pushed the next one over a page boundary
-     and broke the argument into pieces. 9pt over 1.44 is an ordinary book
-     setting. Everything here is in rem, so the whole document - headings,
-     figures, the diagram label size, the column below - moves with it and
-     the proportions are the ones that were tuned. */
   html { font-size: 9pt; line-height: 1.44; }
   .chunk { margin: 1.2rem 0 1.7rem; }
-  /* The text column sits against the left of the page area and the rest of
-     the sheet is left empty on purpose. Two reasons, and the second is the
-     one that decided it.
-     Measure: the page area is 16cm, and 16cm of 10pt serif is about 83
-     characters to the line - half again over what a reader tracks
-     comfortably, and it was the width because nobody had picked one. 36rem
-     is about 65.
-     The margin: a handout is written on. 5.8cm of clean paper down the
-     outside edge is a place to put a note next to the paragraph it belongs
-     to, which is worth more on a teaching handout than symmetry is. It also
-     gives the marginalia construct somewhere to go, which it does not use
-     yet - see the .marginalia rule above, still an inline aside.
-     margin is set explicitly because the screen rule is margin: 0 auto, and auto
-     margins on a narrowed column would centre it again. */
   main { padding: 0; max-width: 38rem; margin: 0; }
-  /* WebKit does not fragment a grid container. An item that crosses a page
-     boundary is sliced through the middle of a line and the remainder painted
-     on the next sheet - and break-inside: avoid on the item does not save it,
-     because the box being fragmented is the container, not the item. .cards
-     is a grid and its ul is display: contents, so every card and every row is
-     a grid item and every one of them was exposed. It only became visible
-     when chunks started flowing: before that the whole chunk moved and the
-     page boundary never fell inside one.
-
-     ::: rows is a single column, so block flow draws the same picture and
-     fragments the way prose does - between rows, with each row whole because
-     the li keeps its own break-inside: avoid. The grid inside the li, the one
-     that sets the term beside its body, is untouched: it never has to
-     fragment now.
-
-     A multi-column ::: cards block is a layout that block flow would not
-     reproduce, so it keeps its grid and is kept whole instead. That is a
-     promise it can hold: the tallest one in the corpus is 183px against a
-     933px page, and a row of cards that no longer fits simply moves.
-
-     Table rows are the same failure without the grid, and cost nothing to
-     protect. */
   .cards.rows { display: block; }
   .cards.rows > ul > li + li, .cards.rows > ol > li + li { margin-top: 0.6rem; }
   .cards:not(.rows) { break-inside: avoid; page-break-inside: avoid; }
   tr, .chunk-expansion { break-inside: avoid; page-break-inside: avoid; }
   thead { display: table-header-group; }
-
-  /* Code cannot reflow, so it is the one thing allowed into that margin.
-     pre carries overflow-x: auto for the screen, and on paper that auto is not
-     a scrollbar, it is a cut - the line simply ends. Reachable today at
-     36rem: lectures/tutorial #diagram-beats-rule is 557px wide. Visible
-     overflow lets it run into the empty margin instead, which is the one
-     place on this page where a few characters of intrusion cost nothing. */
   pre { overflow: visible; }
   a { text-decoration: none; color: inherit; }
-  /* On paper it is a cover page again: fills the sheet, title sitting in
-     the lower third (PRD §4.4), no rule under it. */
-  /* The cover is a page of its own, and says so with break-after rather
-     than by being as tall as one. It used to be min-height: 24cm, which is
-     A4's text height of 24.7cm with 2.8% to spare - so it fitted exactly one
-     paper size at exactly these margins. On US Letter the same page area is
-     22.94cm and the box was 4cm too tall; the overflow is the padding below
-     the title, so what landed on the next sheet was a blank one. A reader
-     whose browser sets its own margins - Safari's print dialog does - got
-     the same blank page on A4.
-     19cm clears both with room to spare and still puts the title low on the
-     sheet, which is the whole of what the height was for (PRD 4.4). The
-     padding is in rem for the same reason the figure cap is: vh inside a
-     page box is not a thing the engines agree on. */
   .chunk-title {
     min-height: 19cm;
     justify-content: flex-end;
@@ -1258,45 +734,11 @@ pre.shiki .line { display: inline; }
   }
   pre { background: rgba(0,0,0,0.03); }
 }
-
 @media screen {
   body { padding: 0; }
   main { padding-top: 4rem; }
-  /* The reading copy in a browser. 10pt is 13.3px, and the whole document is
-     in rem - the 42rem measure came out at 560px, a narrow strip down the
-     middle of a laptop screen with text a size smaller than the browser's
-     own default, and a figure held to 34rem at 450px. Paper keeps its 9pt
-     (the @media print rule above); the screen gets a size that follows the
-     window between a phone and a large monitor: 15px at 390px wide, about
-     16.3px at 1440 and 18px from 1920 up, which puts the measure at 630 to
-     760px, roughly 70 characters. Everything moves with it, figures included,
-     because the proportions were tuned in rem. */
   html { font-size: clamp(15px, calc(12px + 0.3vw), 18px); }
 }
-
-/* ── the reader's layout and contents sidebar (reader: on, screen only) ──
-   A document read on a screen after the lecture gets two margins: the
-   contents on the left, and on the right a column for the reader's own
-   notes, which the highlights put there. Every rule is keyed off
-   body[data-reader=on].rd-ready, and the build writes the attribute only
-   under reader: on while the class is set by a one-line script right after
-   the sidebar - so reader: off matches nothing, and a page read without
-   scripts is laid out exactly as it was before any of this.
-
-   Three widths, measured rather than guessed. The root size follows the
-   window (12px + 0.3vw, clamped), so a width in rem is a different number of
-   pixels at every window size, and a breakpoint has to be solved for: the
-   text column is main's 42rem, the contents 15rem with 1.5rem of air beside
-   it, the notes 17rem with 1.5rem beside it.
-     wide, 1216px and up: contents + text + notes = 77rem, which is 1201px
-       at 1216 - the contents sit fixed on the left.
-     medium, 920 to 1215px: text + notes + a gutter for the button = 62rem,
-       904px at 920 - the contents fold to a button top left that opens them
-       over the page.
-     narrow, below 920px: the notes have no column (they will open under
-       their paragraph), and the text is centred as it always was.
-   The notes column is reserved while it is still empty, so the text does
-   not move sideways the moment a reader makes their first highlight. */
 @media screen {
   .rd-contents[hidden], .rd-toggle[hidden] { display: none !important; }
   body[data-reader=on].rd-ready .rd-contents {
@@ -1309,18 +751,12 @@ pre.shiki .line { display: inline; }
     display: flex;
     flex-direction: column;
   }
-  /* The list scrolls and the head and foot stay: the close button has to be
-     reachable from anywhere in a hundred-entry list, and the foot is where
-     the reader's own tools will sit. */
   body[data-reader=on].rd-ready .rd-list {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
-  /* Headings, not prose: a hyphen in a 13rem entry splits a word the eye
-     is scanning for. On the link, because the prose rule reaches the li
-     with more specificity than this one can without an !important. */
   .rd-contents :is(li, a) { hyphens: manual; -webkit-hyphens: manual; }
   .rd-head { display: flex; align-items: center; justify-content: space-between; flex: none; margin: 0 0 0.9rem; min-height: 1.6rem; }
   .rd-label {
@@ -1343,10 +779,6 @@ pre.shiki .line { display: inline; }
   .rd-contents ol { list-style: none; margin: 0; padding: 0; }
   .rd-group { margin: 1rem 0 0; }
   .rd-list > li:first-child.rd-group { margin-top: 0; }
-  /* A part's heading and, where it has slides, the button that folds them:
-     a chevron pointing at the heading's words when closed and down when
-     open, drawn faint so the headings carry the list and not the controls. Only the part being read and the ones opened by hand show their
-     slides; a closed one carries the sum of its highlights instead. */
   .rd-part-row { display: flex; align-items: baseline; gap: 0.25rem; margin: 0 0 0.3rem; }
   .rd-part {
     display: block;
@@ -1389,8 +821,6 @@ pre.shiki .line { display: inline; }
     color: inherit;
   }
   .rd-num { text-align: right; font-variant-numeric: tabular-nums; opacity: 0.7; }
-  /* The document prints no numbers under slide-numbers: off, and a number
-     only the sidebar carries would name a slide the page does not. */
   body[data-slide-nums=off] .rd-contents li > a[data-rd] { grid-template-columns: minmax(0, 1fr); }
   body[data-slide-nums=off] .rd-num { display: none; }
   .rd-contents a:hover { color: var(--ink); }
@@ -1457,14 +887,8 @@ pre.shiki .line { display: inline; }
     z-index: 44;
     background: rgb(15 15 18 / 0.3);
   }
-  /* A link to a slide lands its heading below the button, not under it. */
   body[data-reader=on].rd-ready :is(.chunk, .column) { scroll-margin-top: 3rem; }
 }
-/* Without a side margin there is no empty corner at the top: the button stood
-   over the first line of whatever chunk had scrolled under it - measured at
-   390 px, on top of a chunk heading. The foot of the window is where a
-   thumb is anyway, and the highlight navigation will take the other
-   corner. */
 @media screen and (max-width: 919.98px) {
   body[data-reader=on].rd-ready .rd-toggle {
     top: auto;
@@ -1479,18 +903,6 @@ pre.shiki .line { display: inline; }
 @media print {
   .rd-contents, .rd-toggle { display: none !important; }
 }
-
-/* ── the reader's highlights and note cards (reader: on) ──
-   PRINT_HIGHLIGHTS_JS paints a highlight as mark.rd-hl round the words and
-   puts its note on a card: in the notes column the layout keeps free from
-   920px, at the height of the highlight (the script sets top and left); below
-   that, inline under the block that holds it, and only while it is the one
-   being read. A highlight with a note carries a line under it, because a
-   narrow window shows no card until the highlight is opened. One yellow, and
-   a stronger one for the highlight whose card is open.
-
-   On paper the cards give way to the page's own margin: see the print block
-   at the end of this section. */
 body[data-reader=on] {
   --rd-hl: oklch(0.94 0.11 98);
   --rd-hl-strong: oklch(0.87 0.16 94);
@@ -1571,7 +983,6 @@ body[data-reader=on] {
     cursor: pointer;
   }
   .rd-actions button:hover, .rd-orphans button:hover { color: var(--ink); }
-  /* Narrow: the card is part of the text, under the block it belongs to. */
   main .rd-card { margin: 0.5rem 0 1rem; font-size: 0.85rem; }
   li > .rd-card { margin-bottom: 0.5rem; }
   .rd-toast {
@@ -1579,7 +990,6 @@ body[data-reader=on] {
     left: 50%;
     bottom: 1rem;
     transform: translateX(-50%);
-    /* Above the lightbox too: a pin is removed there. */
     z-index: 55;
     display: flex;
     align-items: baseline;
@@ -1595,9 +1005,6 @@ body[data-reader=on] {
     box-shadow: 0 0.35rem 1.2rem rgb(0 0 0 / 0.2);
   }
   .rd-toast .rd-undo { font-size: inherit; color: inherit; font-weight: 600; }
-  /* The sidebar's foot: a notice when nothing can be stored, and what a
-     rebuilt document no longer has the words for. It scrolls on its own
-     when the list is long, so the contents above keep their room. */
   .rd-foot { flex: none; max-height: 40vh; overflow-y: auto; border-top: 0.5pt solid var(--rule); margin-top: 0.75rem; padding-top: 0.6rem; }
   .rd-notice, .rd-foot-head { margin: 0 0 0.4rem; }
   .rd-foot-head { color: var(--ink); font-weight: 600; }
@@ -1605,9 +1012,6 @@ body[data-reader=on] {
   .rd-orphans li { margin: 0 0 0.55rem; }
   .rd-orphans q { display: block; background: var(--rd-hl); color: var(--ink); padding: 0 0.15em; }
   .rd-orphan-note { display: block; margin: 0.15rem 0; white-space: pre-wrap; }
-  /* The menu above them: three actions in the look of a card's, the ? that
-     opens the lines on where highlights are kept, and the line an import
-     leaves. The ? is a small ring rather than a word, and stands last. */
   .rd-menu-acts { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 1rem; }
   .rd-menu button {
     font: inherit;
@@ -1636,8 +1040,6 @@ body[data-reader=on] {
   }
   .rd-menu .rd-help-btn[aria-expanded=true] { color: var(--ink); }
   .rd-help-btn:is(:hover, :focus-visible, [aria-expanded=true]) .rd-q { opacity: 1; }
-  /* In the flow of the foot rather than floating over it: the foot scrolls on
-     its own, and a box laid over it would be cut off at its edge. */
   .rd-help {
     margin: 0.5rem 0 0;
     padding: 0.5rem 0.6rem;
@@ -1648,19 +1050,12 @@ body[data-reader=on] {
     outline: none;
   }
   .rd-help[hidden] { display: none; }
-  /* Open, the lines take the room of the contents rather than scroll the ?
-     that closes them out of the foot. */
   .rd-foot:has(.rd-help:not([hidden])) { max-height: 75vh; }
   .rd-help p { margin: 0; }
   .rd-help p + p { margin-top: 0.35rem; }
   .rd-report { margin: 0.45rem 0 0; color: var(--ink); }
   body[data-reader=on] .rd-foot :is(p, li) { hyphens: manual; -webkit-hyphens: manual; }
   .rd-menu + .rd-hl-foot { margin-top: 0.75rem; }
-  /* The way through the highlights, in the corner the contents button leaves
-     free at every width: it is top left from 920px and bottom left below. It
-     exists only once there is a highlight, and the undo notice stands above
-     it wherever the two could meet. The lightbox covers it rather than
-     sharing the window with it, because n and p do nothing there. */
   .rd-nav {
     position: fixed;
     right: 0.75rem;
@@ -1694,8 +1089,6 @@ body[data-reader=on] {
   .rd-filter { display: flex; margin-left: 0.2rem; padding: 0.15rem 0.2rem 0.15rem 0.35rem; border-left: 0.5pt solid var(--rule); }
   .rd-filter button { padding: 0.3rem 0.45rem; white-space: nowrap; }
   .rd-filter button[aria-pressed=true] { color: var(--ink); background: var(--rd-hl); }
-  /* A slide's count of highlights at the right of its contents entry, in the
-     highlights' own yellow: it says what is there, as the marks do. */
   body[data-reader=on].rd-ready .rd-contents li > a[data-rd] { grid-template-columns: 1.9em minmax(0, 1fr) auto; }
   body[data-reader=on][data-slide-nums=off].rd-ready .rd-contents li > a[data-rd] { grid-template-columns: minmax(0, 1fr) auto; }
   .rd-contents .rd-part:has(.rd-count, .rd-sum) { display: flex; align-items: baseline; gap: 0.35em; }
@@ -1713,27 +1106,8 @@ body[data-reader=on] {
   }
 }
 @media screen and (max-width: 919.98px) {
-  /* Above the contents button and the highlights, which sit at the foot of a
-     narrow window. */
   .rd-toast { bottom: 3.5rem; }
 }
-/* Highlights on figures (plan §11). PRINT_HIGHLIGHTS_JS puts a button in a
-   figure's corner - shown on hover and on keyboard focus, and always, faint,
-   where there is no hover, because a touch reader has no other way to find
-   it - and draws what a reader marked in the figure's own coordinates: a
-   group in the SVG, or over a picture a box as large as the picture with the
-   dots placed in it in per cent. So a dot is where it was put in the
-   document, in the lightbox and on paper alike.
-   What they look like follows the text highlight's rule: yellow on screen,
-   numbers only on paper, where they tie a mark to its note in the margin. A
-   whole figure is a thin frame - a rect just inside a vector's viewBox, a
-   box 3 px clear of a picture, never an outline on the svg or the img, which
-   WebKit repainted only in part; a spot is a
-   small yellow dot with a thin dark edge, which reads on any drawing, and
-   the part of a diagram a pin is on is tinted through a class on its group,
-   like every other diagram rule. Printed, a spot with a note grows to hold
-   its number, and a whole figure's number stands beside the frame's top
-   right corner, on the side of the margin its note is in. */
 body[data-reader=on] main .rd-block-whole {
   outline: 2px solid var(--rd-hl-strong);
   outline-offset: 3px;
@@ -1784,9 +1158,6 @@ body[data-reader=on] .psi-diagram .dg-el.rd-el .dg-lbl text {
   stroke-linejoin: round;
 }
 .psi-diagram .dg-el.rd-el { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-/* A code block or a display formula marked whole has the same frame. Code
-   highlights are the prose's marks in a monospace line - only the ground
-   turns yellow, the tokens keep their colours. */
 body[data-reader=on] main :is(pre, .math-display) { position: relative; }
 .rd-fig-btn { -webkit-user-select: none; user-select: none; }
 @media screen {
@@ -1814,10 +1185,7 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
   :is(figure, pre, .math-display):hover > .rd-fig-btn,
   :is(figure, pre, .math-display):focus-within > .rd-fig-btn { opacity: 1; }
   .rd-fig-btn:hover, .rd-fig-btn:focus-visible { background: var(--rd-hl); }
-  /* A one-line formula is a short scroll box: the button stays inside it. */
   .math-display > .rd-fig-btn { top: 0; padding: 0.25rem 0.5rem; }
-  /* A click on a card shows where on the page it belongs: the dot swells,
-     the frame breathes. */
   .rd-pin.rd-pulse .rd-dot, .rd-pin.rd-pulse .rd-pin-dot {
     animation: rd-pulse 0.3s ease-in-out 4 alternate;
     transform-box: fill-box;
@@ -1828,9 +1196,6 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
   @keyframes rd-frame { to { outline-offset: 8px; } }
   body[data-reader=on] main .rd-frame.rd-pulse { animation: rd-breathe 0.3s ease-in-out 4 alternate; }
   @keyframes rd-breathe { to { opacity: 0.25; } }
-  /* The lightbox's bar, top right on the dark ground, and the crosshair
-     while a spot is being marked. The part of a diagram under it is drawn
-     in the strong yellow. */
   .rd-lb-bar { position: absolute; top: 0.75rem; right: 0.75rem; z-index: 3; display: flex; gap: 0.5rem; cursor: auto; }
   .rd-lb-bar button {
     font-family: var(--sans);
@@ -1858,12 +1223,6 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
 @media screen and (hover: none) {
   .rd-fig-btn { opacity: 0.55; }
 }
-/* The keys, as quiet hints where a keyboard is likely - a fine pointer that
-   can hover - and nowhere else: a phone would show a letter it has no key
-   for. The ? names n and p in a line of its own, and Mark a spot shows its m;
-   the pill's arrows carry theirs in title and aria-keyshortcuts only, since
-   a letter beside each was noise at that size. Drawn from data-key, so the
-   button's words stay its words. */
 .rd-keys-line { display: none; }
 @media screen and (hover: hover) and (pointer: fine) {
   .rd-help .rd-keys-line { display: block; }
@@ -1876,13 +1235,6 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
     opacity: 0.6;
   }
 }
-/* A finger rather than a pointer: every control of the reader's takes at
-   least 44 by 44 CSS px to the touch, which test/reader.mjs measures by
-   asking the page what is under each corner of that square. The boxes grow
-   rather than a pseudo-element reaching past them, because the list and the
-   foot of the sidebar scroll and would cut a reach off at their edges; the
-   small glyphs - the chevron, the ? - stay small inside. No display is set
-   here, so an attribute or a width that hides a control still does. */
 @media screen and (pointer: coarse) {
   body[data-reader=on].rd-ready :is(.rd-toggle, .rd-close, .rd-menu button, .rd-nav button, .rd-mark-btn,
       .rd-fig-btn, .rd-lb-bar button, .rd-actions button, .rd-orphans button, .rd-undo) {
@@ -1890,8 +1242,6 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
     min-height: 44px;
   }
   body[data-reader=on].rd-ready .rd-help-btn { width: 44px; }
-  /* A formula is a scroll box as short as its line, and would cut its
-     corner button down to that. */
   body[data-reader=on].rd-ready main .math-display:has(> .rd-fig-btn) { min-height: 46px; }
   body[data-reader=on].rd-ready .rd-fold { width: 44px; height: 44px; padding: 16px; margin: 0; }
   body[data-reader=on].rd-ready .rd-group { margin-top: 0.3rem; }
@@ -1901,10 +1251,6 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
   body[data-reader=on].rd-ready .rd-note { min-height: 44px; }
   body[data-reader=on].rd-ready .rd-menu-acts { gap: 0 0.6rem; }
 }
-/* Paper clips at the page area, and a code block or a picture standing on
-   the column's left edge has its frame there: printed, the frame is drawn
-   on the edge rather than outside it, and a code block takes a little
-   padding for it. */
 @media print {
   .rd-fig-btn, .rd-lb-bar, svg .rd-pin .rd-hit { display: none !important; }
   body[data-reader=on] main .math-display.rd-block-whole { overflow: visible; }
@@ -1923,26 +1269,6 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
     color: var(--ink);
   }
 }
-/* On paper (plan §6). The yellow prints: print-color-adjust says so for the
-   marks alone, so a reader who left the dialog's background graphics off
-   still gets them and the rest of the page stays as the author set it. A
-   highlight with a note ends in a small number, and the note stands in the
-   outer margin the print layout keeps free because a handout is written on
-   (main's rule in the @media print block above: a 38rem column in a 16cm
-   page area leaves 3.9cm inside it). PRINT_HIGHLIGHTS_JS writes the number
-   and the note into the text, where only print shows them, and keeps them
-   there - so what a print engine lays out is ordinary markup, and a printer
-   driven without a beforeprint event (a PDF made by a script) gets them too.
-   The note is a right float with a negative right margin as wide as itself
-   and a gap, so its margin box stands wholly outside the column: no line of
-   the text is shortened for it, and clear keeps a second note under the
-   first rather than beside it. It sits at the line its highlight starts on;
-   where that line is in something narrower than the column - a table, a
-   part's lede, a card - the script hangs it before that block instead, at
-   its top, since a float inside it would land inside it.
-   In cm because the page area is: rem is the type, and the free margin is
-   not a number of lines. The note's type is fixed for the same reason a
-   heading must not size it - it is set inside the heading's own line. */
 @media screen {
   .rd-pn, .rd-pnote { display: none !important; }
 }
@@ -1991,15 +1317,6 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
   }
   .rd-pnote b { font-weight: 600; margin-right: 0.3em; }
 }
-
-/* ── the lightbox (screen only) ──────────────────────────────────────
-   The live views' figure focus, for a reader: click a figure, a diagram, a
-   code block or a display formula and it opens on a paper card over the
-   dimmed page, sized to the window; the wheel or a pinch zooms under the
-   pointer, a drag pans, + / - / 0 zoom from the keyboard, and Esc or a click
-   that did not drag closes it. PRINT_JS builds the overlay, so a document
-   opened without scripts is exactly the document it was. Nothing here reaches
-   paper. */
 @media screen {
   body.lb-ready :is(figure.figure-img, figure.figure-diagram, main pre, main .math-display) { cursor: zoom-in; }
   #psiINT-lightbox {
@@ -2015,7 +1332,6 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
     touch-action: none;
   }
   body.lb-open #psiINT-lightbox { display: flex; }
-  /* Focused so Esc reaches it at once; the ring would frame the window. */
   #psiINT-lightbox:focus { outline: none; }
   body.lb-open { overflow: hidden; }
   body.lb-dragging #psiINT-lightbox, body.lb-dragging #psiINT-lightbox * { cursor: grabbing !important; }
@@ -2031,13 +1347,6 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
     transition: transform 80ms ease-out;
     cursor: grab;
   }
-  /* A continuous gesture must not ease: a trackpad sends a wheel event every
-     8 ms, and each one would re-aim the curve (see the live views' rule).
-     will-change only for the gesture, never at rest: Chrome rasterises a
-     will-change layer once at its resting size and then scales that bitmap,
-     so a zoomed screenshot stayed at the pixels of the unzoomed card and read
-     soft – while the same data URL opened in a tab was sharp. When the class
-     drops after the quiet period, the card is re-rasterised at its scale. */
   body.lb-dragging #psiINT-lightbox > .lb-card,
   body.lb-zooming #psiINT-lightbox > .lb-card { transition: none; will-change: transform; }
   #psiINT-lightbox > figure.lb-card { display: flex; flex-direction: column; align-items: center; gap: 0.6em; }
@@ -2049,9 +1358,6 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
     height: auto;
     object-fit: contain;
   }
-  /* A diagram's box is derived from its type size in the document (main
-     .psi-diagram); here the window decides, and --dg-ar turns the height
-     budget into a width so a tall drawing is not letterboxed. */
   #psiINT-lightbox .psi-diagram {
     width: min(92vw, calc(88vh * var(--dg-ar, 1)));
     max-width: none;
@@ -2077,116 +1383,37 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
   #psiINT-lightbox { display: none !important; }
 }
 
-
 .figure-diagram { margin: 0.7em 0; }
 .psi-diagram {
   --dg-sans: var(--sans-font, var(--sans));
   --dg-mono: var(--mono-font, var(--mono));
-  /* the serif FAMILY, not the reading voice: --body-font is what the F
-     toggle rewrites, so naming it here made .serif and .hand follow the
-     reader's font choice and collapse onto the sans the diagram already
-     defaults to. Print was never affected - it defines no --body-font and
-     fell through to --serif. Parallel to --dg-sans / --dg-mono above. */
   --dg-serif: var(--serif-stack, var(--serif));
   display: block; overflow: visible;
-  /* Deliberately the same numbers as figure.figure-img svg. A diagram is a
-     figure, and figures in this project are sized in viewport space, not
-     em space: the drawing has a natural size (its viewBox in px, so the
-     unit option is also the nominal on-slide scale), max-width shrinks it
-     when it is wider, and the vh cap keeps a tall one from overflowing the
-     slide. Diverging here would have made diagrams the one figure kind that
-     responds to the zoom key, which reads as a bug rather than a feature. */
   max-width: 100%;
-  /* A little taller than figure.figure-img's 50vh. A photo shares the slide
-     with a caption and often arrives in portrait; a diagram is landscape and
-     is usually the whole point of the chunk, and at 50vh a wide one was
-     height-capped hard enough to leave a third of the measure empty beside
-     it.
-     Off --slide-h rather than off vh, for the reason every other slide-
-     internal size is: the cockpit lays the mirror out at the AUDIENCE window's
-     dimensions and then transforms it into its cell, so a raw vh there is the
-     cockpit window's and the same figure was capped at a different height in
-     the two windows. Print defines no --slide-h and falls back to the number
-     this rule has always had; it overrides the cap anyway (PRINT_CSS). */
-  /* --fig-cap is the tier's share of the slide height (FIG_CAP in build.js):
-     unset on an ordinary chunk, 0.79 on a picture slide, 0.72 on a stacked
-     divider. The fallback is the ordinary chunk's. */
   max-height: calc(var(--slide-h, 100vh) * var(--fig-cap, 0.62));
   height: auto;
 }
 @media print {
-  /* How tall a diagram may be on paper is not answered here. This block used
-     to say max-height: none, on the reasoning that a vh cap is a slide
-     proportion and a sheet of paper is not a slide - true, and it left the
-     document with no cap at all, so a portrait diagram resolved to the
-     measure times its ratio and came out taller than the page. The answer
-     now lives beside every other figure kind in PRINT_CSS, under a selector
-     specific enough to beat the cap above in both media. Do not re-add a
-     .psi-diagram max-height here without reading that rule. */
-  /* A diagram is one picture; splitting it across a page break makes it
-     two useless halves. */
   .figure-diagram { break-inside: avoid; page-break-inside: avoid; }
 }
 .psi-diagram .dg-el { transition: opacity 200ms ease; }
-/* Direct children of an element group, never descendants. A rect or a
-   circle deeper than that belongs to an embedded asset, and this rule would
-   paint it the canvas colour over the file's own answer - CSS beats a
-   presentation attribute, so a style-free line drawing came out white on
-   white. The tone rules below always used the child combinator; this one and
-   the text rule did not, which is why the two of them were the leak. */
 .psi-diagram .dg-el > rect, .psi-diagram .dg-el > circle, .psi-diagram .dg-el > .dg-shape {
   fill: var(--paper); stroke: var(--ink); --dg-sw: 1.4px; stroke-width: var(--dg-sw); rx: 4px;
 }
-/* A box whose outline is not a rectangle is a <path>, so every rule below
-   that paints a box has to name it too. They do it through :is(), which is
-   also why those selectors read shorter than they used to: the alternative
-   was a third copy of each one. The join is rounded so a chevron's nose is a
-   point rather than a miter spike. */
 .psi-diagram .dg-shape { stroke-linejoin: round; }
 .psi-diagram .dg-stroke { stroke: var(--ink); --dg-sw: 1.4px; stroke-width: var(--dg-sw); fill: none; stroke-linejoin: round; }
 .psi-diagram .dg-head { fill: var(--ink); stroke: none; }
-/* Same reason: a diagram's own labels live inside a .dg-lbl wrapper, and
-   type inside an embedded drawing is the drawing's business. */
 .psi-diagram .dg-lbl text { fill: var(--ink); font-family: var(--dg-sans); font-weight: 400; }
-/* .dg-mono sits on the <text> itself, so this rule is (0,2,0) while the
-   .dg-lbl text rule above it is (0,2,1) - the label rule won and .mono
-   resolved, emitted its class and changed nothing. Measured before the fix:
-   eight i's and eight W's in a .mono label came out 22.8px and 109.1px wide,
-   which is the sans. The family classes are now all written the same way,
-   matching on the wrapper and reaching the text, so they tie with the label
-   rule and win on source order like .serif and .hand always did. */
 .psi-diagram .mono text, .psi-diagram .dg-mono {
   font-family: var(--dg-mono);
-  /* A .mono label is a token – a header field, a flag, an arrow – so it
-     is spelled out for the same reason a listing is. Only the mono
-     channel: the sans and serif labels keep their fi and fl. */
   font-variant-ligatures: none;
 }
-/* inline *accent* / ~muted~ inside a label */
 .psi-diagram tspan.dg-em { fill: var(--emph); }
 .psi-diagram tspan.dg-mu { fill: var(--ink-soft); }
 .psi-diagram .dg-off { display: none; }
-
-/* containers are a frame around their members, never a filled panel */
-/* --rule is the hairline between two cells of a table; a container is a
-   trust boundary, a segment, a machine - it has to read as a statement.
-   Dashed at that weight it was barely visible on a shaded ground, which
-   is exactly where these are usually drawn. */
 .psi-diagram .dg-container > :is(rect, circle, .dg-shape) { fill: none; stroke: color-mix(in oklab, var(--ink) 42%, var(--dg-ground, var(--paper))); --dg-sw: 1.3px; stroke-width: var(--dg-sw); }
 .psi-diagram .dg-caption text { fill: var(--ink-soft); }
-
-/* braces have no fill and no head */
 .psi-diagram .dg-brace .dg-stroke { stroke: var(--rule); }
-
-/* ── tones ── four theme-safe fills, mixed from the page's own inks ── */
-/* Over --dg-ground, which is --paper wherever nobody says otherwise - every
-   document, every theme. The one thing that sets it is pitchblack in the
-   live views, where the paper is black and a mix over it would be a few per
-   cent above nothing: there the ground is the dark theme's own paper, so the
-   three tones are the colours they always were. The same holds for every
-   other mix against the paper in this sheet and in dgBarFillCss; .paper and
-   the label on a .tone-4 stay on --paper itself, because they mean the
-   canvas. */
 .psi-diagram .tone-1 > :is(rect, circle, .dg-shape) {
   fill: color-mix(in oklab, var(--emph) 13%, var(--dg-ground, var(--paper)));
   stroke: color-mix(in oklab, var(--emph) 60%, var(--ink));
@@ -2200,107 +1427,25 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
 .psi-diagram .tone-4 > :is(rect, circle, .dg-shape) {
   fill: var(--emph); stroke: var(--emph);
 }
-/* .clear is a see-through interior. .bare removes the *stroke*, so without
-   this there was no way to draw a frame you can read through – which is
-   what an outline over an image or another element wants. */
 .psi-diagram .clear > :is(rect, circle, .dg-shape) { fill: none; }
-/* The canvas colour, named. A box already defaults to it, but a box under a
-   tinted default block had no way back, and a free text could not have one at
-   all. A label with a ground is how it knocks out a line running behind it. */
 .psi-diagram .paper > :is(rect, circle, .dg-shape) { fill: var(--paper); }
-
 .psi-diagram .accent > :is(rect, circle, .dg-shape) { stroke: var(--emph); }
 .psi-diagram .accent .dg-stroke { stroke: var(--emph); }
 .psi-diagram .accent .dg-head { fill: var(--emph); }
 .psi-diagram .accent text { fill: var(--emph); }
-/* .muted and .dim answer different questions and were hard to tell apart,
-   because a lighter grey alone reads as "slightly faint" rather than as a
-   different kind of thing. .muted is scaffolding - an axis, a leader, a zone
-   outline - and scaffolding is drawn thinner as well as lighter. .dim is the
-   other axis entirely: full colour at a third of the strength, which is what
-   the dim step operation reaches for when a beat moves on.
-
-   A muted *line* is --ink-soft and a muted *word* is not, and that split is
-   the correction. --ink-soft is picked against the paper, and a caption is
-   very often standing on something else: measured at 1600x900 on the default
-   theme, --ink-soft type reads 3.44:1 on the paper, 2.76:1 on a .tone-1 area
-   and 2.11:1 on a .tone-3 one, against the 3:1 anything on a projector has
-   to clear. A line has no such floor - an axis is followed, not read - so it
-   keeps the token and the 1.05 weight that say scaffolding. The words are
-   mixed straight out of the two inks instead, dark enough to hold on the
-   three light tints and still visibly quieter than --ink.
-
-   Two grounds it cannot answer for, and both are the ground being wrong
-   rather than the type: a .tone-4 area is the accent at full strength, where
-   this mix reads worse than --ink-soft did and only the inverted label two
-   rules down is legible; and a dark theme's paper, where the mix follows
-   --ink and --paper and so inverts with them. */
 .psi-diagram .muted > :is(rect, circle, .dg-shape) { stroke: var(--ink-soft); --dg-sw: 1.05px; stroke-width: var(--dg-sw); }
 .psi-diagram .muted .dg-stroke { stroke: var(--ink-soft); --dg-sw: 1.05px; stroke-width: var(--dg-sw); }
 .psi-diagram .muted .dg-head { fill: var(--ink-soft); }
 .psi-diagram .muted text { fill: color-mix(in oklab, var(--ink) 60%, var(--dg-ground, var(--paper))); }
-
-/* .tone-4 inverts its own label, and that has to win over .accent text:
-   accent ink on an accent fill is invisible, legal, and would otherwise be
-   decided by which rule was written later. lint.js warns on the pair. */
 .psi-diagram .tone-4 text, .psi-diagram .tone-4 tspan { fill: var(--paper); }
-
-/* A free text element draws a ground only where the author gave it a tone.
-   The rect is always the same drawable; these two rules are what make "a
-   box defaults to paper, a text defaults to see-through" one mechanism rather
-   than two. No stroke either way – a bordered label is a box, and there is
-   a statement for that. */
 .psi-diagram .dg-text:not(.tone-1):not(.tone-2):not(.tone-3):not(.tone-4):not(.paper) > :is(rect, circle, .dg-shape) { fill: none; }
-
-/* An edge's label gets the same ground on the same terms: a fill class draws
-   it, no fill class draws nothing. No stroke - a bordered label on a line is
-   a box, and there is a statement for that - and no dash, which the .dashed
-   rule above would otherwise put around the ground of a dashed edge's label.
-   Written after the tone rules on purpose: they set a stroke at the same
-   specificity, so source order is what decides. */
-/* And no fill unless a tone asked for one. An SVG rect with no fill property
-   is black, and this one is emitted in every frame of any edge that is ever
-   given a tone - so without this rule an edge whose label gains a ground in
-   beat 3 draws a black slab across its own line in beats 1 and 2. Exactly the
-   rule the free text's ground already needs, for exactly the same reason. */
 .psi-diagram .dg-edge:not(.tone-1):not(.tone-2):not(.tone-3):not(.tone-4):not(.paper) > rect { fill: none; }
-
-/* The two stroke patterns, stated as multiples of the line they pattern
-   rather than as pixels. --dg-sw is set beside every stroke-width above, on
-   the same element and by the same selector, so a .thick outline gets a
-   longer dash instead of the same dash on a fatter line - which is what 6 4
-   was: 4.3 line-widths of ink and 2.9 of paper at the normal weight, and a
-   dashed box then drew the eye harder than the solid one beside it. It also
-   stumbled at the corners: on a 13px .round corner a 10px period puts one or
-   two dashes on the whole arc, so a gap landing on the apex reads as a
-   chipped box. 2.2 and 1.5 halve the period, which does not divide a
-   perimeter evenly either - nothing does, in general - but a small dash with
-   a small gap hides the seam instead of announcing it.
-   Butt caps, deliberately: a round cap adds half a line-width of ink at each
-   end and would put the dash back where it started. */
 .psi-diagram .dashed > :is(rect, circle, .dg-shape), .psi-diagram .dashed .dg-stroke {
   stroke-dasharray: calc(var(--dg-sw, 1.4px) * 2.2) calc(var(--dg-sw, 1.4px) * 1.5);
 }
-/* Dots, and they have to be round dots or the word means nothing: a zero-
-   length dash under a round cap draws a disc one line-width across, and the
-   gap is 2.5 of those. It used to be 1.5 3.5 with the round cap on top, which
-   is a 2.9px dash at the normal weight - a fine dashed line under another
-   name - and at .thick a 4.1px dash with 0.9px of paper between, so the
-   dotted box in the class catalogue was very nearly solid. */
 .psi-diagram .dotted > :is(rect, circle, .dg-shape), .psi-diagram .dotted .dg-stroke {
   stroke-dasharray: 0 calc(var(--dg-sw, 1.4px) * 2.5); stroke-linecap: round;
 }
-/* A muted dot is a plain dot in the muted ink, never a smaller one. .muted
-   thins a line to 1.05 so that scaffolding reads as scaffolding, and a dot
-   is one line-width across - so .dotted .muted drew discs of 1.9px at a
-   typical figure scale, anti-aliased below their own colour: the peak pixel
-   reached 2.56:1 on the light themes where a solid muted line reaches 2.76,
-   and a band across the line carried a quarter of a muted line's ink or
-   less on all seven themes. The floor is the plain weight, so the pattern
-   is exactly .dotted's and only the ink is quieter, and the gap is stated
-   against the floored width so the dots keep their 2.5 line-widths of
-   paper. max() rather than a fixed 1.4: a .thick or .emph line keeps the
-   2.6 it set. A plot's grid is this pair, written by the compiler. */
 .psi-diagram .muted.dotted > :is(rect, circle, .dg-shape), .psi-diagram .muted.dotted .dg-stroke {
   stroke-width: max(var(--dg-sw), 1.4px);
   stroke-dasharray: 0 calc(max(var(--dg-sw), 1.4px) * 2.5);
@@ -2310,139 +1455,39 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
 .psi-diagram .round > rect { rx: 13px; }
 .psi-diagram .sharp > rect { rx: 0; }
 .psi-diagram .bold text { font-weight: 600; }
-/* the upright serif, for a label that wants the reading voice rather than
-   the diagram's. .hand is the same family forced italic and accented, which
-   is the annotation voice and a different thing – until .serif existed the
-   family was reachable only through it. */
 .psi-diagram .serif text { font-family: var(--dg-serif); }
-/* no handwriting face is bundled, so the annotation voice is the serif in
-   italic – close enough to read as "written in beside the diagram", and it
-   costs no extra font payload. */
 .psi-diagram .hand text { font-family: var(--dg-serif); font-style: italic; fill: var(--emph); }
-
-/* .ghost and .dim deliberately do NOT set opacity on the group here.
-   Visibility and the two softening classes share one channel, and author CSS
-   beats a presentation attribute – so an element pinned at 0.45 by this
-   stylesheet could never be hidden, and its show step did nothing at all.
-   Both the emitter and the runtime resolve that channel once, in
-   dgOpacity().
-
-   What the two rules below touch is a *child* of the group, which is a
-   different thing and safe for the same reason: the alphas multiply, so a
-   hide still takes the whole element to zero. They exist because one alpha
-   over a whole group fades the words as hard as the box, and a word at 0.3
-   is not quiet but unreadable – 1.95:1 against its own fill on the paper,
-   1.88:1 standing on a .tone-3 area. dgOpacity() now returns the *ink*
-   number and these put the ground back where it was: 0.6 x 0.5 is the 0.3
-   that was there before, 0.75 x 0.6 the 0.45, so every existing figure's
-   outline, fill, stroke, arrowhead and picture are unmoved to the pixel and
-   only the type gains. The factors come from DG_SOFT_GROUND rather than
-   being typed here twice.
-
-   Type is what is deliberately NOT in the selector lists. Everything else a
-   softened element can draw is. */
 .psi-diagram .dim > :is(rect, circle, .dg-shape, image),
 .psi-diagram .dim .dg-stroke,
 .psi-diagram .dim .dg-head { opacity: 0.5000; }
 .psi-diagram .ghost > :is(rect, circle, .dg-shape, image),
 .psi-diagram .ghost .dg-stroke,
 .psi-diagram .ghost .dg-head { opacity: 0.6000; }
-/* emph / dim are what a step reaches for; both stay inside the palette */
 .psi-diagram .emph > :is(rect, circle, .dg-shape) { stroke: var(--emph); --dg-sw: 2.6px; stroke-width: var(--dg-sw); }
 .psi-diagram .emph .dg-stroke { stroke: var(--emph); --dg-sw: 2.6px; stroke-width: var(--dg-sw); }
 .psi-diagram .emph .dg-head { fill: var(--emph); }
-/* A chart's column: what it is filled with, and what emph does to it. A
-   column draws no outline, so paper would make it vanish and there is nothing
-   but its fill to emphasise; the rules come from DG_BAR_FILLS in
-   diagram-core, which is also what the linter reads when it says a column is
-   too pale for a theme - one table, so the warning is about the colour that
-   is drawn. The block sits after the box tones on purpose: a column's tone
-   rule is one class more specific and has to win. */
 .psi-diagram .dg-bar > rect { fill: color-mix(in oklab, var(--ink) 55%, var(--dg-ground, var(--paper))); }
 .psi-diagram .dg-bar.tone-1 > rect { fill: color-mix(in oklab, var(--emph) 70%, var(--dg-ground, var(--paper))); }
 .psi-diagram .dg-bar.tone-2 > rect { fill: color-mix(in oklab, var(--ink) 45%, var(--dg-ground, var(--paper))); }
 .psi-diagram .dg-bar.tone-3 > rect { fill: color-mix(in oklab, var(--ink) 68%, var(--dg-ground, var(--paper))); }
 .psi-diagram .dg-bar.emph > rect { fill: var(--emph); stroke: none; }
 .psi-diagram .dg-bar.tone-4.emph > rect { stroke: none; }
-/* Words are the third thing emphasis can act on, and leaving them out left the
-   emph verb on a text accepted and completely inert - the ground rule at the
-   foot of this stylesheet refuses to stroke a label's rect, deliberately and
-   for good reason, so on a text the two rules above have nothing to reach.
-   That is not a corner case: the per-message tag a sequence generates is
-   documented as the way to address one message, and it holds the arrow *and*
-   its number *and* its second line, so the commonest emphasis in a protocol
-   figure is a mixed set by construction. The .accent text rule two blocks up
-   is the same act on the same channel and was already written this way.
-   .tone-4 inverts its own label, and has to keep winning here exactly as it
-   does over .accent text; one class more in the selector settles it rather
-   than source order, which is the guard the stroke case below already uses.
-   (No backticks in here: this whole stylesheet is a template literal.) */
 .psi-diagram .emph text { fill: var(--emph); font-weight: 600; }
 .psi-diagram .tone-4.emph text, .psi-diagram .tone-4.emph tspan { fill: var(--paper); }
-/* .tone-4 fills with the accent, so an emphasis stroke in the accent lands
-   invisibly on it: emph on such a box resolved, set its width and changed
-   nothing on screen - the silent no-op again, arriving through the stylesheet
-   rather than through the grammar. Inverted the way .tone-4's own label
-   already is, and for the same reason. Higher specificity than the rule above,
-   so source order does not decide it. (No backticks in here: this whole
-   stylesheet is a template literal, and one would end it.) */
 .psi-diagram .tone-4.emph > :is(rect, circle, .dg-shape) { stroke: var(--ink); }
-/* emph acts in the prominence slot and .bare in the stroke-weight slot, so
-   neither may overwrite the other - and until this rule the emphasis stroke
-   two blocks up put the outline back on an element that had just taken it
-   off, at the same specificity and later in source order. On a table of type
-   on the paper (.bare .clear cells are the spelling for that) a lit row came
-   out as a row of red empty rectangles that the room reads as a form. So on
-   a .bare element emph emphasises the *ink* - the accent fill and the weight
-   the .emph text rule above already give a free text - and draws no outline.
-   That is the same correction DG_BAR_FILLS makes one channel along, where
-   emph on a column is a solid accent fill rather than the accent outline it
-   is on every other shape: emphasis has to act on whatever the element
-   actually draws. Three classes in the selector, and written after the
-   .tone-4.emph rule, so it wins where an element carries both. */
 .psi-diagram .bare.emph > :is(rect, circle, .dg-shape) { stroke: none; }
-
-/* A label's ground is never stroked, and this is where that has to be said.
-   It was written up with the two rules that create the ground, above the
-   tone rules that stroke - and .emph and .accent both set a stroke on the
-   same child selector at the very same specificity, so source order decided
-   it and they won. The result was a box drawn around a label the moment a step
-   emphasised it: on a sequence, where every message label now carries a
-   ground, emph @wa-msg-8 framed the words instead of thickening the arrow.
-   A bordered label is a box, and there is a statement for that. */
 .psi-diagram .dg-text > :is(rect, circle, .dg-shape) { stroke: none; }
 .psi-diagram .dg-edge > :is(rect, circle, .dg-shape) { stroke: none; }
-
-/* An edge label its own line runs through. The compiler decides it from the
-   routed geometry and writes dg-halo into the beat's class string; this is
-   what the word means. The offset that lifts a label off its line clears it
-   at the *midpoint*, and an elbow's two outer runs, a doubled-back via route
-   and a curve that comes back on itself are all somewhere else on the same
-   path - so a label can be correctly beside the line it labels and still have
-   another stretch of that same line drawn through the middle of it, which the
-   room reads as struck through.
-
-   paint-order and not a rect, because a rect is as wide as the whole run
-   where the crossing is one word long, and on a curve that erases the arc the
-   label belongs to. The stroke is the paper, so it knocks out the glyph
-   shapes and nothing else. Written after every rule that sets a text fill, so
-   a muted or accented label keeps its own colour and only gains the knockout.
-
-   3.2px against a 1.4 line: the stroke is centred on the glyph outline, so
-   half of it is inside the letters and the gap the line sees is about 1.6px
-   each side. Less and a 1.4 stroke still touches the serifs. */
 .psi-diagram .dg-halo text {
   paint-order: stroke fill;
   stroke: var(--paper);
   stroke-width: 3.2px;
   stroke-linejoin: round;
 }
-
 .dg-hint { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .psi-diagram .dg-el { transition: none; }
 }
-
 
 pulse-question, pulse-deck, pulse-summary {
   --pulse-accent: var(--emph);
@@ -4058,8 +3103,7 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
 </section>
 <pulse-summary></pulse-summary>
 </main>
-<script>
-(() => {
+<script>(() => {
   const SEL = 'figure.figure-img, figure.figure-diagram, main pre, main .math-display';
   const MIN = 0.5, MAX = 8, K = 0.01, STEP = 12, QUIET = 160;
   const box = document.createElement('div');
@@ -4090,8 +3134,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     card.removeAttribute('id');
     card.classList.add('lb-card');
     card.style.transform = '';
-    // A picture would start the browser's own drag of the image, which ends
-    // the pan after its first move.
     for (const i of card.querySelectorAll('img')) i.draggable = false;
     box.replaceChildren(card);
     scale = 1; pan = { x: 0, y: 0 };
@@ -4115,7 +3157,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
   document.addEventListener('click', (e) => {
     if (card) return;
     if (e.defaultPrevented || e.button !== 0) return;
-    // A link inside a figure or a selection being made stays what it was.
     if (e.target.closest('a, video, iframe, button')) return;
     const sel = window.getSelection && window.getSelection();
     if (sel && !sel.isCollapsed && String(sel).trim()) return;
@@ -4136,9 +3177,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     quiet = setTimeout(() => document.body.classList.remove('lb-zooming'), QUIET);
     zoomAt(Math.exp(-dy * K), { x: e.clientX, y: e.clientY });
   }, { passive: false });
-  // Pointer events cover mouse, pen and touch; two fingers on a touchscreen
-  // pinch, one drags. A press that never moves more than 3 px is a click,
-  // and a click closes.
   const pts = new Map();
   let drag = null, pinch = null;
   box.addEventListener('pointerdown', (e) => {
@@ -4178,8 +3216,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     pts.delete(e.pointerId);
     if (pinch) {
       if (pts.size < 2) { pinch = null; document.body.classList.remove('lb-zooming'); }
-      // The finger left behind drags on from where it is, and must not count
-      // as a click on its way up.
       if (pts.size === 1) {
         const [p] = [...pts.values()];
         drag = { x: p.x, y: p.y, px: pan.x, py: pan.y, moved: true };
@@ -4916,8 +3952,7 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
 })();
 </script>
 <script type="application/json" id="psiINT-reader-data">{"key":"tutorial@7f0951ad","name":"tutorial","title":"psi-slides – a guided tour","s":{"reader-close":"Close contents","reader-mark":"Highlight","reader-note":"Note (optional)","reader-remove":"Remove","reader-removed":"Highlight removed.","reader-undo":"Undo","reader-orphans":"No longer found in this version","reader-orphan-remove":"remove","reader-session":"This browser does not let the page save highlights – they are lost when the tab is closed.","reader-nav":"Highlights","reader-prev":"Previous highlight","reader-next":"Next highlight","reader-filter-all":"all","reader-filter-notes":"with note","reader-export":"Export highlights (.md)","reader-import":"Import","reader-delete-all":"Delete all","reader-help":"About highlights","reader-help-what":"Select words to highlight them and add a note. Figures, diagrams, images, code and formulas have a button in their corner that marks them whole; open a figure to mark a spot in it.","reader-help-keys":"On a keyboard: n and p step through the highlights, m marks a spot in an open figure.","reader-help-where":"Highlights and notes are stored only in this browser, on this device.","reader-help-risk":"That storage can be lost: clearing site data or closing a private window deletes it, and browsers may delete it on their own – Safari, notably on iPhone and iPad, after seven days of Safari use in which this page was not used.","reader-help-backup":"So export regularly, as a backup: the export is a readable .md file, and importing it brings the highlights back – here, in another browser or on another device.","reader-fold":"Slides in this part","reader-export-file":"highlights","reader-export-line":"Exported on {date}. Highlights: {n}, with a note: {notes}.","reader-imported":"Imported: {added} new, {updated} updated, {orphaned} not found in this version.","reader-import-none":"This file holds no highlights.","reader-import-skipped":"Entries that could not be read: {n}.","reader-deleted-all":"All highlights deleted.","reader-fig-mark":"Highlight this figure","reader-lb-spot":"Mark a spot","reader-lb-close":"Close","reader-fig":"Figure “{key}”","reader-fig-at":"Figure “{key}”, at “{label}”","reader-fig-spot":"Figure “{key}”, a spot in it","reader-fig-approx":"Approximate: that part is no longer in this version of the figure.","reader-code-mark":"Highlight this code","reader-formula-mark":"Highlight this formula","reader-code":"Code, line {line}","reader-code-block":"Code “{key}”","reader-formula":"Formula “{key}”"}}</script>
-<script>
-(() => {
+<script>(() => {
   const body = document.body;
   const nav = document.getElementById('psiINT-reader-contents');
   const main = document.querySelector('main');
@@ -4938,15 +3973,10 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
   };
   const overlay = window.matchMedia('(max-width: 1215.98px)');
   let tops = [], current = null, stale = true, queued = false, placed = false;
-
   const measure = () => {
     const y = window.scrollY;
     tops = targets.map(t => t ? t.getBoundingClientRect().top + y : Infinity);
   };
-  // Keep the marked entry inside the list's own scroll box - near an edge as
-  // the reader scrolls, in the middle when the sidebar is opened over the
-  // page. Adjusts the box and never the page, which scrollIntoView would
-  // also move.
   const list = nav.querySelector('.rd-list') || nav;
   const reveal = (a, centre) => {
     if (!a) return;
@@ -4968,8 +3998,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     if (next) next.setAttribute('aria-current', 'location');
     const g = next && next.closest('.rd-group');
     if (g !== reading) { reading = g || null; handClosed = null; fold(); }
-    // The first entry marked is centred - a page opened at a #hash or
-    // restored half-way down - and every later one only kept in view.
     current = next;
     reveal(current, !placed);
     if (current) placed = true;
@@ -5003,15 +4031,11 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
   if (window.ResizeObserver) new ResizeObserver(() => schedule(true)).observe(main);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => schedule(true));
   schedule(true);
-
-  // ── the sidebar over the page, below the wide layout ──
   const isOpen = () => body.classList.contains('rd-open');
   const setOpen = (on, refocus) => {
     body.classList.toggle('rd-open', on);
     if (toggle) toggle.setAttribute('aria-expanded', on ? 'true' : 'false');
     if (on) {
-      // Opened over the page, the part being read is open whatever the
-      // reader did to it the last time.
       if (handClosed) { handClosed = null; fold(); }
       reveal(current, true);
       const first = current || nav.querySelector('a');
@@ -5038,7 +4062,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
   const onWidth = () => { if (!overlay.matches && isOpen()) setOpen(false, false); };
   if (overlay.addEventListener) overlay.addEventListener('change', onWidth);
 })();
-
 (() => {
   const body = document.body;
   const main = document.querySelector('main');
@@ -5048,42 +4071,16 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
   try { data = JSON.parse(dataEl.textContent) || {}; } catch (e) { return; }
   const S = data.s || {};
   const KEY = 'psi-reader:v1:' + (data.key || 'lecture');
-  // The key up to this version: the source folder's name alone, which two
-  // lectures in two week1 folders shared - one store, each lecture's
-  // highlights listed as not found in the other. While the new key is empty,
-  // the entries of the old store whose slide is in this document are copied
-  // to it, and only those: copying the whole store gave each of the two
-  // lectures the other's highlights, listed at the foot as not found. The
-  // old store is left as it is, so the other lecture finds its own there and
-  // a document built before still finds everything.
   const LEGACY = 'psi-reader:v1:' + (data.name || 'lecture');
   const foot = document.querySelector('[data-reader-slot=tools]');
   const narrowMq = window.matchMedia('(max-width: 919.98px)');
   const WS = /\s/;
   const SHY = '\u00ad';
   const UI = '[data-rd-ui]';
-  // Not the author's running text: the build's own marks, the notes, and
-  // the things a click opens in the lightbox. A figure goes whole - its
-  // caption with it - and has highlights of its own; so does a code block,
-  // whose words are anchored in the block's own text, so that marking code
-  // moves no offset of a slide's prose.
   const SKIP = UI + ', .speaker-note, pulse-question, pulse-deck, pulse-summary, .chunk-num, .chunk-label, .psi-diagram, figure, '
     + '.katex, .math-display, pre, button, script, style, svg, video, iframe, textarea';
-  // A whitespace node that is a child of one of these sits between two
-  // blocks, and a mark round it would be an inline box in a block's place.
   const BLOCKISH = /^(UL|OL|DL|TABLE|THEAD|TBODY|TFOOT|TR|SECTION|ARTICLE|DIV|BLOCKQUOTE|MAIN|ASIDE|NAV|HEADER|FOOTER)$/;
-
-  // ── storage ──
   let persistent = true;
-  // An entry's type and a block's kind are looked up in tables, and a name
-  // every object inherits - constructor, __proto__, toString - found
-  // Object's own members there: a painter that was a function, a selector
-  // that was an object. The entry threw in place() after it was stored, and
-  // placeAll() threw on every load after it. Such a name is refused here,
-  // so it is never stored; a type this build does not know is still kept,
-  // because a later version may paint it. So is any field read as text that
-  // is not text: an object with no usable toString throws wherever it is
-  // turned into a string - a quote, a note, a figure's key, a part's name.
   const inherited = (v) => v != null && (typeof v !== 'string' || v in Object.prototype || v === '__proto__');
   const isText = (v) => v == null || typeof v === 'string';
   const rec = (v, keys) => v == null || (typeof v === 'object' && !Array.isArray(v) && keys.every(k => isText(v[k])));
@@ -5117,8 +4114,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
   };
   let store = load();
   const byId = (id) => store.find(h => h.id === id) || null;
-
-  // ── reader text ──
   const rootOf = (node) => {
     const el = node && (node.nodeType === 1 ? node : node.parentElement);
     if (!el || !main.contains(el) || el.closest(UI)) return null;
@@ -5138,9 +4133,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     return out;
   };
   const joined = (nodes) => nodes.map(t => t.data).join('');
-  // The reader-text offset of a DOM boundary point. A point inside a skipped
-  // element counts the text before it, so a selection that starts in a code
-  // block starts after it and one that ends in a figure ends before it.
   const offsetOf = (nodes, node, off) => {
     const r = document.createRange();
     r.setStart(node, off);
@@ -5159,8 +4151,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     prefix: text.slice(Math.max(0, s - 32), s),
     suffix: text.slice(e, e + 32),
   });
-
-  // ── anchoring (plan §4) ──
   const norm = (str) => {
     let out = '', sp = true;
     const map = [];
@@ -5183,9 +4173,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     const nodes = texts(root);
     return anchorIn(h, joined(nodes), { root, nodes });
   };
-  // Where a quote stands in a text: at its offsets, else anywhere (the
-  // surrounding words decide between several), else with whitespace and
-  // soft hyphens folded. Adds s, e and text to what it is given.
   const anchorIn = (h, text, base) => {
     const quote = String(h.quote || '');
     if (!quote.trim()) return null;
@@ -5232,30 +4219,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     }
     return marks;
   };
-  // ── figures (plan §11) ──
-  // A figure is a raster or an inlined vector in figure.figure-img, or a
-  // ::: draw in figure.figure-diagram; a clip, an embed, code and formulas are
-  // not. It is found again by its key - a diagram's label, an image's alt
-  // text, else its file name - within its slide, and by its place among the
-  // slide's figures when the key has changed; several with one key (two
-  // diagrams under one heading) are told apart by that place.
-  //
-  // An entry marks the whole figure (at is null) or a spot in it: fractions
-  // of the drawing's box - the viewBox of a vector, the picture of a raster -
-  // and on a diagram the author's name for the part under the pointer as
-  // well, since that survives a rebuild that moves the part and the fractions
-  // do not. The name is kept without the dg<N>- the build prefixes it with,
-  // which counts figures from the top of the document and moves when one is
-  // added above. A part that is gone leaves the pin at the fractions, and
-  // the card says it is approximate.
-  //
-  // What is drawn is drawn in the figure's own coordinates - a group in the
-  // SVG, or a layer over the picture positioned in per cent - so the same
-  // pin stands in the right place in the document, in the lightbox's copy
-  // and on paper, with no layout of its own to keep up. A whole figure is a
-  // thin yellow frame; a spot is a small yellow dot, and the part a diagram
-  // pin is on is tinted with a class on its group. As with words, nothing is
-  // numbered on screen; on paper a figure with a note carries its number.
   const FIG = 'figure.figure-img:not(.figure-missing), figure.figure-diagram';
   const SVGNS = 'http://www.w3.org/2000/svg';
   const figsIn = (root) => [...root.querySelectorAll(FIG)].filter(f => !f.closest('#psiINT-lightbox, .speaker-note, ' + UI)
@@ -5274,8 +4237,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     const r = svg.getBoundingClientRect();
     return { x: 0, y: 0, w: svg.width.baseVal.value || r.width || 1, h: svg.height.baseVal.value || r.height || 1 };
   };
-  // A point on screen in the SVG's own units, through whatever the lightbox
-  // has scaled and moved it by.
   const toUser = (svg, x, y) => {
     const m = svg.getScreenCTM();
     if (!m) return { x: 0, y: 0 };
@@ -5293,15 +4254,14 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     return g.id && g.id.startsWith(pre) ? g.id.slice(pre.length) : g.id || '';
   };
   const partLabel = (g) => oneLine([...g.querySelectorAll('.dg-lbl')].map(t => t.textContent).join(' '));
-  const figs = new Map();     // id -> { fig, part, whole }: what a painted figure entry is on
-  const approx = new Set();   // ids whose part is gone
+  const figs = new Map();
+  const approx = new Set();
   const locateFig = (h) => {
     const root = document.getElementById(h.chunk);
     if (!root || !main.contains(root) || !root.matches('article.chunk, section.column')) return null;
     const f = h.fig || {};
     const all = figsIn(root);
     const keyed = f.key ? all.filter(x => figKey(x) === f.key) : [];
-    // An index that is not a number is no figure: all['length'] is a number.
     const at = Number.isInteger(f.index) ? all[f.index] : undefined;
     let fig = keyed.includes(at) ? at : keyed[0];
     if (!fig && at && figKind(at) === f.kind) fig = at;
@@ -5315,17 +4275,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     for (const k in attrs) e.setAttribute(k, attrs[k]);
     return e;
   };
-  // Draws one entry on a figure - the document's, or the lightbox's copy of
-  // it - with a dot the same few pixels wide in either, at the size the
-  // figure is drawn. Returns what stands for the entry
-  // in the page (the drawing for a whole figure, else its dot), the part a
-  // pin is on, and the number paper shows beside a whole figure.
-  //
-  // On screen, as with a text highlight, nothing is numbered: a whole figure
-  // is its frame, a spot an unnumbered yellow dot with a thin dark edge that
-  // reads on any drawing. On paper a figure with a note carries the note's
-  // number - a spot in its dot, which grows to hold it, a whole figure beside
-  // the frame's top right corner, towards the margin the note stands in.
   const drawFig = (h, fig) => {
     const d = drawingOf(fig);
     if (!d) return null;
@@ -5346,21 +4295,12 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     let vb = null, u = 1, layer = null;
     if (isSvg) {
       vb = vbOf(d);
-      // One CSS pixel of the figure as it is drawn, in the drawing's units.
       const w = d.getBoundingClientRect().width;
       u = w > 0 ? vb.w / w : Math.max(vb.w, vb.h) / 600;
       layer = d.querySelector(':scope > g.rd-pins');
       if (!layer) { layer = svgEl('g', { class: 'rd-pins', 'data-rd-ui': '' }); d.appendChild(layer); }
     }
     if (!a) {
-      // The frame is an element of its own, drawn where the pins are, and
-      // not an outline on the svg or the picture. WebKit drew an outline on
-      // an inline svg only where something else happened to repaint - the
-      // corner under the button - and left it standing there once removed;
-      // an element that is put in and taken out is repainted by every
-      // engine. On a vector it lies just inside the viewBox, whose margin
-      // keeps it clear of the ink, so nothing depends on how an engine
-      // paints past an svg's own box; round a picture it stands 3 px clear.
       fig.classList.add('rd-fig-whole');
       let badge, frame;
       if (isSvg) {
@@ -5399,8 +4339,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
       if (part) part.classList.add('rd-el');
       disc = svgEl('g', { class: 'rd-pin', 'data-rd-ui': '', transform: 'translate(' + x.toFixed(2) + ' ' + y.toFixed(2) + ')',
         style: '--rd-r: ' + (4.5 * u).toFixed(2) + 'px; --rd-rp: ' + (7.5 * u).toFixed(2) + 'px' });
-      // A ring three times the dot's size takes the click, which a dot of
-      // nine pixels would make a game of aim.
       disc.appendChild(svgEl('circle', { class: 'rd-hit', r: (13 * u).toFixed(2) }));
       disc.appendChild(svgEl('circle', { class: 'rd-dot', r: (4.5 * u).toFixed(2), 'stroke-width': (1.2 * u).toFixed(2) }));
       disc.appendChild(svgEl('text', { class: 'rd-pin-p', 'text-anchor': 'middle', 'dominant-baseline': 'central',
@@ -5423,8 +4361,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     disc.dataset.hl = h.id;
     return { disc, part, badge: null };
   };
-  // Takes everything the reader drew off a figure: the lightbox's copy before
-  // it is drawn again, and a document figure whose last entry has gone.
   const stripFig = (fig) => {
     for (const n of fig.querySelectorAll(UI)) n.remove();
     for (const b of fig.querySelectorAll('.rd-fig-box')) { while (b.firstChild) b.before(b.firstChild); b.remove(); }
@@ -5441,8 +4377,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     if (h.at && h.at.el && !got.part) approx.add(h.id);
     return [got.disc];
   };
-  // What is left on a figure once one of its entries has gone - with none
-  // left, nothing: no frame, tint, layer, wrapper or class.
   const refreshFig = (fig) => {
     const on = [...figs.values()].filter(v => v.fig === fig);
     fig.classList.toggle('rd-fig-whole', on.some(v => v.whole));
@@ -5454,8 +4388,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
       b.remove();
     }
   };
-  // A whole figure's frame is one of its marks, as a spot's dot is, so the
-  // two go the same way.
   const unpaintFig = (id) => {
     const v = figs.get(id);
     if (v && v.badge) v.badge.remove();
@@ -5464,7 +4396,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     approx.delete(id);
     if (v) refreshFig(v.fig);
   };
-  // The words a card and the export name a figure entry by.
   const figPhrase = (h) => {
     const f = h.fig || {};
     const key = oneLine(f.key) || String((+f.index || 0) + 1);
@@ -5475,15 +4406,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     }
     return fill(S['reader-fig-spot'], { key });
   };
-  // ── code blocks and display formulas ──
-  // Both open in the lightbox like a figure, and both can be marked whole
-  // from a button in their corner: a yellow frame, a card, and on paper the
-  // note's number on the frame. A code block also takes a text highlight,
-  // anchored like prose but in the block's own text - chunk, the block's
-  // place among the slide's code blocks and its first line as a key, then
-  // offsets, quote and context within that block - so that the offsets of a
-  // slide's prose, which leave code out, stay what they were. A formula takes
-  // no selection: KaTeX sets one glyph per box.
   const BLOCKS = Object.assign(Object.create(null), { code: 'pre', formula: '.math-display' });
   const blocksIn = (root, kind) => [...root.querySelectorAll(BLOCKS[kind] || 'x-none')]
     .filter(b => !b.closest('#psiINT-lightbox, .speaker-note, pulse-question, pulse-deck, ' + UI) && (root.tagName !== 'SECTION' || !b.closest('article.chunk')));
@@ -5518,7 +4440,7 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     const now = { kind: b.kind, index: all.indexOf(el), key: blockKey(el) };
     return { root, el, update: now.index === b.index && now.key === b.key ? null : { block: now } };
   };
-  const blocks = new Map();   // id -> { el, badge }: a block marked whole
+  const blocks = new Map();
   const locateBlock = (h) => findBlock(h);
   const paintBlock = (h, at) => {
     at.el.classList.add('rd-block-whole');
@@ -5536,8 +4458,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     v.badge.remove();
     if (![...blocks.values()].some(x => x.el === v.el)) v.el.classList.remove('rd-block-whole', 'is-focus', 'rd-has-note');
   };
-  // Code text: the block is found as above and the quote in its text; the
-  // marks are laid round each text node a Shiki token holds, as in prose.
   const locateCode = (h) => {
     const f = findBlock(h);
     if (!f) return null;
@@ -5546,7 +4466,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     if (at && f.update) at.update = f.update;
     return at;
   };
-  // The words a card and the export name such an entry by.
   const whatOf = (h) => {
     if (h.type === 'figure') return figPhrase(h);
     const b = h.block || {};
@@ -5566,12 +4485,8 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     block: { locate: locateBlock, paint: paintBlock },
     code: { locate: locateCode, paint: paintText },
   });
-
-  // ── painting ──
-  const marksOf = new Map();   // id -> the elements its painter drew
+  const marksOf = new Map();
   const orphans = new Set();
-  // A figure's drawing is taken off by its own painter; a text highlight is
-  // unwrapped. Asked by id, because a removed entry has left the store.
   const unpaint = (id) => {
     if (figs.has(id)) { unpaintFig(id); marksOf.delete(id); return; }
     if (blocks.has(id)) { unpaintBlock(id); marksOf.delete(id); return; }
@@ -5588,19 +4503,14 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     const has = !!(h.note && h.note.trim());
     for (const m of marksOf.get(h.id) || []) m.classList.toggle('rd-has-note', has);
   };
-  // Places one entry; true when its anchor moved and the store should be
-  // written back. An entry a painter throws on is listed as not found rather
-  // than thrown: placeAll() runs on every load, and one entry that throws
-  // there used to leave every entry after it unpainted for good.
   const place = (h) => {
     try { return placeOne(h); } catch (e) {
-      try { unpaint(h.id); } catch (e2) { /* nothing was drawn */ }
+      try { unpaint(h.id); } catch (e2) { }
       orphans.add(h.id);
       return false;
     }
   };
   const placeOne = (h) => {
-    // Placed twice, an entry would be drawn twice and taken off once.
     if (marksOf.has(h.id)) unpaint(h.id);
     orphans.delete(h.id);
     const kind = KINDS[h.type || 'text'];
@@ -5624,8 +4534,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     for (const h of store) if (place(h)) moved = true;
     if (moved) save();
   };
-
-  // ── the cards ──
   const layer = document.createElement('div');
   layer.className = 'rd-notes';
   layer.setAttribute('data-rd-ui', '');
@@ -5656,19 +4564,13 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     ta.value = h.note || '';
     const acts = document.createElement('div');
     acts.className = 'rd-actions';
-    // One action: remove takes the note with it, and emptying the field is
-    // how a note alone goes.
     acts.append(button('rd-remove', S['reader-remove'] || ''));
-    // A figure's card says which figure, and where in it: the page beside
-    // it has no yellow words to say so.
     if (h.type === 'figure' || h.type === 'block' || h.type === 'code') {
       const what = document.createElement('p');
       what.className = 'rd-card-what';
       card.appendChild(what);
     }
     card.append(ta, acts);
-    // Over the lightbox, a press on the card is the card's and not the start
-    // of a drag, nor a click that closes the overlay.
     card.addEventListener('pointerdown', (e) => e.stopPropagation());
     cards.set(h.id, card);
     return card;
@@ -5691,9 +4593,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     cards.delete(id);
   };
   const shown = (h) => marksOf.has(h.id) && (h.id === focused || !!(h.note && h.note.trim()));
-  // Narrow, the card stands under the block that holds the highlight - in a
-  // list item, inside it; in a table, after the table - and only while the
-  // highlight is the one being read.
   const placeInline = (card, h) => {
     const m = (marksOf.get(h.id) || [])[0];
     if (!m) return;
@@ -5728,9 +4627,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
       let floor = -Infinity;
       for (const it of items) { it.top = Math.max(it.want, floor); floor = it.top + it.h + gap; }
     };
-    // The card being read stands level with its highlight; the others make
-    // way for it, upwards and downwards, and only where there is no room
-    // above does it give up its place.
     const fi = items.findIndex(it => it.id === focused);
     if (fi < 0) forward();
     else {
@@ -5747,19 +4643,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     }
     for (const it of items) it.card.style.top = Math.round(it.top) + 'px';
   };
-  // ── paper (plan §6) ──
-  // What a printed page carries for a highlight with a note: a number after
-  // its last word and the note in the outer margin, numbered in the page's
-  // order. Both are written into the text and hidden on screen, rebuilt on
-  // every layout, so a printout is always the page as it stands and no
-  // print event has to be caught. Where the note goes is decided here, on
-  // the screen's layout, which is the document's own: the column is one
-  // measure in both media, and only its width differs.
-  // A note is set at the line its highlight starts on when every block
-  // between that line and the slide runs to the column's right edge in
-  // plain block flow; otherwise before the outermost block that does not -
-  // a table, a lede narrower than the column, a card in a grid - because a
-  // float inside such a block would stand inside it.
   const paperNodes = [];
   const inFlow = (el) => {
     const cs = getComputedStyle(el);
@@ -5780,9 +4663,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     while (i > 0 && inFlow(blocks[i - 1]) && Math.abs(blocks[i - 1].getBoundingClientRect().right - right) < 1.5) i--;
     return { before: i ? blocks[i - 1] : m };
   };
-  // A figure's number is in its dot, or beside the frame of a figure or a
-  // block marked whole, so it gets no superscript; its note stands level
-  // with the top of the figure or the block.
   const paper = () => {
     for (const n of paperNodes) n.remove();
     paperNodes.length = 0;
@@ -5859,7 +4739,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
   if (narrowMq.addEventListener) narrowMq.addEventListener('change', schedule);
   if (window.ResizeObserver) new ResizeObserver(schedule).observe(main);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(schedule);
-
   const setFocus = (id, opts = {}) => {
     if (focused !== id) {
       for (const m of marksOf.get(focused) || []) m.classList.remove('is-focus');
@@ -5873,8 +4752,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     else if (opts.card) card.focus({ preventScroll: true });
     if (opts.reveal) card.scrollIntoView({ block: 'nearest' });
   };
-
-  // ── the undo notice ──
   let toastEl = null, toastTimer = 0, undoFn = null;
   const hideToast = () => { if (toastEl) toastEl.hidden = true; undoFn = null; clearTimeout(toastTimer); };
   const toast = (msg, undo) => {
@@ -5895,13 +4772,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     clearTimeout(toastTimer);
     toastTimer = setTimeout(hideToast, 5000);
   };
-
-  // ── the way through them: the pill, n and p, the counts in the contents ──
-  // The route is every entry a painter placed, in the order its first painted
-  // element stands in the page. Ordering by element rather than by chunk and
-  // offset is what lets a figure's highlight (plan §11) join the same route
-  // with nothing here changed: its painter hands back elements as well. An
-  // entry that could not be placed is in the sidebar's foot, not on the route.
   const hasNote = (h) => !!(h.note && h.note.trim());
   const FOLLOWS = Node.DOCUMENT_POSITION_FOLLOWING;
   const ordered = () => store.filter(h => marksOf.has(h.id))
@@ -5909,7 +4779,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     .sort((a, b) => a.el === b.el ? 0 : (a.el.compareDocumentPosition(b.el) & FOLLOWS ? -1 : 1));
   let onlyNotes = false;
   const route = () => ordered().filter(x => !onlyNotes || hasNote(x.h));
-
   const pill = document.createElement('div');
   pill.className = 'rd-nav';
   pill.setAttribute('data-rd-ui', '');
@@ -5934,15 +4803,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
   filter.append(allBtn, notesBtn);
   pill.append(prevBtn, posEl, nextBtn, filter);
   body.appendChild(pill);
-
-  // The menu in the sidebar's foot. Built once rather than with the list of
-  // lost highlights under it, so a button keeps the focus through a redraw.
-  // Export and delete all stand only while there is something to export or
-  // delete; import and the ? beside it stand always, because a reader in a
-  // new browser has nothing yet and every reason to import. The ? opens four
-  // lines: what the tools are, where highlights are kept, why that storage
-  // is fragile and why the export is the backup. They stood open under the
-  // buttons at first and were in the way of a reader who had read them once.
   const menu = document.createElement('div');
   menu.className = 'rd-menu';
   menu.setAttribute('data-rd-ui', '');
@@ -5986,10 +4846,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
   menu.append(menuActs, helpEl, reportEl, fileIn);
   if (foot) foot.appendChild(menu);
   const setReport = (msg) => { reportEl.textContent = msg || ''; reportEl.hidden = !msg; };
-  // Opened by the ? and closed by it again, by Esc, or by a click anywhere
-  // else. It opens with the focus on it, so a screen reader reads the four
-  // lines, and Esc hands the focus back to the button; a click elsewhere
-  // leaves the focus where that click put it.
   const setHelp = (on, refocus) => {
     helpEl.hidden = !on;
     helpBtn.setAttribute('aria-expanded', on ? 'true' : 'false');
@@ -6002,17 +4858,12 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     if (helpEl.hidden || !e.target.closest || e.target.closest('.rd-help, .rd-help-btn')) return;
     setHelp(false, false);
   }, true);
-  // Ahead of the sidebar's own Esc, which would close the overlay with it.
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' || helpEl.hidden) return;
     e.preventDefault();
     e.stopPropagation();
     setHelp(false, true);
   }, true);
-
-  // The count beside a contents entry: the slide's own highlights, and on a
-  // part's heading those of its lede. Every highlight, whatever the filter
-  // says - the filter is a way through the page, the count is what is in it.
   const countLinks = [...document.querySelectorAll('#psiINT-reader-contents a[data-rd], #psiINT-reader-contents a.rd-part')];
   const counts = () => {
     const n = new Map();
@@ -6026,9 +4877,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
       c.textContent = String(k);
       c.setAttribute('aria-label', (S['reader-nav'] || '') + ': ' + k);
     }
-    // A folded part says how many are in it, lede and slides together; the
-    // stylesheet shows this sum while the part is closed and the slides'
-    // own counts while it is open, so folding asks nothing of this script.
     for (const g of document.querySelectorAll('#psiINT-reader-contents .rd-group')) {
       const head = g.querySelector('.rd-part');
       if (!head) continue;
@@ -6043,13 +4891,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
       c.setAttribute('aria-label', (S['reader-nav'] || '') + ': ' + k);
     }
   };
-
-  // Stops at both ends rather than wrapping: a reader who presses n on the
-  // last highlight and lands on the first has lost their place in a document
-  // of forty pages, and a greyed arrow says where the end is. With none of
-  // them open, the way starts where the reader is - n takes the first below
-  // the top of the window, p the last above it - and with one open that the
-  // filter leaves out, from that one.
   const updateNav = () => {
     const all = ordered();
     pill.hidden = !all.length;
@@ -6090,8 +4931,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
   const setFilter = (on) => { onlyNotes = on; updateNav(); };
   allBtn.addEventListener('click', () => setFilter(false));
   notesBtn.addEventListener('click', () => setFilter(true));
-  // n and p: never while typing, never with a modifier (the browser's own
-  // shortcuts), and not while the lightbox or the contents lie over the page.
   document.addEventListener('keydown', (e) => {
     if ((e.key !== 'n' && e.key !== 'p') || e.defaultPrevented || e.isComposing) return;
     if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || pill.hidden) return;
@@ -6101,8 +4940,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     e.preventDefault();
     step(e.key === 'n' ? 1 : -1);
   });
-
-  // ── the sidebar's foot: what could not be placed, and the session notice ──
   const renderFoot = () => {
     if (!foot) return;
     for (const n of foot.querySelectorAll('.rd-hl-foot')) n.remove();
@@ -6142,21 +4979,14 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     }
     if (box.firstChild) foot.appendChild(box);
   };
-
-  // ── export, import, delete all (plan §5) ──
   const fill = (str, vals) => String(str || '').replace(/\{(\w+)\}/g, (m, k) => (k in vals ? String(vals[k]) : m));
   const oneLine = (t) => String(t || '').split(SHY).join('').replace(/\s+/g, ' ').trim();
-  // A heading's words without what the page adds to them: a formula's second,
-  // MathML copy, and the count this script puts beside a contents entry.
   const plain = (el) => {
     if (!el) return '';
     const c = el.cloneNode(true);
     for (const x of c.querySelectorAll('.katex-mathml, .rd-count, .rd-sum, .chunk-num, .chunk-label, [data-rd-ui]')) x.remove();
     return oneLine(c.textContent);
   };
-  // The heading a slide's highlights stand under: the number the page prints
-  // (none under slide-numbers: off), the slide's name as the contents list
-  // gives it, and the id - the one of the three a rebuild does not move.
   const slideLine = (chunk) => {
     const id = '{#' + chunk + '}';
     const root = document.getElementById(chunk);
@@ -6167,13 +4997,7 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     const num = body.dataset.slideNums !== 'off' && root.dataset.chunkNum ? root.dataset.chunkNum : '';
     return [num, name].filter(Boolean).join(' · ') + (num || name ? ' ' : '') + id;
   };
-  // The entry, whole, in a comment a Markdown reader does not show. Two
-  // hyphens in a row would end the comment early, and in this JSON they can
-  // only stand inside a string, where an escape reads back the same.
   const dataLine = (h) => '<' + '!-- psi-reader ' + JSON.stringify(h).replace(/--/g, '-\\u002d') + ' --' + '>';
-  // A figure entry is named rather than quoted - which figure, and the words
-  // on the part a pin is on - so that a lecturer reading the file sees what
-  // the reader pointed at and not a pair of fractions.
   const entryLines = (h) => {
     const out = [];
     const what = whatOf(h);
@@ -6219,8 +5043,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     setTimeout(() => URL.revokeObjectURL(url), 10000);
     setReport('');
   };
-  // Only the data comments are read. One that does not parse, or parses to
-  // something that is not an entry, is counted and skipped, never thrown.
   const readEntries = (text) => {
     const found = [];
     let bad = 0;
@@ -6291,15 +5113,11 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     r.onerror = () => setReport(S['reader-import-none'] || '');
     r.readAsText(f);
   });
-
-  // ── making, removing ──
   const newId = () => 'h-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const fromSelection = () => {
     const sel = window.getSelection && window.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
     const r = sel.getRangeAt(0);
-    // A selection belongs to the chunk it starts in and is clipped to it;
-    // one that starts in a code block, to that block.
     const root = rootOf(r.startContainer);
     if (!root) return null;
     const sn = r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentElement;
@@ -6325,11 +5143,8 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     const now = Date.now();
     const chunk = p.root.id;
     let s = p.s, e = p.e;
-    // In a code block: the same, in the block's own text.
     const code = p.pre ? { kind: 'code', index: blocksIn(p.root, 'code').indexOf(p.pre), key: blockKey(p.pre) } : null;
     const sameSpace = (h) => code ? h.type === 'code' && h.block && h.block.index === code.index : !h.type;
-    // A selection that touches or overlaps a highlight grows it rather than
-    // standing on top of it: one entry, the oldest id, the notes kept.
     const over = store.filter(h => sameSpace(h) && h.chunk === chunk && marksOf.has(h.id)
       && h.start <= e && h.end >= s);
     for (const h of over) { s = Math.min(s, h.start); e = Math.max(e, h.end); }
@@ -6373,14 +5188,12 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
       layout();
     });
   };
-  // ── the button at the end of a selection ──
   let markBtn = null, pending = null, pointerDown = false;
   const hideButton = () => { pending = null; if (markBtn) markBtn.hidden = true; };
   const showButton = (p) => {
     if (!markBtn) {
       markBtn = button('rd-mark-btn', S['reader-mark'] || '');
       markBtn.setAttribute('data-rd-ui', '');
-      // Pressing it must not take the selection it is about to mark.
       markBtn.addEventListener('pointerdown', (e) => e.preventDefault());
       markBtn.addEventListener('mousedown', (e) => e.preventDefault());
       markBtn.addEventListener('click', (e) => {
@@ -6401,8 +5214,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     let y = last.bottom + 6;
     if (y + h > window.innerHeight - pad) y = rects.length ? rects[0].top - h - 6 : last.top - h - 6;
     y = Math.max(pad, Math.min(window.innerHeight - h - pad, y));
-    // Not on top of the pill, which holds the corner a selection near the
-    // foot of the window would put it in: above the selection instead.
     if (!pill.hidden) {
       const pr = pill.getBoundingClientRect();
       if (x < pr.right && x + w > pr.left && y < pr.bottom && y + h > pr.top) {
@@ -6413,8 +5224,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     markBtn.style.top = Math.round(y + window.scrollY) + 'px';
   };
   const check = () => {
-    // A selection inside a note field is the field's, and rootOf refuses it:
-    // the cards are marked as the script's own.
     if (body.classList.contains('lb-open')) { hideButton(); return; }
     const p = fromSelection();
     if (p) showButton(p); else hideButton();
@@ -6431,13 +5240,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
   document.addEventListener('pointerup', () => { pointerDown = false; scheduleCheck(); }, true);
   document.addEventListener('pointercancel', () => { pointerDown = false; }, true);
   document.addEventListener('selectionchange', scheduleCheck);
-
-  // ── figures: the corner button, the dots, the lightbox (plan §11) ──
-  // A click on a figure opens the lightbox, as it did before. The two ways in
-  // stand beside that click rather than changing it: a button in the
-  // figure's corner that marks it whole, and in the lightbox, where the
-  // figure is large enough to point at, a spot. A click on a dot opens its
-  // card and nothing else.
   const newFig = (fig, at) => {
     const root = figRoot(fig);
     if (!root) return null;
@@ -6460,15 +5262,12 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     b.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      // Marked whole already: that entry's card, not a second frame.
       let h = store.find(x => { const v = figs.get(x.id); return v && v.whole && v.fig === fig; });
       if (!h) h = newFig(fig, null);
       if (h) setFocus(h.id, { edit: true, reveal: true });
     });
     fig.appendChild(b);
   }
-  // A code block and a display formula carry the same button, and mark
-  // the block whole.
   const newBlock = (el) => {
     const root = figRoot(el);
     if (!root) return null;
@@ -6489,10 +5288,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     b.setAttribute('data-rd-ui', '');
     b.setAttribute('aria-label', S[el.matches('pre') ? 'reader-code-mark' : 'reader-formula-mark'] || '');
     b.title = b.getAttribute('aria-label');
-    // The block scrolls, and a focused button taller than a one-line
-    // formula would scroll it to show the button, cutting off the
-    // formula's superscripts: a mouse press does not focus it, and a
-    // keyboard focus puts the block back.
     b.addEventListener('mousedown', (e) => e.preventDefault());
     b.addEventListener('focus', () => requestAnimationFrame(() => { el.scrollTop = 0; }));
     b.addEventListener('click', (e) => {
@@ -6504,8 +5299,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     });
     el.appendChild(b);
   }
-  // A dot opens its card, and so does a highlight in a code block: neither
-  // opens the lightbox the block around it would.
   document.addEventListener('click', (e) => {
     const t = e.target;
     const pin = t.closest && t.closest('.rd-pin');
@@ -6528,15 +5321,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     d.classList.add('rd-pulse');
     setTimeout(() => d.classList.remove('rd-pulse'), 1300);
   };
-
-  // The lightbox is PRINT_JS's; this half hears it open and close, and is
-  // asked about a click before the click closes it. On a figure it gains a
-  // bar with a close button and Mark a spot (also m). Marking, the cursor is
-  // a crosshair, the part of a diagram under it is outlined, and a click that
-  // did not drag sets a pin and opens its card beside it - the margin card
-  // itself, lent to the overlay while it is open, so typing there is typing
-  // in the card the page shows when it closes. A drag still pans and the
-  // wheel still zooms, marking or not.
   const lb = document.getElementById('psiINT-lightbox');
   let lbFig = null, lbCopy = null, marking = false, lbCard = null, bar = null, spotBtn = null, hover = null;
   const syncLb = () => {
@@ -6617,14 +5401,10 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
   if (lb) {
     lb.addEventListener('lb:open', (e) => {
       const { card, opener } = e.detail || {};
-      // Code and formulas are shown as they are, marks and frame with them;
-      // only the button in the corner stays behind.
       if (card) for (const b of card.querySelectorAll('.rd-fig-btn')) b.remove();
       if (!opener || !opener.matches(FIG) || !main.contains(opener) || !figRoot(opener)) return;
       lbFig = opener;
       lbCopy = card;
-      // A picture is as wide as it can be at its own proportions, so the
-      // box a pin is placed against is the picture and not a letterbox.
       const img = drawingOf(opener);
       if (img && img.tagName === 'IMG' && img.naturalWidth && img.naturalHeight) {
         const ci = drawingOf(card);
@@ -6677,8 +5457,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
       setHover(lbFig.classList.contains('figure-diagram') && t && d && d.contains(t) && !t.closest(UI)
         ? t.closest('.dg-el') : null);
     });
-    // Ahead of the lightbox's own keys: m, and an Esc that first puts away
-    // the card, then the crosshair, and only then the overlay.
     document.addEventListener('keydown', (e) => {
       if (!lbCopy || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
       if (e.key === 'Escape') {
@@ -6690,8 +5468,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
       if (e.key === 'm' && !e.shiftKey) { e.preventDefault(); setMarking(!marking); }
     }, true);
   }
-
-  // ── events on highlights and cards ──
   document.addEventListener('input', (e) => {
     const ta = e.target.closest && e.target.closest('.rd-note');
     if (!ta) return;
@@ -6717,7 +5493,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     const card = t.closest('.rd-card');
     if (card) {
       if (t.closest('.rd-remove')) remove(card.dataset.hl);
-      // A figure's card shows where on the figure it is.
       else if (!t.closest('textarea, button') && !card.closest('#psiINT-lightbox')
                && (figs.has(card.dataset.hl) || blocks.has(card.dataset.hl))) pulse(card.dataset.hl);
       return;
@@ -6726,7 +5501,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     const mark = t.closest('mark.rd-hl');
     const sel = window.getSelection && window.getSelection();
     const selecting = sel && !sel.isCollapsed && String(sel).trim();
-    // A link inside a highlight is still a link.
     if (mark && !selecting && !t.closest('a')) { setFocus(mark.dataset.hl, { card: true, reveal: true }); return; }
     if (focused && !selecting) setFocus(null);
   });
@@ -6737,8 +5511,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     if (a && a.closest && a.closest('.rd-card')) a.blur();
     setFocus(null);
   });
-  // Another tab with the same store - the other document, where the browser
-  // shares one - wrote to it: take its version and paint again.
   window.addEventListener('storage', (e) => {
     if (e.key !== KEY) return;
     for (const h of store) unpaint(h.id);
@@ -6757,7 +5529,6 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
     renderFoot();
     layout();
   });
-
   placeAll();
   renderFoot();
   schedule();
