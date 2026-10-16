@@ -134,6 +134,15 @@ function buildDeck(front, body = BODY) {
 const idOf = (p) => p.evaluate(() => (flatChunks[state.activeIdx] || {}).id);
 const idxOf = (p, id) => p.evaluate((i) => flatChunks.findIndex(c => c.id === i), id);
 const wait = (p, ms) => p.waitForTimeout(ms);
+// Until the projection has arrived on a slide the cockpit drove it to, at
+// most `ms`. Under fade the two windows land one after the other - the
+// cockpit at the bottom of its own dip, which is when it sends the slide,
+// and the projection at the bottom of the dip that message starts - and
+// settle() asks each window on its own whether it holds still, so the
+// projection can answer before the message has reached it. Read right after,
+// it was still on the slide being left in two runs out of five.
+const landed = (p, id, ms = 2000) => p.waitForFunction(
+  (i) => (flatChunks[state.activeIdx] || {}).id === i && !fadePending, id, { timeout: ms, polling: 5 }).catch(() => {});
 
 async function openPair(ctx, port, errors) {
   const aud = await ctx.newPage();
@@ -379,11 +388,15 @@ export async function run({ page, report }) {
       // runs as a remote apply.
       const p2 = await openPair(ctx, f2.port, errors);
       await goTo(p2.spk, 'auto');
+      await landed(p2.aud, 'auto');
       ok(await idOf(p2.aud) === 'auto', 'fade: the cockpit drives the projection onto the autoplay figure', await idOf(p2.aud));
       // End to end, timed so the old clock's next tick falls in the dip: the
       // press comes as the last beat lands, and the cockpit's dip plus the
-      // projection's are about one autoplay delay long.
-      const segs = await p2.aud.evaluate(() => countSegments(flatChunks[state.activeIdx].el));
+      // projection's are about one autoplay delay long. Counted on #auto by
+      // name: counted on the live slide, a projection still in its dip gave
+      // the title's count, the wait below timed out, and the press landed on
+      // an inner beat.
+      const segs = await p2.aud.evaluate(() => countSegments(flatChunks.find(c => c.id === 'auto').el));
       await p2.aud.waitForFunction((n) => revealed.auto === n, segs, { timeout: 4000, polling: 5 }).catch(() => {});
       await p2.spk.waitForFunction((n) => revealed.auto === n, segs, { timeout: 1000, polling: 5 }).catch(() => {});
       await p2.spk.bringToFront();
@@ -394,6 +407,7 @@ export async function run({ page, report }) {
       // And directly: inside the projection's dip the slide being left has no
       // clock. The figure is made new again in both windows so it plays.
       await goTo(p2.spk, 'three');
+      await landed(p2.aud, 'three');
       await p2.aud.evaluate(() => { delete revealed.auto; autoplayStoppedOn = null; });
       await p2.spk.evaluate(() => { delete revealed.auto; autoplayStoppedOn = null; });
       await goTo(p2.spk, 'auto');
