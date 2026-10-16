@@ -44,7 +44,7 @@ import {
   CARDS_SLOTS, OVERLAY_SLOTS, BACKDROP_SLOTS, SIDE_SLOTS, DOCK_SLOTS,
   splitTail, parseTail, slotTable, strayTailProblem,
   parseDrawOpener, formatDrawOpener, drawCompilerAttrs, parseRevealMark,
-  fenceTracker,
+  fenceTracker, htmlCommentOpens,
 } from './tails.mjs';
 // The live views' commands: which key means what, and the ? panel's rows.
 // Imported here to render the panel; its text is also spliced into both
@@ -6083,11 +6083,52 @@ function parseLecture(src) {
     fence.step(line, fmOffset + lineStart);
     inFence = fence.inside;
 
+    // A multi-line HTML comment is taken out of the deck, whole: no line in
+    // it is a heading, a `---`, a directive or a note (tails.mjs,
+    // `commented`), and none of it reaches a view. A heading inside one used
+    // to open a chunk, the `-->` landed in the next slide's paragraph as
+    // `--&gt;`, and the browser's comment never closed - every later slide
+    // gone from all four views. Passed through instead of dropped, it was
+    // still at the mercy of every capture mode that splits at a blank line
+    // (a card row cut one in two), and a draft parked in it shipped to every
+    // reader of the page source. The comment leaves one blank line where it
+    // stood, which ends a paragraph the way the HTML block did; text after
+    // the `-->` on its closing line stays, as body text. A comment on one
+    // line is untouched. lint.js reads it the same way.
+    if (fence.commented) {
+      if (noteBlock) flushNoteBlock();
+      if (annotBlock) flushAnnotBlock();
+      const target = cardsBlock ? cardsBlock.lines
+        : currentDock ? currentDock.lines
+        : currentOverlay ? currentOverlay.lines
+        : currentExpansion ? currentExpansion.lines
+        : currentChunk ? bodyLines
+        : currentColumn ? colBody : null;
+      if (target) {
+        if (htmlCommentOpens(line)) target.push('');
+        if (!fence.inComment) {
+          const after = line.slice(line.indexOf('-->') + 3);
+          if (after.trim()) target.push(after);
+        }
+      }
+      continue;
+    }
+
     // A card row's body is captured rather than streamed, because choosing
     // its size means counting the words in the longest item - a fact about
     // the source that cannot be recovered from CSS. Fence-aware: a ::: in a
     // code sample inside a card must not close the row.
-    if (cardsBlock) {
+    //
+    // A `> note:` or `> annot:` block is the exception: it is the speaker's
+    // or the room's, never a card's, so it leaves the row and falls through
+    // to the note reader below, as one in an overlay, a pane or an expansion
+    // does. Captured as card text it was a blockquote on the projection and
+    // missing from the cockpit. A line after the block that is not a `>` line
+    // ends it, as everywhere else. lint.js mirrors the peel.
+    const cardNote = !!cardsBlock && !inFence
+      && (/^>\s*(?:note|annot):/i.test(line) || (!!(noteBlock || annotBlock) && /^>/.test(line)));
+    if (cardsBlock && !cardNote && (noteBlock || annotBlock)) { flushNoteBlock(); flushAnnotBlock(); }
+    if (cardsBlock && !cardNote) {
       const cardDraw = inFence ? null : parseDrawOpener(line);
       if (!inFence && /^:::\s*$/.test(line)) {
         const target = currentOverlay ? currentOverlay.lines
@@ -7013,6 +7054,18 @@ function parseLecture(src) {
       `The code fence opened on line ${ln} (${fence.marker}) is never closed.\n` +
       '  Everything after it was read as code, so any slide below it is missing\n' +
       `  from the output. Close it with a line of at least ${fence.marker}.`);
+  }
+  // The same for an HTML comment. No line inside one is structure, so a
+  // `<!--` with no `-->` after it folded every slide below it into one
+  // comment; and before that rule it was worse, because the browser's
+  // comment never closed either and the views lost every later slide while
+  // the build counted them. lint.js: unclosed-comment.
+  if (fence.inComment) {
+    const ln = src.slice(0, fence.commentOpenedAt).split('\n').length;
+    refuse(
+      `The HTML comment opened on line ${ln} (<!--) is never closed.\n` +
+      '  Everything after it is inside the comment, so any slide below it is\n' +
+      '  missing from the output. Close it with a line containing -->.');
   }
   if (cardsBlock) {
     const err = new Error(

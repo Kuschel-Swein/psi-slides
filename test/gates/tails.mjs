@@ -421,14 +421,30 @@ export async function run({ report }) {
     ok(fenceOpener('``') === null && fenceOpener('~~~') !== null, 'two characters are not a run');
     // A multi-line HTML comment (CommonMark HTML block type 2) holds no fence:
     // marked renders a ~~~ there as the comment's text, and the tracker read
-    // it as an opener that swallowed every slide below.
-    ok(walk(['<!-- draft:', '~~~python', 'print(1)', '-->', '```', 'x', '```']) === '....DID',
+    // it as an opener that swallowed every slide below. `commented` marks
+    // every line of one, opener and closer included (C below), because no
+    // line in it is structure either: a heading in a comment once opened a
+    // chunk, the comment's closer landed in the next chunk's paragraph as
+    // `--&gt;`, and the browser's comment never closed - every later slide
+    // gone from all four views.
+    const cwalk = (lines) => {
+      const f = fenceTracker();
+      return lines.map((l, i) => { const d = f.step(l, i); return d ? 'D' : f.inside ? 'I' : f.commented ? 'C' : '.'; }).join('');
+    };
+    ok(cwalk(['<!-- draft:', '~~~python', 'print(1)', '-->', '```', 'x', '```']) === 'CCCCDID',
        'a fence-looking line inside a multi-line comment is the comment\'s text');
-    ok(walk(['<!-- one line -->', '~~~', 'x', '~~~']) === '.DID', 'a comment closed on its own line holds nothing after it');
-    ok(walk(['```', '<!--', '```', '~~~', 'x', '~~~']) === 'DIDDID', 'a comment opener inside a fence is code, and opens nothing');
-    ok(walk(['    <!--', '~~~', '~~~']) === '.DD', 'four spaces of indent are not an HTML block');
-    ok(walk(['<!-- left open', '## free: B {#b}', '~~~', 'x', '~~~']) === '..DID',
-       'a comment left open ends at the next slide heading, where marked\'s body ends too');
+    ok(cwalk(['<!-- one line -->', '~~~', 'x', '~~~']) === '.DID', 'a comment closed on its own line holds nothing after it');
+    ok(cwalk(['```', '<!--', '```', '~~~', 'x', '~~~']) === 'DIDDID', 'a comment opener inside a fence is code, and opens nothing');
+    ok(cwalk(['    <!--', '~~~', '~~~']) === '.DD', 'four spaces of indent are not an HTML block');
+    ok(cwalk(['<!-- open', '## free: B {#b}', '---', '> note: n', ':::', 'x -->', '## free: C']) === 'CCCCCC.',
+       'a heading, a ---, a note and a ::: inside a comment are the comment\'s text, up to the line with -->');
+    {
+      const f = fenceTracker();
+      ['a', '<!-- left open', '## free: B {#b}', 'x'].forEach((l, i) => f.step(l, i + 1));
+      ok(f.inComment && f.commentOpenedAt === 2, 'a comment left open stays open, and says where it opened');
+      f.step('-->', 5);
+      ok(!f.inComment && f.commented, 'the closing line is the comment\'s, and nothing after it is');
+    }
 
     // Every reader goes through it: no hand-written fence regex is left in
     // either file's code. Comments are blanked first; a regex in a comment

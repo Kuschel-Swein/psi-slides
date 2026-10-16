@@ -141,6 +141,24 @@ from building the same way is a major version.
 
 ### Fixed
 
+- **A slide commented out with `<!-- … -->` no longer takes every later slide
+  with it.** A heading inside a multi-line HTML comment opened a chunk, the
+  `-->` landed in the next slide's paragraph as `--&gt;`, and the browser's
+  comment never closed: every slide after it, the chrome and the runtime were
+  gone from all four views, with exit 0 and a clean lint. A multi-line
+  comment is now taken out of the deck whole, in the build and the linter
+  alike – no heading, `---`, directive or note inside it is structure, and
+  none of its text is shipped in the page source. It leaves a blank line
+  where it stood; text after the `-->` on its closing line stays. A comment
+  never closed is refused (`unclosed-comment`), the way an open code fence
+  is. A comment on one line is untouched.
+- **A `> note:` inside `::: cards` / `::: rows` is a speaker note.** The
+  row's body was captured before the note reader saw the line, so the note
+  was a blockquote on the projection and in print, and missing from the
+  cockpit. It is peeled off the row as one in an overlay or a pane is, and
+  filed on the segment the row stands in; a `> annot:` likewise. The linter
+  now reads a heading inside a card row as the row's text, as the build
+  always did, rather than reporting an unclosed row the build never saw.
 - A card row's automatic size no longer counts a nested bullet's wrapped
   second line as words of the card's head: `- **Playwright**` over a detail
   bullet broken across two source lines came out a size smaller than the

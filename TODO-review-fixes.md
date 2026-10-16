@@ -16,9 +16,9 @@ Status: `[ ]` open · `[~]` in progress · `[x]` done · `[-]` dropped (with rea
 
 ## Slice A – parser: constructs that lose or leak content
 
-- [ ] **A1** [1.1] `<!-- … -->` around a chunk: headings and `---` inside an HTML comment are not structure; the comment survives intact. Build and lint.
-- [ ] **A2** [1.2] `> note:` inside `::: cards` / `::: rows` becomes a speaker note of the chunk, never a blockquote on the slide. Build and lint.
-- [ ] **A3** [7] Matrix gate: every container × every line type (`> note:`, `---`, `#`/`##`, `<!--`, unknown `:::`), build against lint. Catches the next A1/A2.
+- [x] **A1** [1.1] `<!-- … -->` around a chunk: headings and `---` inside an HTML comment are not structure; the comment survives intact. Build and lint.
+- [x] **A2** [1.2] `> note:` inside `::: cards` / `::: rows` becomes a speaker note of the chunk, never a blockquote on the slide. Build and lint.
+- [x] **A3** [7] Matrix gate: every container × every line type (`> note:`, `---`, `#`/`##`, `<!--`, unknown `:::`), build against lint. Catches the next A1/A2.
 
 ## Slice B – the cockpit's notes field
 
@@ -80,3 +80,8 @@ Status: `[ ]` open · `[~]` in progress · `[x]` done · `[-]` dropped (with rea
 From the review, left for later: 1.5 (projection reload desync), 1.7 (single-beat tall chunk), 2.4–2.10 (author-loop diagnostics, asset watching, lint after build, `--review`), section 6 (polish).
 
 ## Log
+
+- **A1** The shared `fenceTracker` now marks every line of a multi-line comment (`commented`, opener and closer included) and no longer ends a comment at a heading; `parseLecture` drops those lines before any classification (one blank line stays, plus text after `-->`), lint.js skips them in the same place, and an unclosed comment is refused in both (`unclosed-comment`). Chose “absent” over “passed through intact”: passed through, a comment with a blank line in it was still cut in two by the card-row renderer (the `-->` escaped again), and a commented-out draft shipped in the page source. No deck in this repo or the content repo has a multi-line comment after its first heading, so no output moves (tracked views rebuilt byte-identical, content-repo lint unchanged). Lint no longer counts a comment's words toward the density budget. Not done: the image-ref collectors still see a `![](…)` inside a comment.
+- **A2** The card-row capture lets `> note:` / `> annot:` and their continuation lines fall through to the note reader; the note is filed where a note in an overlay is (the segment the row stands in), on a chunk and on a divider. Lint already read it as a note; what the matrix found instead was that lint closed the chunk on a `#`/`##` inside a card row the build captures as card text – lint now treats a card row as captured for headings, like the build. (A heading in a captured block renders as `<h2>statement: Inner {#inner}</h2>`, tail text included, in cards as in overlays and expansions – pre-existing, left as is.)
+- **A3** `test/containers.mjs`, not a gate (it runs build.js), in `npm test` after settings.mjs: 16 containers × 11 line types, 176 decks, ~5 s, 3,320 assertions. Before the fixes it failed 145 assertions in 22 cells. It also found a third disagreement: lint's `::: pulse` capture counted a `---` / `:::` / note inside a comment; fixed. Unknown `::: foo` is refused by both everywhere in its block form; the one-line form (R3) is not in this slice.
+

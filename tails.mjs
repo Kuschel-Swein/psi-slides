@@ -445,8 +445,12 @@ export function fenceCloses(open, line) {
 // renders what is inside as the comment's text, so a `~~~` there is no
 // fence – read as one, it swallowed every slide below it and the build
 // refused a deck that had built for a year (a draft commented out, code and
-// all). Only the fence is suspended: the comment's lines are not code, and
-// a `---` or a `:::` in one keeps the meaning it had before.
+// all). Nor is any other line in it structure: a `#` or `##` heading, a
+// `---`, a `:::` and a `> note:` inside a comment are the comment's text.
+// Read as structure, a heading in a commented-out draft opened a chunk, the
+// comment's `-->` landed in the next chunk's paragraph and was escaped to
+// `--&gt;`, and the browser's comment never closed: every later slide was
+// gone from all four views, with exit 0.
 export function htmlCommentOpens(line) {
   const s = String(line ?? '');
   if (!/^ {0,3}<!--/.test(s)) return false;
@@ -458,27 +462,33 @@ export function htmlCommentOpens(line) {
 // true from the opening line up to, not including, the closing one – the
 // shape every reader had with its boolean toggle. `openedAt` is the value
 // passed as the second argument when the open fence started, for a reader
-// that has to name an unclosed fence at the end of the file. `inComment` is
-// true on the lines of an HTML comment after its first, where no fence opens.
+// that has to name an unclosed fence at the end of the file.
+//
+// `commented` is true when the line just stepped belongs to a multi-line
+// HTML comment – its opening line, every line inside, and the line carrying
+// `-->` – and a reader that decides what a line is asks it beside `inside`:
+// such a line is body text and nothing else. `inComment` is true while a
+// comment is still open after the line, and `commentOpenedAt` says where it
+// opened, for the reader that refuses one left open at the end of the file.
 export function fenceTracker() {
   let open = null;
   let at = null;
   let comment = false;
+  let commentAt = null;
+  let commented = false;
   return {
     step(line, where) {
+      commented = false;
       if (open) {
         if (fenceCloses(open, line)) { open = null; at = null; return true; }
         return false;
       }
       if (comment) {
-        const t = String(line ?? '');
-        // A `#` or `##` heading opens a column or a slide whatever stands
-        // round it, and each body goes to marked on its own, so a comment
-        // left open ends there: marked never sees past it either.
-        if (/^#{1,2}\s/.test(t)) comment = false;
-        else { if (t.includes('-->')) comment = false; return false; }
+        commented = true;
+        if (String(line ?? '').includes('-->')) { comment = false; commentAt = null; }
+        return false;
       }
-      if (htmlCommentOpens(line)) { comment = true; return false; }
+      if (htmlCommentOpens(line)) { comment = true; commentAt = where ?? null; commented = true; return false; }
       const o = fenceOpener(line);
       if (!o) return false;
       open = o;
@@ -486,7 +496,9 @@ export function fenceTracker() {
       return true;
     },
     get inside() { return open !== null; },
+    get commented() { return commented; },
     get inComment() { return comment; },
+    get commentOpenedAt() { return commentAt; },
     get openedAt() { return at; },
     get marker() { return open ? open.ch.repeat(open.len) : null; },
   };

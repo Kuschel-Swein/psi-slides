@@ -548,7 +548,10 @@ lede; it is a beat now, and `***` is the spelling of a rule there.
 first non-blockquote line. A second `> note:` starts a **new** note, so never
 prefix continuation lines. Notes appear in the cockpit and in
 `print-notes.html`, never in the audience view or `print.html`. A note written
-before the very first heading attaches to the next chunk.
+before the very first heading attaches to the next chunk. A note written
+inside a block – a `::: side` pane, an `::: overlay`, a `::: cards` /
+`::: rows` row – is the chunk's note all the same, filed on the segment the
+block stands in; only `::: pulse` refuses one (`note-in-pulse`).
 
 **A note under a `# Heading`, before the first `##`, is the divider's own.**
 The divider is a slide you talk on – it is where the room is told what the
@@ -1746,7 +1749,7 @@ Rules you will meet while authoring: `unknown-type`, `unknown-class`,
 or directive – the message names which), `missing-id`, `duplicate-id`,
 `multiple-ids`, `title-count`, `density`,
 `duplicate-explicit-block`, `unclosed-directive`, `stray-directive`,
-`stray-directive-close`, `nested-directive`, `unclosed-fence`, `unclosed-math`, `reveal-overuse`,
+`stray-directive-close`, `nested-directive`, `unclosed-fence`, `unclosed-comment`, `unclosed-math`, `reveal-overuse`,
 `empty-beat` (a `---` that buys a press on which nothing at all happens – no
 words, no aside written in it, no note on it, nothing held to it by `from`),
 `orphan-column` (a column with fewer than two chunks),
@@ -1987,6 +1990,15 @@ A source file can silence warnings with an HTML comment anywhere in the body
 
 Silence a check when you have decided the shape is right, not to make a
 warning go away unread.
+
+**A multi-line HTML comment takes what it holds out of the deck.** Wrap a
+draft slide in `<!--` and `-->` on lines of their own and its heading, its
+`---` lines, its directives and its notes are not structure: the slide is
+absent from all four views, and its words are not shipped in the page source
+either. The comment leaves a blank line where it stood. A comment that is never
+closed is an error in both the build and the linter (`unclosed-comment`),
+because everything after it would be inside it. A comment on one line, such as
+the `linter: ignore` above, stays in the HTML as before.
 
 ## Workflow
 

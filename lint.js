@@ -4030,6 +4030,13 @@ function lintFile(filePath) {
       const pd = activeDirective;
       if (pd.fence.step(line)) { pd.words[pd.seps > 0 ? 1 : 0] = true; continue; }
       if (pd.fence.inside) continue;
+      // A multi-line comment is out of the deck (build.js drops it before
+      // splitPulse sees the body): no ---, ::: or note in it counts, and its
+      // words are no half's. Text after its --> is.
+      if (pd.fence.commented) {
+        if (!pd.fence.inComment && line.slice(line.indexOf('-->') + 3).trim()) pd.words[pd.seps > 0 ? 1 : 0] = true;
+        continue;
+      }
       if (/^:::\s*$/.test(line)) {
         // Mirrors splitPulse: exactly one ---, words on both sides of it.
         // A body already refused for what is in it says nothing more.
@@ -4066,6 +4073,30 @@ function lintFile(filePath) {
       continue;
     }
     if (inFence) { if (chunk) chunkBody.push(line); continue; }
+
+    // Mirrors build.js: a multi-line HTML comment is taken out of the deck
+    // whole - no line in it is a heading, a `---`, a directive or a note
+    // (tails.mjs, `commented`), and none of it reaches a view, so none of it
+    // counts toward a word budget, a segment or a picture. It ends a note
+    // block, as any line that is not a `>` line does. Text after the `-->` on
+    // its closing line stays in the body, so it says so here too.
+    if (fence.commented) {
+      inMetaBlock = false;
+      curNote = null;
+      const after = fence.inComment ? '' : line.slice(line.indexOf('-->') + 3).trim();
+      if (after) {
+        segHasBody();
+        if (chunk) {
+          if (!activeDirective) picture.other[pictureBucket()] += 1;
+          if (layoutStack.some(l => l.kind === 'slide')) slideBody.push(after);
+          else if (layoutStack.some(l => l.kind === 'script')) scriptBody.push(after);
+          else chunkBody.push(after);
+        } else if (col && !(activeDirective && (activeDirective.kind === 'dock' || activeDirective.kind === 'overlay'))) {
+          col.hasBody = true;
+        }
+      }
+      continue;
+    }
 
     // Fence settled: a non-fenced content line of an open cards/rows block
     // records whether the block carries a picture or a nested level, for the
@@ -4157,7 +4188,11 @@ function lintFile(filePath) {
     // applies, and it has to be the same or the two disagree about where
     // the chunks are. Left out, an `# Heading` in an overlay reported an
     // unclosed directive here while the build silently opened a column.
-    const inCaptured = !!activeDirective;
+    // A card row is captured by the build as well (its body is read whole at
+    // the closer), so a heading written in one is a card's line there and
+    // has to be one here - this file used to close the chunk on it and
+    // report an unclosed row the build never saw.
+    const inCaptured = !!activeDirective || !!stackHas(/^(cards|rows)\b/);
     const h1 = inCaptured ? null : line.match(/^#\s+(.*)$/);
     const h2 = inCaptured ? null : line.match(/^##\s+(.*)$/);
 
@@ -4968,6 +5003,14 @@ function lintFile(filePath) {
     add(fence.openedAt, 'error', 'unclosed-fence',
         `code fence ${fence.marker} is never closed – everything after it was read as code, `
         + `so every slide below it is missing; close it with a line of at least ${fence.marker}`);
+  }
+  // The same for an HTML comment: nothing inside one is structure, so a
+  // `<!--` with no `-->` after it holds every slide below. The build refuses
+  // it too.
+  if (fence.inComment) {
+    add(fence.commentOpenedAt, 'error', 'unclosed-comment',
+        'HTML comment <!-- is never closed – everything after it is inside the comment, '
+        + 'so every slide below it is missing; close it with a line containing -->');
   }
 
   // Mirrors renderDock in build.js: a #link in a dock is the live marker, so

@@ -32,6 +32,26 @@ through `npm run build:tracked`. The browser suite builds its lectures in place
 with the same flag – `buildLecture` in `harness.mjs` – so a test run leaves the
 tracked views as committed.)
 
+`test/containers.mjs` is in `npm test` for the same reason it is in neither
+suite: it runs build.js and lint.js as subprocesses and drives no browser. It
+crosses every container a slide body has – `::: cards`, `::: rows`, both panes
+of `::: side`, `::: overlay`, `::: dock`, `::: expand`, `::: footnote`,
+`::: pulse`, `::: cols`, `::: slide`, `::: script`, and a divider's body with and without a
+card row or an overlay – with every line the parser reads as structure: a
+`> note:` (with and without a continuation line), a `> annot:`, a `---`, a
+`##` and a `#` heading, a multi-line HTML comment holding all of those, one
+with blank lines, one with text after its `-->`, a comment on one line, and an
+unknown `::: foo`. Each pair is one deck, built and linted; the two must agree
+on accept or refuse, and an accepted deck must keep the chunk after the
+container visible in all four views, keep a note out of `audience.html` and
+`print.html` and in the cockpit and the notes document, leave no comment open
+and no `--&gt;` behind, and keep what a comment held inside it. Two defects
+the 2.0.0 review found were one capture mode forgetting one line type – a note
+in a card row shown to the room, a heading in a commented-out draft that took
+every later slide with it – and a fixture per pair would only have caught the
+pair someone thought of. About 175 decks, five seconds, eight at a time;
+`--verbose` lists which pairs are accepted and which refused.
+
 A fourth place exists and is deliberately not one of these: `desktop/test/`
 holds the desktop app's own tests, run by `npm test` inside `desktop/` and by
 `desktop.yml`, never by `npm test` here. What it guards is the app's reading
@@ -53,6 +73,7 @@ node test/gates/run.mjs semantics   # gates whose name matches
 node test/run.mjs                   # all specs
 node test/run.mjs nav               # specs whose name matches
 npm run reproducible                # same bytes under any flag set
+npm run containers                  # every container × every line type, build against lint
 ```
 
 ## The gates: twenty-three contracts
