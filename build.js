@@ -14475,10 +14475,10 @@ ${items}
 // stale file is exactly what the key should open. The one place this is
 // decided; renderAudience gets the answer as data. A full build has every
 // view, so it emits nothing and its audience.html is unchanged by this. The
-// views asked about are the `opens` of the start menu's commands
-// (commands.mjs).
+// views asked about are the `opens` of the commands (commands.mjs): the
+// start menu's two, and the cockpit's S, which opens audience.html.
 function siblingViewsAbsent(outDir, targetNames) {
-  const opened = START_MENU.map((id) => COMMANDS.find((x) => x.id === id).opens).filter(Boolean);
+  const opened = [...new Set(COMMANDS.map((c) => c.opens).filter(Boolean))];
   return opened.filter((name) =>
     !targetNames.includes(name) && !fs.existsSync(path.join(outDir, `${name}.html`)));
 }
@@ -20139,6 +20139,13 @@ const viewHooks = {
   // open, otherwise the hint standing on the strip. Returns whether it took
   // something back, so the chain carries on when it did not.
   escapePrompter: () => false,
+  // The answer to hasLivePeer() changed: a window appeared, answered again,
+  // said goodbye or was closed. The cockpit's footer says which.
+  onPeerChange: (live) => {},
+  // A projection has just booted in a window the cockpit opened, or come
+  // back from a reload (greeted: it has already adopted this window). Only
+  // the cockpit answers.
+  onPeerBoot: (greeted) => {},
 };
 
 const stage = document.getElementById('psiINT-stage');
@@ -20578,13 +20585,66 @@ function sendToPeer(msg) {
   if (!peer || peer.closed) { peer = null; return; }
   try { peer.postMessage(Object.assign({ deck: DECK_ID }, msg), '*'); } catch (e) { peer = null; }
 }
-// Is the other window actually there? Drives the two decisions that differ
+// The peer said goodbye: its page went away (pagehide), which is a reload, a
+// navigation or a window closing. The handle is kept - a reload keeps the
+// window, and the next document in it is reached through the same handle -
+// but nothing counts it as there until it speaks again. A closed window
+// says so through .closed as well; the goodbye is for the other two, where
+// .closed stays false and the cockpit used to say "live" to a window that
+// showed another page. Cleared by any message from the peer.
+let peerGone = false;
+// Is the other window actually there? Drives the decisions that differ
 // between "running alone" and "driving a projector": where a mode toast
-// lands, and whether the blank badge is drawn on the projection itself.
+// lands, whether the blank badge is drawn on the projection itself, and
+// what the cockpit's footer says.
 function hasLivePeer() {
-  if (peer && peer.closed) peer = null;
-  return !!peer;
+  if (peer && peer.closed) { peer = null; peerGone = false; }
+  return !!peer && !peerGone;
 }
+// While the peer is gone but its window is still there, it is asked once a
+// second whether a page of this deck stands in it again. A reloaded window
+// answers (a ping is a message from a window it accepts, so it adopts the
+// sender and greets); a window that went to another page never does, and
+// after PEER_PING_MAX tries the asking stops - the next press still pushes
+// through the handle. The same tick notices a window that was closed, which
+// sends no goodbye a closed window can be relied on for, and tells the view
+// when the answer to hasLivePeer() changed (viewHooks.onPeerChange).
+const PEER_PING_MAX = 120;
+let peerPings = 0;
+let peerSeen = false;
+function notePeer() {
+  const live = hasLivePeer();
+  if (live !== peerSeen) {
+    peerSeen = live;
+    if (live && VIEW === 'audience') {
+      try { sessionStorage.setItem(PAIRED_KEY, '1'); } catch (e) {}
+    }
+    viewHooks.onPeerChange(live);
+  }
+}
+// This tab's projection has had a cockpit of this deck - kept across a
+// reload, and not copied into a tab opened by hand. A projection that had one
+// finds it again by its window name (openViewWindow), so the heartbeat check
+// in cockpitElsewhere is only for a projection that never had one.
+const PAIRED_KEY = 'psi-slides:paired:' + DECK_ID;
+function pairedBefore() {
+  try { return sessionStorage.getItem(PAIRED_KEY) === '1'; } catch (e) { return false; }
+}
+function peerTick() {
+  if (peer && peerGone && !peer.closed && peerPings < PEER_PING_MAX) {
+    peerPings++;
+    sendToPeer({ type: 'ping', source: VIEW });
+  }
+  notePeer();
+}
+setInterval(peerTick, 1000);
+// The goodbye has to be the last thing the peer hears from this page, or a
+// message sent after it (the live demo's stop, also on pagehide) clears it
+// again. Listeners run in the order they were added, so it is added once
+// every script has run.
+window.addEventListener('load', () => {
+  window.addEventListener('pagehide', () => { sendToPeer({ type: 'bye', source: VIEW }); });
+});
 // Audience broadcasts unconditionally; speaker overrides
 // viewHooks.shouldBroadcast to gate on its push toggle.
 function shouldBroadcast() {
@@ -20857,21 +20917,27 @@ window.addEventListener('message', (ev) => {
   if (ev.origin !== SELF_ORIGIN) return;
   const m = ev.data;
   if (!m || typeof m !== 'object') return;
-  // The cockpit handshake (openCockpit): a projection that found a window
-  // called psi-slides-speaker it cannot read asks which deck it shows. Ahead
+  // The window handshake (openViewWindow): a view that found a window under
+  // the other view's name it cannot read asks which deck it shows. Ahead
   // of the peer check, because the asker is not yet anyone's peer; answered
   // only to a top-level window, never to a frame, and it gives away nothing
   // but the hash.
   if (m.type === 'whois') {
     let top = false;
     try { top = !!ev.source && ev.source.top === ev.source; } catch (e) {}
-    if (VIEW === 'speaker' && (top || isPeerWindow(ev.source))) {
+    // Both views answer: the projection asks a window called
+    // psi-slides-speaker, the cockpit one called psi-slides-audience
+    // (openViewWindow). A build before the cockpit's S had only the cockpit
+    // answer, and its projection reads only the deck.
+    if (top || isPeerWindow(ev.source)) {
       try { ev.source.postMessage({ type: 'iam', source: VIEW, deck: DECK_ID }, '*'); } catch (e) {}
     }
     return;
   }
   if (m.type === 'iam') {
-    if (cockpitAsk && ev.source === cockpitAsk.w) cockpitAsk.settle(m.deck === DECK_ID);
+    if (viewAsk && ev.source === viewAsk.w) {
+      viewAsk.settle(m.deck === DECK_ID && (m.source === undefined || m.source === viewAsk.view));
+    }
     return;
   }
   // And the origin is not enough: a sandboxed frame is "null" too. See
@@ -20882,19 +20948,39 @@ window.addEventListener('message', (ev) => {
   // cockpit still pairs.
   if (m.deck !== undefined && m.deck !== DECK_ID) return;
   if (m.source === VIEW) return; // ignore our own postings (shouldn't happen, defensive)
+  // The peer's page is going away - see peerGone. Ahead of the adoption
+  // below, which would count the goodbye itself as a sign of life.
+  if (m.type === 'bye') {
+    // The first ask comes sooner than the tick: a reload is back in a few
+    // hundred milliseconds, and a lecturer's next press should find it.
+    if (ev.source === peer) { peerGone = true; peerPings = 0; notePeer(); setTimeout(peerTick, 400); }
+    return;
+  }
   // Adopt sender as peer. Handles two cases: audience reload while
   // speaker is alive (speaker's next push reconnects us); audience
   // first hearing from a speaker that booted via opener.
-  // The projection greets a window it has just adopted – a cockpit that
-  // booted, or the one it lost to its own reload – so that whichever
-  // window holds a demo can hand it over again (demoAnnounce).
+  // Either window greets a window it has just adopted – a cockpit that
+  // booted, the one it lost to its own reload, a reloaded cockpit asking
+  // with a ping – so that whichever window holds a demo can hand it over
+  // again (demoAnnounce), and a reloaded cockpit is sent the room's state
+  // as its own boot hello would have been. Not on a hello, which is a
+  // greeting already, and not on a here, which the cockpit answers itself.
   const hadPeer = hasLivePeer();
+  const wasGone = peerGone && ev.source === peer;
   setPeer(ev.source);
-  if (VIEW === 'audience' && !hadPeer && hasLivePeer() && m.type !== 'hello') {
-    sendToPeer({ type: 'hello', source: 'audience' });
+  peerGone = false;
+  if (!hadPeer && hasLivePeer() && m.type !== 'hello' && m.type !== 'here') {
+    sendToPeer({ type: 'hello', source: VIEW });
   }
+  notePeer();
+  // A projection that has just booted in a window this cockpit opened
+  // (the cockpit's S): the cockpit hands it the slide.
+  if (m.type === 'here') { viewHooks.onPeerBoot(false); return; }
   if (m.type === 'hello') {
     if (VIEW === 'audience') sendToPeer({ type: 'state', source: 'audience', payload: snapshot() });
+    // A projection back from its own reload, answering the cockpit's ping:
+    // the cockpit hands it the slide it was on.
+    else if (wasGone) viewHooks.onPeerBoot(true);
     demoAnnounce();
     // Same reasoning as demoAnnounce: a cockpit that has just booted, or the
     // one the projection lost to its own reload, has no idea whether the room
@@ -20917,6 +21003,12 @@ window.addEventListener('message', (ev) => {
   // Ahead of nothing it could be confused with, and past the freeze gate,
   // because a frozen cockpit is looking ahead while the room's talk begins.
   if (m.type === 'press') { viewHooks.onPress(true); return; }
+  // A window that had said goodbye asking whether this page is there. The
+  // adoption above has already answered it with a hello when this window had
+  // no peer; one that still held it answers with a pong, which says nothing
+  // but "here" and clears the asker's peerGone like any message.
+  if (m.type === 'ping') { if (hadPeer) sendToPeer({ type: 'pong', source: VIEW }); return; }
+  if (m.type === 'pong') return;
   if (m.type === 'video') { applyRemoteVideo(m); return; }
   // A diagram the other window edited. Its own message rather than a field
   // of the snapshot, following the video precedent and for the same reason:
@@ -24012,6 +24104,11 @@ if (linkOverlay) {
     dismissLinkOverlay();
   });
 }
+// What the cockpit says after it has sent an address: on the projection, or
+// only here when there is none.
+function addressShownText() {
+  return hasLivePeer() ? 'address shown on the projection' : 'address shown here – no projection window open';
+}
 // Capture phase: this has to beat the stage's own click handling, which
 // would otherwise treat the click as a chunk select.
 // The mark after a link, and Shift-click, are one act with two ways in. The
@@ -24029,7 +24126,7 @@ document.addEventListener('click', (e) => {
   const label = (a && a.tagName === 'A' ? a.textContent : '').trim();
   showLinkOverlay(href, label);
   sendToPeer({ type: 'link-show', source: VIEW, href, label });
-  if (VIEW === 'speaker') flashMode('address shown on the projection');
+  if (VIEW === 'speaker') flashMode(addressShownText());
   // Chrome leaves a clicked button focused, and the guard above then hands
   // it the next Space - so a lecturer who clicked the mark and pressed Space
   // to move on would have re-opened the address instead. A keyboard
@@ -24051,7 +24148,7 @@ document.addEventListener('click', (e) => {
   // Ungated by freeze, like blank: showing the room an address is an
   // explicit act aimed at the projection, not shared navigation state.
   sendToPeer({ type: 'link-show', source: VIEW, href, label });
-  if (VIEW === 'speaker') flashMode('address shown on the projection');
+  if (VIEW === 'speaker') flashMode(addressShownText());
 }, true);
 
 // ── live demo (D) ───────────────────────────────────────────────────
@@ -24159,7 +24256,7 @@ async function startDemo(replace) {
   // The cockpit never shows the picture itself, so without a projection
   // window a capture would run into nothing while the badge said DEMO.
   if (VIEW === 'speaker' && !hasLivePeer()) {
-    flashMode('no projection window – it opens with S from the audience view');
+    flashMode('no projection window – S opens it');
     return;
   }
   demoPending = true;
@@ -24628,7 +24725,7 @@ function toggleFullscreenHere() {
 }
 function toggleProjectionFullscreen() {
   if (VIEW !== 'speaker') { endStartMenu(); toggleFullscreenHere(); return; }
-  if (!hasLivePeer()) { flashMode('no projection window open – Shift-W fills this one'); return; }
+  if (!hasLivePeer()) { flashMode('no projection window – S opens it · Shift-W fills this one'); return; }
   const want = !peerFullscreen;
   sendToPeer({ type: 'fullscreen', source: VIEW, action: want ? 'enter' : 'exit' });
   flashMode(want
@@ -24809,6 +24906,16 @@ const COMMAND_RUN = {
     e.preventDefault();
   },
   'blank': (e) => {
+    // A cockpit with no projection has nothing to blank, and saying
+    // "projection blanked" there is the same false comfort as below. A blank
+    // still standing from before the projection went can be lifted, so the
+    // BLANK badge does not outlive it.
+    const alone = VIEW === 'speaker' && !hasLivePeer();
+    if (alone && !state.blanked) {
+      flashMode('no projection window – nothing to blank · S opens it');
+      e.preventDefault();
+      return;
+    }
     state.blanked = !state.blanked;
     applyState();
     // Blanking is a command to the projector, so it outranks the freeze
@@ -24819,7 +24926,8 @@ const COMMAND_RUN = {
     if (VIEW === 'speaker') {
       sendToPeer({ type: 'blank', source: VIEW, blanked: state.blanked });
     }
-    flashMode(state.blanked ? 'projection blanked' : 'projection back');
+    flashMode(alone ? 'blank lifted – no projection window open'
+      : state.blanked ? 'projection blanked' : 'projection back');
     e.preventDefault();
   },
   // W is the projection's frame, Shift-W is this window's - see the
@@ -24852,59 +24960,114 @@ const COMMAND_RUN = {
   // its own export.
   'export-annotations': (e) => { exportAnnotationsPlain(); e.preventDefault(); },
   // Only in audience: open the speaker window and remember it as our peer.
-  //
-  // A cockpit that is already open is brought forward, never opened again:
-  // window.open with a URL re-navigates the named window, which reloaded the
-  // cockpit and lost its freeze, its clock and its cue cursor. Opening with
-  // an empty URL finds the named window without navigating it; only when
-  // that is not already this deck's cockpit is it sent to speaker.html.
-  // Whether it is this deck's is read off its address where the address can
-  // be read, and asked where it cannot (openCockpit).
+  // A cockpit that is already open is brought forward, never opened again
+  // (openViewWindow); one this window cannot reach is named rather than
+  // doubled (cockpitElsewhere). The cockpit's S is SPEAKER_JS's projection.
   'cockpit': (e) => {
     e.preventDefault();
     if (hasLivePeer()) { try { peer.focus(); } catch (err) {} return; }
-    withView('speaker', openCockpit);
+    if (!pairedBefore() && cockpitElsewhere()) return;
+    withView('speaker', () => openViewWindow('speaker'));
   },
   'help': (e) => { toggleHelp(); e.preventDefault(); },
 };
-// How long a found cockpit has to say which deck it shows. It answers from
+// The two windows each open the other under a fixed name: the projection's S
+// the cockpit, the cockpit's S the projection. Whichever opened the other is
+// its opener, which is the relationship postMessage rides on (isPeerWindow).
+const VIEW_WINDOWS = {
+  speaker: { name: 'psi-slides-speaker', features: 'width=1400,height=900' },
+  audience: { name: 'psi-slides-audience', features: 'width=1280,height=720' },
+};
+// How long a found window has to say which deck it shows. It answers from
 // its message handler, so a few milliseconds when it is there at all;
-// silence means a page that is no cockpit of this build.
-const COCKPIT_ASK_MS = 250;
-let cockpitAsk = null;
-function openCockpit() {
-  const w = window.open('', 'psi-slides-speaker', 'width=1400,height=900');
+// silence means a page that is no view of this build.
+const VIEW_ASK_MS = 250;
+let viewAsk = null;
+// Opens the other view, or finds it. A window that is already open is
+// brought forward, never opened again: window.open with a URL re-navigates
+// the named window, which reloaded the cockpit and lost its freeze, its
+// clock and its cue cursor. Opening with an empty URL finds the named window
+// without navigating it; only when that is not already this deck's view is
+// it sent to the file. Whether it is this deck's is read off its address
+// where the address can be read, and asked where it cannot.
+//
+// The cockpit does not take the window as its peer here: a projection that
+// boots says so to its opener (here), and one that was already standing is
+// asked (ping), and the answer is what makes it the peer - the footer says
+// "live" only once a projection has spoken.
+function openViewWindow(view) {
+  const spec = VIEW_WINDOWS[view];
+  const w = window.open('', spec.name, spec.features);
   if (!w) return;
   try { w.focus(); } catch (err) {}
+  const adopt = () => {
+    if (view === 'speaker') setPeer(w);
+    else { try { w.postMessage({ type: 'ping', source: VIEW, deck: DECK_ID }, '*'); } catch (err) {} }
+  };
   // Readable means same origin: a blank window, or under --serve a page
-  // that may be another deck's cockpit - either way, unless it already is
-  // this deck's cockpit, it is sent there.
-  const want = new URL('speaker.html', location.href).href;
+  // that may be another deck's view - either way, unless it already is
+  // this deck's, it is sent there.
+  const want = new URL(view + '.html', location.href).href;
   let here = null;
   try { here = String(w.location.href).split(/[?#]/)[0]; } catch (err) { here = null; }
   if (here !== null) {
-    if (here !== want) w.location.href = want;
-    setPeer(w);
+    if (here !== want) { w.location.href = want; if (view === 'speaker') setPeer(w); }
+    else adopt();
     return;
   }
   // Unreadable: a page from another file:// address. That used to be taken
   // for this deck's cockpit, and on a tab that had gone from one deck to
   // another it was the first deck's, driven by the second. So it is asked,
-  // and only an answer naming this deck keeps it as it is; another deck, or
-  // no answer, and it is sent to this deck's speaker.html.
-  if (cockpitAsk) clearTimeout(cockpitAsk.timer);
-  const ask = { w, timer: 0 };
+  // and only an answer naming this deck and this view keeps it as it is;
+  // another deck, or no answer, and it is sent to this deck's file.
+  if (viewAsk) clearTimeout(viewAsk.timer);
+  const ask = { w, view, timer: 0 };
   ask.settle = (ours) => {
-    if (cockpitAsk !== ask) return;
-    cockpitAsk = null;
+    if (viewAsk !== ask) return;
+    viewAsk = null;
     clearTimeout(ask.timer);
     if (w.closed) return;
-    if (!ours) { try { w.location.href = want; } catch (err) { return; } }
-    setPeer(w);
+    if (!ours) {
+      try { w.location.href = want; } catch (err) { return; }
+      if (view === 'speaker') setPeer(w);
+      return;
+    }
+    adopt();
   };
-  cockpitAsk = ask;
-  ask.timer = setTimeout(() => ask.settle(false), COCKPIT_ASK_MS);
+  viewAsk = ask;
+  ask.timer = setTimeout(() => ask.settle(false), VIEW_ASK_MS);
   try { w.postMessage({ type: 'whois', source: VIEW }, '*'); } catch (err) { ask.settle(false); }
+}
+// A projection opened from the cockpit tells its opener it is there, and the
+// cockpit hands it the slide (viewHooks.onPeerBoot). Not adopted as the peer
+// on its own word: an opener can be any page, and only a cockpit of this deck
+// answers.
+if (VIEW === 'audience' && window.opener && window.opener !== window) {
+  try { window.opener.postMessage({ type: 'here', source: VIEW, deck: DECK_ID }, '*'); } catch (err) {}
+}
+// A cockpit of this deck that this window cannot reach. A projection opened
+// by hand in a new tab or window has no relation to a cockpit already
+// running - the browser keeps the two apart, so neither the named-window
+// lookup nor a message finds it - and its S used to open a second cockpit
+// with its clock at 0:00 while the first drove nothing. The cockpit writes a
+// heartbeat into localStorage (one store for every file:// page in Chrome
+// and Safari, and for every page under --serve), and S here reads it: a
+// fresh one says where the cockpit is, and a second S within
+// COCKPIT_ELSEWHERE_MS opens another one anyway. Firefox keeps a store per
+// file, so there the heartbeat is never seen and S opens a cockpit as before.
+const COCKPIT_BEAT_KEY = 'psi-slides:cockpit-beat:' + DECK_ID;
+const COCKPIT_BEAT_MS = 5000;
+const COCKPIT_ELSEWHERE_MS = 10000;
+let cockpitWarnedAt = 0;
+function cockpitElsewhere() {
+  let beat = 0;
+  try { beat = Number(localStorage.getItem(COCKPIT_BEAT_KEY)) || 0; } catch (err) { return false; }
+  const now = Date.now();
+  if (!beat || now - beat > COCKPIT_BEAT_MS * 3) return false;
+  if (now - cockpitWarnedAt < COCKPIT_ELSEWHERE_MS) { cockpitWarnedAt = 0; return false; }
+  cockpitWarnedAt = now;
+  flashMode('a cockpit is open in another window – S there opens the projection · S again opens a second one');
+  return true;
 }
 // A field a key types into stands outside the key map. The cockpit's notes
 // field is the exception while it is read-only: it is focusable but not being
@@ -26533,6 +26696,9 @@ body.preview-resizing #psiINT-preview-resizer::after { opacity: 1; }
   border-color: oklch(0.48 0.15 250);
 }
 #psiINT-speaker-footer #psiINT-freeze-btn.is-frozen:hover { background: oklch(0.50 0.15 250); }
+/* No projection answers: grey, not green - the one state that must not look
+   like the live one. */
+#psiINT-speaker-footer #psiINT-freeze-btn.no-peer { color: var(--ink-soft); }
 #psiINT-speaker-footer #psiINT-slug { color: var(--ink-soft); font-style: italic; }
 #psiINT-speaker-footer .spacer { flex: 1; }
 #psiINT-speaker-footer .kbd-hint { font-size: 10px; opacity: 0.7; }
@@ -27229,14 +27395,57 @@ COMMAND_RUN['export-annotations'] = (e) => { exportAnnotations(); e.preventDefau
 // This window's own frame, for the one-screen case where the cockpit IS the
 // thing to fill; plain W is the projection's.
 COMMAND_RUN['fullscreen-window'] = (e) => { toggleFullscreenHere(); e.preventDefault(); };
+// S opens the projection, or brings it forward (openViewWindow). The other
+// half of the projection's S, and the way back from a projection closed by
+// mistake: the window it opens has this cockpit for its opener, so it
+// attaches here, and the clock, the freeze and the cue cursor stay as they
+// are. A cockpit opened on its own used to spend the press on nothing.
+function openProjection() {
+  if (hasLivePeer()) { try { peer.focus(); } catch (err) {} return; }
+  withView('audience', () => openViewWindow('audience'));
+}
+COMMAND_RUN['projection'] = (e) => { openProjection(); e.preventDefault(); };
+// A projection that has just booted in a window this cockpit opened, or come
+// back from a reload: it is handed the slide, the way thawing hands it -
+// unless the cockpit is frozen, where the room is not this window's to
+// move, and a projection that has not greeted yet is only asked to.
+viewHooks.onPeerBoot = (greeted) => {
+  if (!frozen) {
+    sendToPeer({ type: 'state', source: VIEW, payload: snapshot() });
+    figureFocusState().forEach(sendToPeer);
+  } else if (!greeted) {
+    sendToPeer({ type: 'ping', source: VIEW });
+  }
+};
+viewHooks.onPeerChange = () => applyFreezeIndicator();
+// The footer's one light says two things, because a cockpit that drives
+// nothing is the state that must not look like the one that does: whether a
+// projection answers (hasLivePeer, kept current by peerTick), and if one
+// does, whether it follows. With no projection the click opens one.
 function applyFreezeIndicator() {
-  freezeBtn.classList.toggle('is-frozen', frozen);
-  freezeBtn.textContent = frozen ? '❄ frozen' : '● live';
+  const live = hasLivePeer();
+  freezeBtn.classList.toggle('is-frozen', frozen && live);
+  freezeBtn.classList.toggle('no-peer', !live);
+  freezeBtn.textContent = !live ? (frozen ? '○ no projection · frozen' : '○ no projection')
+    : frozen ? '❄ frozen' : '● live';
   freezeBtn.setAttribute('aria-pressed', frozen ? 'true' : 'false');
-  freezeBtn.title = frozen
+  freezeBtn.title = !live
+    ? 'No projection window answers this cockpit. Click or press S to open it.'
+      + (frozen ? ' V thaws the freeze.' : '')
+    : frozen
     ? 'The room is holding one slide while you move on. Click or press V to catch it up.'
     : 'The room follows this window. Click or press V to freeze the projection.';
 }
+// The heartbeat a projection opened by hand reads before it opens a second
+// cockpit (cockpitElsewhere in AUDIENCE_JS). Removed when this page goes.
+function cockpitBeat() {
+  try { localStorage.setItem(COCKPIT_BEAT_KEY, String(Date.now())); } catch (e) {}
+}
+cockpitBeat();
+setInterval(cockpitBeat, COCKPIT_BEAT_MS);
+window.addEventListener('pagehide', () => {
+  try { localStorage.removeItem(COCKPIT_BEAT_KEY); } catch (e) {}
+});
 function toggleFreeze() {
   frozen = !frozen;
   applyFreezeIndicator();
@@ -27260,12 +27469,17 @@ function toggleFreeze() {
     // finished picture – the exact promise the freeze workflow makes.
     if (window.psiEditorThaw) window.psiEditorThaw();
   }
-  flashMode(frozen
+  flashMode(!hasLivePeer()
+    ? (frozen ? 'frozen · no projection window open' : 'live again · no projection window open')
+    : frozen
     ? 'projection frozen · the room holds this slide'
     : 'projection live · the room follows again');
 }
 applyFreezeIndicator();
-freezeBtn.addEventListener('click', toggleFreeze);
+freezeBtn.addEventListener('click', () => {
+  if (hasLivePeer()) toggleFreeze();
+  else openProjection();
+});
 
 // Export live annotation drafts as Markdown. Copies to clipboard first,
 // then asks for explicit confirmation before clearing the draft buffer —

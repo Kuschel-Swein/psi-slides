@@ -270,7 +270,10 @@ export async function run({ page, report, errors: pageErrors }) {
       await type('blank');
       await press('Enter', 250);
       p = await panel();
-      ok(!p.open && (await knobs()).blanked === !before.blanked, `${v}: Enter closes the panel and blanks, as B does`, JSON.stringify(await knobs()));
+      // A cockpit with no projection blanks nothing and says so (cockpit-alone).
+      ok(!p.open && (v === 'speaker'
+        ? /nothing to blank/.test(await page.evaluate(() => document.getElementById('psiINT-mode-badge').textContent))
+        : (await knobs()).blanked === !before.blanked), `${v}: Enter closes the panel and blanks, as B does`, JSON.stringify(await knobs()));
       await press('b', 200);
 
       // The arrows walk the runnable rows, and a click on one runs it.

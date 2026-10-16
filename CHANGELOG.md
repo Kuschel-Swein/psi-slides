@@ -171,6 +171,23 @@ from building the same way is a major version.
   preview strip's smooth scroll to the current slot starts a frame later as
   well. On a 39-chunk deck with a note on every slide, the forced layouts
   inside a press went from 2.0 to 1.3.
+- **A cockpit with no projection says so, and opens one.** `speaker.html`
+  opened on its own showed a green “● live”, `S` did nothing there, and `B`
+  answered “projection blanked” with no projection to blank. The footer's
+  light now reads “○ no projection” until a projection answers, and again
+  when it is closed or goes to another page; a click on it, or `S`, opens
+  `audience.html` in a window of its own, which then follows the cockpit.
+  The same `S` is the way back from a projection closed by mistake: the new
+  window attaches to the running cockpit, whose clock, freeze and cue cards
+  stay as they were. Before, the way back was to open the projection by hand
+  and press `S` there, which opened a second cockpit with its clock at 0:00
+  while the first drove nothing; such a projection now says that a cockpit is
+  open and where to press, and a second `S` opens another one anyway (in
+  Chrome and Safari; Firefox keeps the storage this reads apart per file).
+  Without a projection, `B` blanks nothing and says so, and `W`, `D` and a
+  shown address say so too. A projection reloaded under a live cockpit is
+  given the cockpit's slide within about a second instead of at the next
+  press.
 - **A slide commented out with `<!-- … -->` no longer takes every later slide
   with it.** A heading inside a multi-line HTML comment opened a chunk, the
   `-->` landed in the next slide's paragraph as `--&gt;`, and the browser's

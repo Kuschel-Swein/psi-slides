@@ -75,6 +75,7 @@ export async function run({ page, report }) {
     font: document.body.dataset.font || '',
     collapse: state.collapse,
   }));
+  const modeText = () => page.evaluate(() => document.getElementById('psiINT-mode-badge').textContent);
   const press = async (k, wait = 120) => { await page.keyboard.press(k); await page.waitForTimeout(wait); };
   const type = async (s) => { await page.keyboard.type(s, { delay: 20 }); await page.waitForTimeout(120); };
 
@@ -143,8 +144,11 @@ export async function run({ page, report }) {
       p = await panel();
       ok(!p.open && !p.focused, `${v}: the second Esc closes the panel and gives the keyboard back`, JSON.stringify({ open: p.open, focused: p.focused }));
 
+      // B reaches its binding again. A cockpit with no projection blanks
+      // nothing and says so (cockpit-alone), so there the answer is the toast.
       await press('b', 200);
-      ok((await knobs()).blanked === !before.blanked, `${v}: B blanks again once the panel is closed`);
+      ok(v === 'speaker' ? /nothing to blank/.test(await modeText()) : (await knobs()).blanked === !before.blanked,
+        `${v}: B blanks again once the panel is closed`, await modeText());
       await press('b', 200);
 
       await press('?', 250);

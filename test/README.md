@@ -7,7 +7,7 @@ Two suites, split by one question: **can this be decided without a browser?**
   hand-mirrored list one file keeps of another's. Twenty-three gates, about three seconds,
   no browser and no `npm install`. Run by `gates.yml` on push and pull
   request.
-- **`test/`** – the things that only break in a built page. 55 specs, about 2,010
+- **`test/`** – the things that only break in a built page. 56 specs, about 2,040
   assertions, about four minutes on a twelve-core machine with six specs at a
   time (about eleven minutes one at a time). One of them, `souffleuse`, starts an
   engine of its own beside its browser – see below.
@@ -169,7 +169,7 @@ fixture is compiled *and* linted.
 ## The browser suite: four families
 
 **Navigation** – `nav`, `nav-cockpit`, `nav-goto`, `nav-fullscreen`, `help-search`, `palette`, `transition`, `pitchblack`,
-`cue-cards`, `cockpit-notes`, `clock`, `autoplay`, `live-sync`. The navigation
+`cue-cards`, `cockpit-notes`, `cockpit-alone`, `clock`, `autoplay`, `live-sync`. The navigation
 model, and what a slide change looks like under `transition: pan | cut | fade` –
 the one spec here that samples per animation frame rather than after a settle,
 because its whole subject is what happens between two states.
@@ -322,7 +322,7 @@ is fine. **They assert the property and never a coordinate.**
 context the bar is not in the document and a measurement of it reports no
 overlaps among no buttons.
 
-### The twenty-three specs that build a deck of their own
+### The twenty-four specs that build a deck of their own
 
 Four different reasons, and the last is the one to remember.
 
@@ -359,6 +359,14 @@ reach the projection and nothing is stored; a double-click and `Shift`-`N`
 still open an edit, `PageDown` mid-edit leaves it and turns the page, `Esc`
 leaves it and does nothing else; and the long note fades at its foot, scrolls
 with the wheel unfocused, and stands in full once scrolled to the end.
+`cockpit-alone` is the pair the other way round, from `file://` on a fixture of
+four slides: `speaker.html` opened on its own says `○ no projection` and not
+“live”, and its `B` and `W` say there is no projection rather than claiming
+one; its `S` opens `audience.html` attached to it, on its slide; a reload of
+that projection is answered within a second; a closed one turns the light back,
+and `S` opens it again into the same cockpit with its clock unreset; and a
+projection opened by hand beside it names the running cockpit instead of
+opening a second one, until `S` is pressed again.
 
 **Because nothing that ships can reach the case** – `palette` (the start menu
 lives on the first slide and its first beat of a page load, so the spec needs

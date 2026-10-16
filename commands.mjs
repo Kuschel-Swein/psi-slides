@@ -184,6 +184,12 @@ export const COMMANDS = [
     hint: 'a column name goes to that column\'s first slide, a dot to its slide' },
 
   // ── the projector (cockpit) ──
+  // The cockpit's S is the projection's S the other way round: it opens the
+  // other window. A cockpit opened first, or left behind by a projection
+  // closed by mistake, used to spend the press on nothing.
+  { id: 'projection', group: 'projector', views: SPK, keys: ['s'],
+    label: 'Open the projection', short: 'Projection', opens: 'audience', reach: 'local',
+    hint: 'open the projection window, or bring it forward – one that was closed opens again attached to this cockpit' },
   { id: 'freeze', group: 'projector', views: SPK, keys: ['v'],
     label: 'Freeze the projection', reach: 'local', state: 'frozen',
     hint: 'freeze the projection – the room holds this slide while you move on' },

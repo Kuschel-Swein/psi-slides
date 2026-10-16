@@ -38,6 +38,7 @@ const SPECS = [
   './nav-fullscreen.mjs',
   './cue-cards.mjs',
   './cockpit-notes.mjs',
+  './cockpit-alone.mjs',
   './clock.mjs',
   './souffleuse.mjs',
   './demo.mjs',

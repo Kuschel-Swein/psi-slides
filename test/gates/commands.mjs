@@ -129,14 +129,14 @@ const PRESSES = [
   ['w', 'fullscreen', 'fullscreen'], ['Shift+W', 'fullscreen', 'fullscreen-window'],
   ['p', 'print', 'print'], ['d', 'demo', 'demo'],
   ['Shift+E', 'export-annotations', 'export-annotations'],
-  ['s', 'cockpit', null], ['Shift+S', 'cockpit', 'prompter'],
+  ['Shift+S', 'cockpit', 'prompter'],
   ['v', null, 'freeze'], ['Shift+V', null, 'preview-orientation'],
   ['Shift+?', 'help', 'help'],
   // Let through then, let through now.
   ['e', null, null], ['x', null, null], ['Tab', null, null],
 ];
-// The keys added since: a presenter remote's black-screen key, and the three
-// that set the cockpit's clock.
+// The keys added since: a presenter remote's black-screen key, the three
+// that set the cockpit's clock, and the cockpit's S.
 const ADDED = [
   ['.', 'blank', 'blank'],
   // The cockpit's clock, moved without restarting it. < and > arrive with or
@@ -146,6 +146,9 @@ const ADDED = [
   ['z', null, 'clock-plan'], ['Shift+Z', null, 'clock-plan'],
   // Another window for a running live demo; D itself pauses and resumes.
   ['Shift+D', 'demo-switch', 'demo-switch'],
+  // S in the cockpit opens the projection; it was a press spent on nothing,
+  // which a cockpit opened first could not recover from.
+  ['s', 'cockpit', 'projection'],
 ];
 
 function press(spec) {

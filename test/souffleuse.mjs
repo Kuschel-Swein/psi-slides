@@ -1188,6 +1188,16 @@ export async function run({ page, report }) {
     aud.on('pageerror', (e) => errs.push('audience: ' + e));
     await aud.goto(serving.url + '/audience.html', { waitUntil: 'load' });
     await aud.waitForTimeout(500);
+    // A projection opened by hand cannot reach the cockpit already running,
+    // and its first S says so rather than opening a second one
+    // (cockpitElsewhere); the second S opens one anyway, which is the case
+    // this section is about.
+    const pagesBefore = aud.context().pages().length;
+    await aud.keyboard.press('s');
+    await aud.waitForTimeout(400);
+    ok(aud.context().pages().length === pagesBefore
+       && /cockpit is open/.test(await aud.evaluate(() => document.getElementById('psiINT-mode-badge').textContent)),
+       'the first S in a projection opened by hand names the running cockpit and opens none');
     const [spk] = await Promise.all([aud.context().waitForEvent('page'), aud.keyboard.press('s')]);
     extra.push(spk);
     spk.on('pageerror', (e) => errs.push('cockpit: ' + e));
@@ -1218,7 +1228,7 @@ export async function run({ page, report }) {
 
     // ── and a second cockpit takes the prompter, out loud ───────────
     // The sidecar whispers to the socket of the last hello, so opening a
-    // second cockpit - which is one stray `S` in the projection away - takes
+    // second cockpit - two presses of S in a projection opened by hand - takes
     // the hints over. It used to do that in silence: the first window kept its
     // switch pressed and its microphone open for the rest of the talk, sending
     // a transcript nothing would answer. It is told, with the reason.
