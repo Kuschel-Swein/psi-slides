@@ -360,13 +360,14 @@ where the rest of the hour is going to be spent.
  <div class="wrap">
   <h2 id="attention">When the slide is not the point</h2>
   <p class="lede">Half of presenting is taking attention off the wall and
-  putting it back. Three keys and one mouse gesture do that, and none of them
+  putting it back. Two keys and one mouse gesture do that, and none of them
   changes where you are in the lecture.</p>
 
-  <!-- Half-empty row, answer 1: three ways of pointing the room somewhere
+  <!-- Half-empty row, answer 1: the ways of pointing the room somewhere
        else, in one row, because each is two or three sentences and any one of
-       them alone would be a paragraph with an empty half beside it. -->
-  <div class="pair-up trio">
+       them alone would be a paragraph with an empty half beside it. The live
+       demo was the third; it has a section of its own below. -->
+  <div class="pair-up">
    <div>
     <p><strong>Freeze the projection with <kbd>V</kbd>.</strong> The wall keeps
     the slide it has while you go looking somewhere else &ndash; three slides
@@ -384,19 +385,63 @@ where the rest of the hour is going to be spent.
     at the slide on your own screen, at the size it is on yours, and the room
     sees where.</p>
    </div>
+  </div>
+ </div>
+</section>
+
+<section class="band">
+ <div class="wrap">
+  <!-- The live demo, a section of its own since D pauses rather than ends:
+       it used to be the third of three short answers above, and pausing,
+       showing again, another window and the end are four things to say,
+       not one. Words on the left, a step. The heading stands above the
+       band, because the words are taller than the picture beside them. -->
+  <h2 id="demo">A live demo without mirroring your screens</h2>
+  <div class="beside">
+   <div class="said">
+    <p class="lede">Press <kbd>D</kbd> in the cockpit and pick a window or a
+    screen of your laptop: it fills the frame on the wall. The terminal you
+    are typing in can be up there while your slides and notes stay on the
+    laptop, and nobody mirrors the displays and loses the window positions on
+    the way back.</p>
+    <p class="cue"><kbd>D</kbd> again and the room is back on the slides. The
+    window is still being shared in the background, so <kbd>D</kbd> once more
+    brings it back at once, as it is now, without asking which one. That is
+    the rhythm of most demos: a slide, the terminal, the next slide, the
+    terminal again.</p>
+    <p class="cue">While a demo runs, the cockpit shows the badge in the
+    picture. Its two buttons are for the two things with no key worth
+    remembering mid-talk: <b>other window</b> opens the picker again and puts
+    the window you choose in place of the one shown
+    (<kbd>Shift</kbd>-<kbd>D</kbd> does the same), and <b>end</b> stops
+    sharing.</p>
+   </div>
+   <div class="stage">
+    <figure class="shot">
+     <div class="bar"><b>speaker.html</b> &middot; D</div>
+     <img src="img/demo.webp" alt="The lower part of the cockpit during a live demo: the speaker note in large type, a strip of neighbouring slides, and over the strip a black badge reading &ldquo;DEMO &middot; hit D to pause it&rdquo; with two outlined buttons, &ldquo;other window&rdquo; and &ldquo;end&rdquo;. Below, the footer with the live mark.">
+    </figure>
+   </div>
+  </div>
+
+  <!-- Half-empty row, answer 1: the two things to know before the talk,
+       one about the pause and one about the first time. -->
+  <div class="pair-up">
    <div>
-    <p><strong>For a live demo on the projection, press <kbd>D</kbd>.</strong>
-    Pick a window or a screen of your machine and it fills the frame &ndash; so the
-    terminal you are typing in can be on the wall without mirroring your displays
-    and losing your window positions on the way back. <kbd>D</kbd> again pauses it
-    and the room is back on the slides; <kbd>D</kbd> once more brings the same
-    window back without asking. <kbd>Shift</kbd>-<kbd>D</kbd>, or the
-    <em>other window</em> button on the speaker window's demo badge, picks
-    another one.</p>
-    <p>On a Mac the first capture fails while macOS is still asking for the
-    screen-recording permission, and a second press of <kbd>D</kbd> then works.
-    Worth doing once before the talk rather than finding out in front of the
-    room.</p>
+    <p><strong>Paused is not ended.</strong> A paused demo still captures the
+    window, and the browser&rsquo;s sharing bar on the laptop says so; the
+    badge reads <b>demo paused</b>. It ends with <b>end</b>, with &ldquo;End
+    the live demo&rdquo; in the <kbd>?</kbd> panel, with the browser&rsquo;s
+    own &ldquo;stop sharing&rdquo;, or when you close the shared window. The
+    next <kbd>D</kbd> then asks again.</p>
+   </div>
+   <div>
+    <p><strong>Try it once before the talk.</strong> On a Mac the first
+    capture fails while macOS asks for the screen-recording permission; allow
+    it, press <kbd>D</kbd> again, and it works from then on. Opened through
+    <code class="flag">--serve</code>, the picture goes straight to the
+    projection window; opened from the file, through a connection that stays
+    on your laptop. Neither sends it over the network.</p>
    </div>
   </div>
  </div>

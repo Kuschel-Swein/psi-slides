@@ -199,6 +199,25 @@ const SHOTS = [
       await p.waitForTimeout(500);
     } },
   { name: 'cockpit', src: 'speaker.html', w: 1440, h: 900, dsf: 1.5, frag: true },
+  // The cockpit while a live demo runs, for the demo section on "In the
+  // room". What the lecturer sees of a demo is not the picture - that is on
+  // the wall, and the real window is on the laptop - but the badge and its
+  // two buttons, so the shot is that badge with the cockpit round it, cut to
+  // where it stands (`rect`, in CSS px of the viewport): the speaker note
+  // above it - which on this chunk happens to be a note about a demo - the
+  // strip it stands on, and the footer. The state is set
+  // rather than captured: headless Chromium has no screen to pick from and
+  // this speaker.html has no projection window, and the cockpit draws
+  // nothing of the stream, only the badge, so a canvas stream stands in.
+  { name: 'demo', src: 'speaker.html', w: 1440, h: 900, dsf: 1.5, frag: true,
+    rect: { x: 0, y: 505, width: 1000, height: 395 },
+    act: async (p) => {
+      await p.evaluate(() => {
+        demoStream = document.createElement('canvas').captureStream(1);
+        applyDemoBadge();
+      });
+      await p.waitForTimeout(300);
+    } },
   // `top` scrolls the document so the chunk opens the frame: the lead-in of
   // the part above it is not what any of the three document shots is about.
   { name: 'printed', src: 'print.html', w: 1000, h: 625, dsf: 2.15, rig: PAPER_RIG, top: true },
@@ -720,7 +739,7 @@ try {
     if (s.clip && !(await page.locator(s.clip).count())) {
       throw new Error(`${s.name}: nothing matches ${s.clip}`);
     }
-    await frame.screenshot({ path: png });
+    await frame.screenshot({ path: png, ...(s.rect ? { clip: s.rect } : {}) });
     let out = png;
     if (enc) {
       out = path.join(IMG, s.name + '.webp');
