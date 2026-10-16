@@ -114,6 +114,7 @@ npm start                # run the app against the engine in the repository root
 npm test                 # unit tests: the event parser, the PDF export, settings, paths, strings
 npm run smoke            # start the app, build and export a real lecture, take screenshots
 npm run parity -- <dir>  # the app's three PDFs against the command line's (a folder the smoke kept)
+npm run confine          # a deck whose script reads the disk exports nothing from outside the lecture
 npm run stage-engine     # copy the engine into desktop/engine/ and install it
 npm run dist             # stage the engine, then build the installers (unsigned)
 npm run dist:signed      # the macOS release: signed and notarised, see below
@@ -170,7 +171,12 @@ secret is read by electron-builder as a file path, not as absent.
 - Nothing leaves the computer. There is no account, no telemetry, no update
   check and no network access of any kind. A PDF export prints in a hidden,
   sandboxed window with empty storage that refuses every network request and
-  cannot navigate or open another window.
+  cannot navigate or open another window. Its page may load only what the
+  build may read for that lecture – the view, the lecture's own files, a
+  picture, clip or face one folder up – so a script in a deck someone sent
+  cannot read a file from elsewhere on the disk into the PDF (Electron, unlike
+  Chrome, lets a page opened from disk fetch other files).
+  `npm run confine` exports such a deck in a real Electron and checks.
 
 ## The state the window shows
 

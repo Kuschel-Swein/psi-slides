@@ -39,6 +39,7 @@ on:
       - 'cue-cards.mjs'
       - 'commands.mjs'
       - 'pdf-core.mjs'
+      - 'local-files.mjs'
       - 'pdf-export.mjs'
       - 'chrome-path.mjs'
       - 'pulse-embed.js'
@@ -57,6 +58,7 @@ on:
       - 'cue-cards.mjs'
       - 'commands.mjs'
       - 'pdf-core.mjs'
+      - 'local-files.mjs'
       - 'pdf-export.mjs'
       - 'chrome-path.mjs'
       - 'pulse-embed.js'
@@ -113,6 +115,12 @@ jobs:
       - name: Smoke test
         working-directory: desktop
         run: xvfb-run --auto-servernum npm run smoke
+
+      # The export window's file: rule in a real Electron: a deck's script
+      # that reads a file above the asset root prints nothing of it.
+      - name: Confinement test
+        working-directory: desktop
+        run: xvfb-run --auto-servernum npm run confine
 
   package:
     name: Package (${{ matrix.os }})

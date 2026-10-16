@@ -480,10 +480,12 @@ function diagramImageRefs(src) {
   return refs;
 }
 
-// Mirrors the asset root in build.js (assetEscape, assetRootOf,
-// assetRootNarrowed): a build reads an asset from the lecture's folder or the
-// folder one level up - the lecture's folder alone when that one is the home
-// folder or a disk's top - links resolved, never from a dot-folder, and
+// Mirrors the asset root in local-files.mjs (assetEscape, assetRootOf,
+// assetRootNarrowed, assetRootExposed), which build.js imports: a build
+// reads an asset from the lecture's folder or the folder one level up - the
+// lecture's folder alone when that one is the home folder or a disk's top,
+// and only its assets/ and fonts/ when the lecture's folder is one of those
+// itself - links resolved, never from a dot-folder, and
 // refuses anything else before it writes a view. So a
 // reference out there is an error here, not a warning - it is a deck the
 // build hard-fails.
@@ -506,12 +508,21 @@ function assetRootOf(sourceDir, home = os.homedir()) {
   if (assetRootNarrowed(own, home)) return own;
   return parent;
 }
-// True when the folder above the lecture is the home folder or the top of a
-// disk, where "one level up" would be everything the person owns.
+// True when "one level up" would be everything the person owns: the folder
+// above the lecture is the home folder or the top of a disk, or the lecture's
+// folder is one of the two itself.
 function assetRootNarrowed(own, home = os.homedir()) {
   const parent = path.dirname(own);
-  return parent === own || parent === path.parse(parent).root || parent === realpathLoose(home);
+  const realHome = realpathLoose(home);
+  return parent === own || parent === path.parse(parent).root || parent === realHome || own === realHome;
 }
+// True when the lecture's folder is the home folder or the top of a disk, so
+// that even the lecture's folder alone is everything: only EXPOSED_FOLDERS
+// below it are read.
+function assetRootExposed(own, home = os.homedir()) {
+  return path.dirname(own) === own || own === realpathLoose(home);
+}
+const EXPOSED_FOLDERS = ['assets', 'fonts'];
 // Mirrors assetKindOf in build.js: a picture, a clip, a face, or null.
 function assetKindOf(p) {
   const ext = path.extname(String(p)).slice(1).toLowerCase();
@@ -530,6 +541,10 @@ function assetEscape(abs, sourceDir, home = os.homedir()) {
   if (!pathWithin(root, real)) return real;
   const rel = path.relative(root, real);
   if (rel && rel.split(path.sep).some(c => c.startsWith('.'))) return real;
+  if (assetRootExposed(root, home)) {
+    const parts = rel.split(path.sep);
+    if (parts.length < 2 || !EXPOSED_FOLDERS.includes(parts[0])) return real;
+  }
   // Only where the name and the file it lands on disagree about the
   // extension: a folder on the way being a link (/tmp on macOS) is not this.
   const named = path.resolve(abs);
@@ -5175,12 +5190,17 @@ function lintFile(filePath) {
       const out = assetEscape(abs, sourceDir);
       if (out === null || outsideSeen.has(out)) continue;
       outsideSeen.add(out);
-      const scope = assetRootNarrowed(realpathLoose(sourceDir))
-        ? `the lecture's folder alone (${assetRoot}), because the folder above it is your home folder or the top of a disk`
-        : `the lecture's folder and the folder one level up (${assetRoot})`;
+      const exposed = assetRootExposed(realpathLoose(sourceDir));
+      const scope = exposed
+        ? `its assets/ and fonts/ folders alone, because the lecture's folder (${assetRoot}) is your home folder or the top of a disk`
+        : assetRootNarrowed(realpathLoose(sourceDir))
+          ? `the lecture's folder alone (${assetRoot}), because the folder above it is your home folder or the top of a disk`
+          : `the lecture's folder and the folder one level up (${assetRoot})`;
       const inDot = pathWithin(assetRoot, out)
         && path.relative(assetRoot, out).split(path.sep).some(c => c.startsWith('.'));
-      emit('error', 'asset-outside-root', !pathWithin(assetRoot, out)
+      const outsideExposed = exposed && pathWithin(assetRoot, out) && !inDot
+        && !EXPOSED_FOLDERS.includes(path.relative(assetRoot, out).split(path.sep)[0]);
+      emit('error', 'asset-outside-root', !pathWithin(assetRoot, out) || outsideExposed
         ? `'${href}' is ${out} – the build reads assets from ${scope}, links resolved, and refuses `
           + 'this deck; copy the file in there'
         : inDot
@@ -5313,6 +5333,19 @@ function collectFiles(inputs) {
   return [...out].sort();
 }
 
+// What lint prints quotes the source - a class token, a heading, a file
+// name - and a terminal obeys an escape sequence in it: a token carrying a
+// clear-screen and a title change could print a clean result over the real
+// errors of a deck someone sent. SECURITY.md names this command as the safe
+// first look, so every line goes out through build.js's guard, copied here
+// as text (the untrusted gate holds the two copies equal): control
+// characters and the bidi overrides become spaces. A finding is one line,
+// so its newlines go too.
+function consoleSafe(text) {
+  return String(text).replace(/[\p{Cc}\u202a-\u202e\u2066-\u2069]/gu,
+    (c) => (c === '\n' || c === '\t' ? c : ' '));
+}
+
 function main() {
   const args = process.argv.slice(2);
   const strict = args.includes('--strict');
@@ -5337,7 +5370,7 @@ function main() {
     for (const x of lintFile(f)) {
       if (allowMissingIds && x.rule === 'missing-id') continue;
       const sev = x.severity === 'error' ? 'error' : 'warn ';
-      console.log(`${x.file}:${x.line}  ${sev}  ${x.rule.padEnd(22)}  ${x.msg}`);
+      console.log(consoleSafe(`${x.file}:${x.line}  ${sev}  ${x.rule.padEnd(22)}  ${x.msg}`.replace(/\n/g, ' ')));
       if (x.severity === 'error') errors++;
       else warnings++;
     }

@@ -50,11 +50,18 @@
  *
  *   driver.version                    the Chromium version, for the report
  *   driver.where                      what to print beside it (a path, "Electron")
- *   driver.open({w, h, onBlocked, onPageError}) -> page
+ *   driver.open({w, h, allowFile, onBlocked, onRefusedFile, onPageError}) -> page
  *       a page of w x h CSS px at device scale 1 and fresh storage, with every
  *       http(s) and ws(s) request refused - onBlocked(origin) once per
- *       request - and uncaught page errors reported - onPageError(message) -
- *       before open() resolves, so before anything can load
+ *       request - every file: request that allowFile(url) does not allow
+ *       refused - onRefusedFile(url) once per request - and uncaught page
+ *       errors reported - onPageError(message) - before open() resolves, so
+ *       before anything can load. allowFile is the caller's rule
+ *       (local-files.mjs's fileUrlAllowed, bound to the lecture's folder):
+ *       which local files the page may load at all, the view itself
+ *       included. A page opened from disk can *show* a file it cannot read -
+ *       an iframe of ../../secret.txt, a folder drawn as a listing - and the
+ *       PDF carries what it showed
  *   driver.close()                    ends the browser; the caller's to call
  *
  *   page.load(url)                    resolves on the load event
@@ -675,6 +682,7 @@ const RELOAD_SOCKET = /^wss?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?\/?$
 
 function blockCounter() {
   const blocked = new Map();      // origin -> count
+  const refusedFiles = new Map(); // file: url -> count
   let reloadSockets = 0;
   return {
     onBlocked(origin) {
@@ -682,23 +690,44 @@ function blockCounter() {
       if (RELOAD_SOCKET.test(o)) { reloadSockets += 1; return; }
       blocked.set(o, (blocked.get(o) || 0) + 1);
     },
-    // An array rather than the Map, so a result crosses an IPC boundary as
+    // The URL as the browser hands it over, percent-encoded, so a name with
+    // a control character in it reaches a terminal as text.
+    onRefusedFile(url) {
+      const u = String(url).split('#')[0].slice(0, 300);
+      refusedFiles.set(u, (refusedFiles.get(u) || 0) + 1);
+    },
+    // Arrays rather than the Maps, so a result crosses an IPC boundary as
     // it is.
     result: () => ({
       blocked: [...blocked].map(([origin, count]) => ({ origin, count })),
+      refusedFiles: [...refusedFiles].map(([url, count]) => ({ url, count })),
       reloadSockets,
     }),
   };
 }
 
+// The rule for local files is the caller's, and an export without one is
+// refused rather than run with none: open() would otherwise have to choose
+// between refusing the view itself and letting the page show any file on
+// the disk.
+function requireAllowFile(opts) {
+  if (!opts || typeof opts.allowFile !== 'function') {
+    throw new Error('pdf-core: an export needs allowFile(url), the rule for the local files its page may load');
+  }
+  return opts.allowFile;
+}
+
 export async function exportSlides(driver, opts) {
   const { url, beats, size, w, h, zoom, collapse, ceiling, dumpDom } = opts;
+  const allowFile = requireAllowFile(opts);
   const net = blockCounter();
   const pageErrors = [];
 
   const page = await driver.open({
     w, h,
+    allowFile,
     onBlocked: net.onBlocked,
+    onRefusedFile: net.onRefusedFile,
     onPageError: (msg) => pageErrors.push(String(msg)),
   });
   try {
@@ -888,12 +917,15 @@ export const DOC_VIEWPORT = { w: 794, h: 1123 };
 
 export async function exportDocument(driver, opts) {
   const { url } = opts;
+  const allowFile = requireAllowFile(opts);
   const net = blockCounter();
   const pageErrors = [];
 
   const page = await driver.open({
     w: DOC_VIEWPORT.w, h: DOC_VIEWPORT.h,
+    allowFile,
     onBlocked: net.onBlocked,
+    onRefusedFile: net.onRefusedFile,
     onPageError: (msg) => pageErrors.push(String(msg)),
   });
   try {
@@ -980,6 +1012,15 @@ export function formatReport(r, { outLabel, withBrowser = true }) {
         ? ' – the export is offline by design. A remote image prints empty, so inline it.'
         : ' – the export is offline by design. A hosted embed prints as a card;'
           + ' a remote image prints empty, so inline it.'));
+  }
+  // Absent on a result from before the field existed.
+  const refused = r.refusedFiles || [];
+  for (const { url, count } of refused.slice(0, 5)) {
+    warn(`${rel}: refused ${count} request(s) for ${url} – the export loads only the lecture's own`
+      + ' files and what the build may read one level up, so this prints empty.');
+  }
+  if (refused.length > 5) {
+    warn(`${rel}: and ${refused.length - 5} more local file(s) refused the same way.`);
   }
   for (const e of r.pageErrors) {
     warn(`${rel}: the page reported an error during the export: ${e}`);

@@ -728,9 +728,10 @@ from nowhere else.** `![](../shared/assets/logo.png)` works – a set of
 lectures side by side can share a folder of pictures – and
 `![](../../photos/x.png)` fails the build, naming the folder it may read from.
 A symbolic link counts as the file it points to, so a link in `assets/` that
-leads out of that folder fails the same way. Two narrowings: when the folder
+leads out of that folder fails the same way. Three narrowings: when the folder
 above the lecture is your home folder or the top of a disk, the lecture's own
-folder is the limit, and nothing is ever read from a folder whose name starts
+folder is the limit; when the lecture's folder *is* one of those, only its
+`assets/` and `fonts/` are read; and nothing is ever read from a folder whose name starts
 with a dot (`assets/.hidden/x.png`, `../.config/…`). The rule covers every way a deck
 names a file: `![](…)`, a `::: draw` `image`, a `::: backdrop`,
 `cover-image:`, `closing-image:`, a clip and a face in `fonts/`. It is what

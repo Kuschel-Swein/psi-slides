@@ -64,6 +64,14 @@ we tested: in Chrome 153 and Firefox 156 on macOS, a page opened from disk
 that tried to fetch another file on disk, or to look into one through an
 embedded frame, was refused. Safari has not been tested.
 
+**A page opened from disk can still show other files on screen**, a
+projector included, without reading them. A lecture's HTML can embed a text
+file from elsewhere on your disk in a frame, or a picture, and Chrome draws a
+folder as a list of its files, with your user name in the path. The script
+cannot see what the frame shows, but everyone looking at the screen can. The
+exports and checks `node build.js` runs in a browser refuse this (see
+*Exporting a PDF* below); a browser you open the file in does not.
+
 **In Chrome and Safari, pages opened from disk share one browser storage**,
 and psi-slides keeps things there that you may not want another lecture to
 see: the highlights and notes you made in a document, the annotations you
@@ -104,6 +112,9 @@ four HTML files.
 `node lint.js <source.md>` gives a safe first look: it reads the source, runs
 nothing from it, and reports the first three refusals below as errors
 (`frontmatter-language`, `asset-outside-root`), faces in `fonts/` included.
+What it quotes from the source reaches your terminal with control characters
+and text-direction overrides replaced by spaces, so a source cannot clear the
+screen or retitle the window with a line of lint's output.
 A `<!-- linter: ignore … -->` comment in the source silences warnings only,
 so a lecture cannot hide these errors from it.
 
@@ -119,9 +130,11 @@ files, and its message says why:
   diagram, backgrounds, the cover and closing images, clips, and fonts in
   `fonts/`. When the folder above is your home folder or the top of a disk,
   it reads from the lecture's folder alone, so a lecture unpacked at
-  `~/talk` cannot reach `~/anything`. Nothing is read through a folder whose
-  name starts with a dot (`.ssh`, `.git`, `.config`, `.env` …), inside the
-  lecture's folder included.
+  `~/talk` cannot reach `~/anything`. When the lecture's folder is itself
+  your home folder or the top of a disk, it reads from that folder's
+  `assets/` and `fonts/` alone, and says so once. Nothing is read through a
+  folder whose name starts with a dot (`.ssh`, `.git`, `.config`, `.env` …),
+  inside the lecture's folder included.
 - **A symbolic link whose target is a different kind of file than its name
   says.** A link counts as the file it points to, so it is held to the same
   folders, and `assets/pic.png` pointing at a PDF or a key is refused.
@@ -145,8 +158,9 @@ files, and its message says why:
   you share the files made from it.
 - **`--check-fit`, `--squint` and `--frames` open the finished projection in
   a browser without a window**, and the lecture's scripts run there, network
-  requests included. The PDF exports run the lecture's scripts too, but
-  offline; see *Exporting a PDF* below.
+  requests included. The page may load the same local files as a PDF
+  export's page, and no others (see the next section). The PDF exports run
+  the lecture's scripts too, but offline; see *Exporting a PDF* below.
 - **Annotations are Markdown and may carry HTML.** `--integrate-annotations`
   moves the live annotations exported from a talk into `source.md`, and from
   there into each file you make. That holds for a snippet someone sends you,
@@ -173,6 +187,16 @@ the PDF is made.
   sends every connection to a proxy that does not exist, and WebRTC may use
   no other way out, so a script's peer connection or a WebSocket opened in a
   worker reaches nobody either.
+- **Nothing from elsewhere on the disk.** The page may load the files
+  `--serve` would deliver for the lecture (see below): the four views, the
+  lecture's own pictures, clips, fonts, stylesheets, scripts and PDFs, and a
+  picture, clip or font from the folder one level up that `node build.js`
+  may read. A request for any other file on your disk – a frame showing a
+  text file two folders up, a folder drawn as a list of its files – is
+  refused, prints empty, and the export names it. This matters most in the
+  desktop builder, whose browser (Electron), unlike Chrome, lets a page
+  opened from disk read other files with a script: without this rule a
+  lecture's script could copy a key from a folder like `~/.ssh` into the PDF.
 - **Nothing is carried over from an earlier session.** The page starts from
   empty browser storage, so no sign-in to Pulse and no saved position,
   theme or highlight reaches it.
@@ -197,7 +221,12 @@ lecture uses, so the pictures of a lecture in a neighbouring folder can be
 fetched too – and only when the lecture's own folder has no file of that
 name. Nothing else up there is served: no other kind of file, nothing below a
 name starting with a dot, and nothing at all when that folder is your home
-folder or the top of a disk. The live views
+folder or the top of a disk. When the lecture's own folder is your home
+folder or the top of a disk, `--serve` delivers its four views and its
+`assets/`, `fonts/` and `videos/` folders, and nothing else in it. Every
+answer tells the browser that no other site may show the page in a frame,
+that a file is only what its declared type says, and that no other site may
+load it. The live views
 talk to `--watch` over a connection that accepts only a page opened from disk
 or delivered by `--serve`, and changing `source.md` through it needs the
 secret `node build.js` writes into the live views. A web page open in the

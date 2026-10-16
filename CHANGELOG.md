@@ -347,6 +347,50 @@ from building the same way is a major version.
   that had nothing wrong with it. Under auto-fit the type is solved again
   as well.
 
+### Security
+
+- **A PDF export in the desktop builder no longer lets a deck's script read
+  the disk.** In Electron a page opened from disk may `fetch()` any other
+  file, a key in a dot-folder one `../` loop away included, and a deck's own
+  `<script>` could write what it read into the PDF. The export window's
+  session now answers `file:` itself and lets through only what the build may
+  read for that lecture; the rest is answered with nothing and named in the
+  export's report. `npm run confine` in `desktop/` checks it in a real
+  Electron.
+- **The command line's PDF exports and `--frames`, `--check-fit` and
+  `--squint` load only the lecture's own files.** Chromium will not let a page
+  opened from disk read another file, but it shows one: an
+  `<iframe src="../../secret.txt">`, or the folder above drawn as a listing
+  with the user's name in its path, landed in the PDF's text and in the
+  frame's picture. A `file:` request outside what `--serve` would answer for
+  the lecture is now refused and named. The rule is one file,
+  `local-files.mjs`, which the build, `--serve`, both PDF drivers and the
+  probes share.
+- **A `source.md` directly in the home folder, or at the top of a disk, reads
+  from its `assets/` and `fonts/` only**, and the build says so once. Before,
+  its asset root was the folder above – every account's home – and a picture
+  in a neighbouring account was inlined. `lint.js` mirrors the rule, and
+  `--serve` answers such a lecture's four views, `assets/`, `fonts/` and
+  `videos/` and nothing else of it.
+- **`lint.js` prints what it quotes from the source through the build's
+  terminal guard.** A class token carrying a clear-screen and a title change
+  reached the terminal raw and could print a clean result over the real
+  errors of a deck someone sent – and the linter is the first look
+  `SECURITY.md` recommends.
+- **`--serve` sends `Content-Security-Policy: frame-ancestors 'self'`,
+  `X-Content-Type-Options: nosniff` and `Cross-Origin-Resource-Policy:
+  same-origin`** with every answer, so no other site can frame the cockpit or
+  load a picture from it to learn that it exists. No `Referrer-Policy`: an
+  embed sets its own, because YouTube refuses to play without a Referer.
+- **`ws` 8.22.0 and `js-yaml` 3.15.2 in the lockfile**, both within their
+  existing ranges: `ws` 8.20.0 carried a memory exhaustion from tiny fragments
+  and an uninitialised memory disclosure (GHSA-96hv-2xvq-fx4p,
+  GHSA-58qx-3vcg-4xpx), and the watch socket accepts origin `null` before the
+  nonce; `js-yaml` 3.14.2 carried quadratic-CPU advisories a frontmatter
+  block could reach. `katex` stays at 0.18.0 for now: its advisory needs
+  prototype pollution that already exists, and a KaTeX update moves the
+  tracked views.
+
 ## [2.0.0]
 
 ### Breaking

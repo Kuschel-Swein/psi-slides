@@ -36,6 +36,13 @@ import { createDiagramCompiler, parseDiagramDefaults, dgShapeD, dgSplineD, dgPat
 // export itself (pdf-export.mjs, which needs playwright-core) stays a dynamic
 // import behind the flag.
 import { resolvePdfOptions } from './pdf-core.mjs';
+// Which files on this machine a lecture may reach - the build's reads,
+// --serve's answers, and the pages the PDF exports and the probes open from
+// disk. Its own file because the desktop app's export applies it too.
+import {
+  pathWithin, realpathLoose, assetRootOf, assetRootNarrowed, assetRootExposed, EXPOSED_FOLDERS,
+  assetKindOf, assetEscape, SERVE_MIME, servePathAllowed, fileUrlAllowed,
+} from './local-files.mjs';
 // The {…} tail grammar and the ::: draw opener, shared with lint.js so the
 // two files cannot disagree about a tail. Tables plus small pure helpers,
 // zero dependencies - see the header of tails.mjs and CLAUDE.md.
@@ -231,79 +238,10 @@ function safeMatter(src) {
   }
 }
 
-// Whether `p` is `root` or somewhere below it. On path.relative rather than a
-// string prefix, so /lectures-old is not inside /lectures.
-function pathWithin(root, p) {
-  const rel = path.relative(root, p);
-  return rel === '' || (rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel));
-}
-
-// realpath for a path that may not exist yet: the deepest part of it that
-// does is resolved, and the rest is appended as written.
-function realpathLoose(p) {
-  const abs = path.resolve(p);
-  try { return fs.realpathSync(abs); }
-  catch (e) {
-    const parent = path.dirname(abs);
-    if (parent === abs) return abs;
-    return path.join(realpathLoose(parent), path.basename(abs));
-  }
-}
-
-// The folder a lecture may read assets from: the one above the lecture's
-// own, taken after links are resolved - above where the folder really is,
-// not above the name it was reached by. A lecture folder reached through a
-// link therefore reads its own files and its real parent's, and a `../`
-// written against the link's parent is refused (the build resolves `..`
-// lexically, so that would be a third folder). When the folder above is the
-// home folder or the top of a disk, the root is the lecture's folder alone:
-// a deck unpacked at ~/talk would otherwise read ~/anything.
-// `home` is a parameter so the untrusted gate can say where home is.
-function assetRootOf(sourceDir, home = os.homedir()) {
-  const own = realpathLoose(sourceDir);
-  const parent = path.dirname(own);
-  if (assetRootNarrowed(own, home)) return own;
-  return parent;
-}
-// True when the folder above the lecture is the home folder or the top of a
-// disk, where "one level up" would be everything the person owns.
-function assetRootNarrowed(own, home = os.homedir()) {
-  const parent = path.dirname(own);
-  return parent === own || parent === path.parse(parent).root || parent === realpathLoose(home);
-}
-// What a file is for, by its extension: a picture, a clip or a face, or
-// null for anything else. Its own table rather than IMG_EXTS / VIDEO_EXTS /
-// FONT_EXTS, so the untrusted gate can lift it alone; the gate holds it to
-// those three lists and to lint.js's copy.
-function assetKindOf(p) {
-  const ext = path.extname(String(p)).slice(1).toLowerCase();
-  if (['svg', 'png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) return 'image';
-  if (['mp4', 'webm', 'm4v', 'mov'].includes(ext)) return 'video';
-  if (['woff2', 'woff', 'ttf', 'otf'].includes(ext)) return 'font';
-  return null;
-}
-// Where `abs` really lands when the build may not read it, or null when it
-// may: outside the asset root, inside it below a folder whose name starts
-// with a dot (.ssh, .git, .config, .env ...), or a link whose target is not
-// the kind of file its name says - `assets/pic.png -> ../contract.pdf` would
-// otherwise be inlined as a picture of a PDF, bytes and all. A link counts
-// as the file it points to.
-function assetEscape(abs, sourceDir, home = os.homedir()) {
-  const real = realpathLoose(abs);
-  const root = assetRootOf(sourceDir, home);
-  if (!pathWithin(root, real)) return real;
-  const rel = path.relative(root, real);
-  if (rel && rel.split(path.sep).some(c => c.startsWith('.'))) return real;
-  // Only where the name and the file it lands on disagree about the
-  // extension: a folder on the way being a link (/tmp on macOS) is not this.
-  const named = path.resolve(abs);
-  if (path.extname(real).toLowerCase() !== path.extname(named).toLowerCase()) {
-    const want = assetKindOf(named);
-    const got = assetKindOf(real);
-    if (!got || (want && got !== want)) return real;
-  }
-  return null;
-}
+// The rule itself - the asset root, the dot-folders, a link's kind, and
+// what a page opened from disk may load - is local-files.mjs, imported at the
+// top of this file: the desktop app's PDF export has to refuse the same
+// files in its own main process, and cannot import this file to do it.
 
 // Files the current build was asked to read and did not, keyed by where they
 // really are. Filled by assetAllowed at every reader, refused before any view
@@ -321,6 +259,7 @@ function assetAllowed(abs) {
 function assetsConfinedError(outside, sourceDir) {
   const root = assetRootOf(sourceDir);
   const narrowed = assetRootNarrowed(realpathLoose(sourceDir));
+  const exposed = assetRootExposed(realpathLoose(sourceDir));
   const lines = [
     `This lecture refers to ${outside.size} file(s) the build may not read:`,
     '',
@@ -330,11 +269,16 @@ function assetsConfinedError(outside, sourceDir) {
     const where = !pathWithin(root, real) ? ''
       : (rel && rel.split(path.sep).some(c => c.startsWith('.')))
         ? '  (in a folder whose name starts with a dot)'
-        : '  (a link to a file that is not a picture, a clip or a font)';
+        : (exposed && !EXPOSED_FOLDERS.includes(rel.split(path.sep)[0]))
+          ? '  (not in assets/ or fonts/)'
+          : '  (a link to a file that is not a picture, a clip or a font)';
     lines.push((shown && path.resolve(sourceDir, shown) !== real ? `  ${shown}  ->  ${real}` : `  ${real}`) + where);
   }
   lines.push('');
-  if (narrowed) {
+  if (exposed) {
+    lines.push(`The lecture's folder, ${root}, is your home folder or the top of a disk, so a build`);
+    lines.push('reads from its assets/ and fonts/ folders alone – the rest of it is everything you own.');
+  } else if (narrowed) {
     lines.push(`A build reads assets from the lecture's folder and from the folder one level up –`);
     lines.push(`except where that folder is your home folder or the top of a disk, as it is here,`);
     lines.push(`and then from the lecture's folder alone: ${root}.`);
@@ -347,11 +291,29 @@ function assetsConfinedError(outside, sourceDir) {
   lines.push('when that file is the same kind as the link\'s name says – a picture, a clip or a font.');
   lines.push('This is what keeps a deck you were sent from copying a file from elsewhere on your');
   lines.push('machine into its output.');
-  lines.push(`  Fix: copy the file into ${root} or below it (not into a dot-folder), and point the`);
-  lines.push('  reference at the copy.');
+  if (exposed) {
+    lines.push('  Fix: move the lecture into a folder of its own; or copy the file into assets/ and');
+    lines.push('  point the reference at the copy.');
+  } else {
+    lines.push(`  Fix: copy the file into ${root} or below it (not into a dot-folder), and point the`);
+    lines.push('  reference at the copy.');
+  }
   const err = new Error(lines.join('\n'));
   err.userFacing = true;
   return err;
+}
+
+// A lecture whose folder is the home folder or the top of a disk reads from
+// its assets/ and fonts/ alone, which is a rule an author meets as a refusal
+// of a picture they can see beside source.md. Said once per run, before
+// anything is refused, so the refusal is not the first word on it.
+let exposedWarned = false;
+function warnExposedOnce(sourceDir) {
+  if (exposedWarned || !assetRootExposed(realpathLoose(sourceDir))) return;
+  exposedWarned = true;
+  console.warn(`[assets] ${realpathLoose(sourceDir)} is your home folder or the top of a disk, so this build`
+    + ' reads pictures, clips and faces from its assets/ and fonts/ folders only. Move the lecture'
+    + ' into a folder of its own to lift that.');
 }
 
 function assertAssetsConfined(sourceDir) {
@@ -32562,6 +32524,7 @@ function buildOnce(absIn, only, opts = {}) {
   MATH_ERRORS.length = 0;
   UNRESOLVED_ASSETS.clear();
   OUTSIDE_ASSETS.clear();
+  warnExposedOnce(outDir);
   lastKatexSheet = null;
   // Auto-inline decision when neither --inline-images nor --no-inline-images
   // was passed: scan referenced images, inline iff total fits AUTO_INLINE_BUDGET.
@@ -33416,15 +33379,8 @@ function runNew(slug, into) {
 // deck. source.md is not served either: no view reads it - the editor
 // carries the text it edits in the page and writes back over the watch
 // socket - and it holds the speaker notes the projection does not show.
-const SERVE_MIME = {
-  html: 'text/html; charset=utf-8', css: 'text/css; charset=utf-8',
-  js: 'text/javascript; charset=utf-8',
-  svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg',
-  jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
-  mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm',
-  mov: 'video/quicktime', woff2: 'font/woff2', woff: 'font/woff',
-  ttf: 'font/ttf', otf: 'font/otf', pdf: 'application/pdf',
-};
+// SERVE_MIME and servePathAllowed are local-files.mjs's, because a page the
+// engine opens from disk is held to what this server would answer.
 
 // The port --serve listens on, once it does; null without --serve. The watch
 // socket reads it to accept a page this server delivered.
@@ -33438,24 +33394,34 @@ function serveHostAllowed(host, port) {
   return ['localhost', '127.0.0.1', '[::1]'].some(n => h === `${n}:${port}` || (port === 80 && h === n));
 }
 
-// Whether a path below the served root may be answered: a kind the table
-// knows, nothing below a dot-name, and not the prompter's files.
-function servePathAllowed(rel) {
-  const parts = String(rel).split(/[\\/]+/).filter(Boolean);
-  if (!parts.length) return false;
-  if (parts.some(p => p.startsWith('.'))) return false;
-  const leaf = parts[parts.length - 1];
-  if (/^(?:prompter|souffleuse)-/i.test(leaf)) return false;
-  return Object.prototype.hasOwnProperty.call(SERVE_MIME, path.extname(leaf).slice(1).toLowerCase());
-}
+
+// Sent with every answer, a refusal included. No site but this one may
+// frame a view: the cockpit carries the watch socket's nonce, and a page
+// elsewhere that framed it could at least watch it. The browser takes each
+// file for the type it is served as, and no other origin may load a picture
+// or a clip from here - which is all a page elsewhere needs to learn which
+// files exist. frame-ancestors restricts who frames these pages, not what
+// they frame, so a YouTube embed - the reason --serve exists - is untouched.
+// No Referrer-Policy: an embed carries its own (strict-origin-when-cross-
+// origin), because YouTube refuses to play without a Referer, and a page-wide
+// no-referrer is one attribute away from breaking it.
+const SERVE_HEADERS = [
+  ['content-security-policy', "frame-ancestors 'self'"],
+  ['x-content-type-options', 'nosniff'],
+  ['cross-origin-resource-policy', 'same-origin'],
+];
 
 async function runServe(rootDir, wantedPort, { absIn = null } = {}) {
   const http = await import('node:http');
   // Canonicalise the root too, or a repo reached through a symlinked path
   // would fail its own containment check.
   try { rootDir = fs.realpathSync(rootDir); } catch { /* keep as given */ }
+  // A lecture whose folder is the home folder or the top of a disk is served
+  // its four views, assets/, fonts/ and videos/ and nothing else of it.
+  const exposed = assetRootExposed(rootDir);
   let port = null;
   const server = http.createServer((req, res) => {
+    for (const [name, value] of SERVE_HEADERS) res.setHeader(name, value);
     if (!serveHostAllowed(req.headers.host, port)) {
       res.writeHead(403); return res.end('forbidden');
     }
@@ -33465,7 +33431,7 @@ async function runServe(rootDir, wantedPort, { absIn = null } = {}) {
     if (rel === '/') rel = '/audience.html';
     // Judged on the path as asked and again on where it really is below,
     // so a link named like a picture does not serve a transcript.
-    if (!servePathAllowed(rel)) { res.writeHead(404); return res.end('not found'); }
+    if (!servePathAllowed(rel, exposed)) { res.writeHead(404); return res.end('not found'); }
     // Resolve, then confirm the result is still inside the served root:
     // without this, a request for /../../.ssh/id_rsa would be honoured.
     // Resolve symlinks before the containment test, not just `..`. A prefix
@@ -33496,7 +33462,7 @@ async function runServe(rootDir, wantedPort, { absIn = null } = {}) {
       if (abs !== rootDir && !abs.startsWith(rootDir + path.sep)) {
         res.writeHead(403); return res.end('forbidden');
       }
-      if (!servePathAllowed(path.relative(rootDir, abs))) { res.writeHead(404); return res.end('not found'); }
+      if (!servePathAllowed(path.relative(rootDir, abs), exposed)) { res.writeHead(404); return res.end('not found'); }
     }
     let stat;
     try { stat = fs.statSync(abs); } catch { res.writeHead(404); return res.end('not found'); }
@@ -33748,6 +33714,21 @@ async function openAudienceProbe(absIn, label, viewport, verb = 'read') {
     return { code: 0 };
   }
   const page = await browser.newPage({ viewport, deviceScaleFactor: 1 });
+  // The PDF exports' rule for the disk: the page may load what --serve would
+  // answer for this lecture and nothing else. A deck's HTML can show a file
+  // it cannot read - an iframe of ../../secret.txt, a folder drawn as a
+  // listing under the user's name - and a frame of --frames is a picture of
+  // what was shown. One rule, so it comes from where the exports keep it.
+  const { routeLocalFiles } = await import('./pdf-export.mjs');
+  const lectureDir = path.dirname(absIn);
+  const refusedSaid = new Set();
+  await routeLocalFiles(page, (url) => fileUrlAllowed(url, lectureDir), (url) => {
+    const u = String(url).split('#')[0].slice(0, 300);
+    if (refusedSaid.has(u)) return;
+    refusedSaid.add(u);
+    console.error(`${label}: refused ${u} – a page opened from the lecture loads only its own files`
+      + ' and what the build may read one level up.');
+  });
   // What the three probes look at is the room's projection mid-talk, so the
   // start menu a lecturer sees before the first slide moves stays down: frame
   // 1 of --frames would otherwise carry it.
@@ -35964,7 +35945,11 @@ async function main() {
     // the only new import in build.js, and it sits behind the flag.
     // One browser for every PDF asked for.
     const { exportPdfs } = await import('./pdf-export.mjs');
-    await exportPdfs(pdf);
+    // Which local files the page may load: what --serve would answer for
+    // this lecture (local-files.mjs), so a deck's own HTML cannot put a file
+    // from elsewhere on the disk into the PDF by showing it.
+    const lectureDir = path.dirname(absIn);
+    await exportPdfs({ ...pdf, allowFile: (url) => fileUrlAllowed(url, lectureDir) });
   }
   // After the build, because it measures what the build just wrote. Its
   // exit code is the command's: a slide that does not fit is a defect the

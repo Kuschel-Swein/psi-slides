@@ -52,12 +52,26 @@ export const OFFLINE_ARGS = [
   '--webrtc-ip-handling-policy=disable_non_proxied_udp',
 ];
 
+// Every file: request the page or one of its frames makes, held to
+// allowFile(url): allowed ones go on to the disk, the rest are aborted and
+// reported. Exported for the probes in build.js (--frames, --check-fit,
+// --squint), which open the same pages and keep the same rule.
+export async function routeLocalFiles(page, allowFile, onRefused = () => {}) {
+  if (typeof allowFile !== 'function') throw new Error('routeLocalFiles needs allowFile(url)');
+  await page.route(/^file:/i, (route) => {
+    const url = route.request().url();
+    if (allowFile(url)) return route.continue();
+    onRefused(url);
+    return route.abort();
+  });
+}
+
 async function playwrightDriver(chromium, executablePath) {
   const browser = await chromium.launch({ executablePath, headless: true, args: OFFLINE_ARGS });
   return {
     version: browser.version(),
     where: executablePath,
-    async open({ w, h, onBlocked, onPageError }) {
+    async open({ w, h, allowFile, onBlocked, onRefusedFile, onPageError }) {
       const ctx = await browser.newContext({ viewport: { width: w, height: h } });
       const page = await ctx.newPage();
       page.on('pageerror', (e) => onPageError(String(e && e.message || e)));
@@ -85,6 +99,12 @@ async function playwrightDriver(chromium, executablePath) {
         onBlocked(originOf(ws.url()));
         ws.close();
       });
+      // And the disk. Chromium will not let a page opened from disk read
+      // another file, but it will show one - an iframe of ../../secret.txt,
+      // a folder drawn as a listing under the user's name - and the PDF
+      // carries what was shown. The caller's rule says which local files the
+      // page may load; the view itself is one of them.
+      await routeLocalFiles(page, allowFile, onRefusedFile);
 
       return {
         load: (url) => page.goto(url, { waitUntil: 'load' }),
@@ -147,14 +167,15 @@ function writeAtomic(out, bytes) {
 // with the first report.
 //
 // jobs: { slides: null | {out, dumpDom, ...resolvePdfOptions}, documents:
-// [{flag, html, out}] }, audienceHtml beside slides. build.js has refused
-// every combination that would do nothing before this is reached.
+// [{flag, html, out}], allowFile(url) }, audienceHtml beside slides. build.js
+// has refused every combination that would do nothing before this is
+// reached.
 const joinFlags = (names) => names.length < 2
   ? names.join('')
   : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 
 export async function exportPdfs(jobs) {
-  const { slides, documents = [] } = jobs;
+  const { slides, documents = [], allowFile } = jobs;
   const asked = [...(slides ? ['--slides-pdf'] : []), ...documents.map(d => d.flag)];
 
   let chromium;
@@ -193,6 +214,7 @@ export async function exportPdfs(jobs) {
         ...slides,
         url: pathToFileURL(audienceHtml).href,
         dumpDom: !!dumpDom,
+        allowFile,
       });
       if (dumpDom) fs.writeFileSync(path.resolve(dumpDom), r.dom);
       writeAtomic(out, r.pdf);
@@ -200,7 +222,7 @@ export async function exportPdfs(jobs) {
       written.push({ out, pages: r.pages });
     }
     for (const d of documents) {
-      const r = await exportDocument(driver, { url: pathToFileURL(d.html).href });
+      const r = await exportDocument(driver, { url: pathToFileURL(d.html).href, allowFile });
       writeAtomic(d.out, r.pdf);
       say(r, d.out);
       written.push({ out: d.out, pages: r.pages });

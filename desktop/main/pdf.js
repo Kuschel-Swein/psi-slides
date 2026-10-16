@@ -177,12 +177,19 @@ async function writeAtomic(out, bytes, live = () => true) {
 //    override set then survives the navigation to the view.
 //  - The network is refused at the session, which sees WebSockets as well;
 //    the Fetch domain does not.
+//  - The disk is the session's too. In Electron a page opened from file://
+//    may fetch() any other file: URL - a dot-folder's key one loop of `../`
+//    away - and a deck's own <script> could put what it read into the PDF.
+//    So the session's file: protocol is handled here: allowFile(url), the
+//    caller's rule (local-files.mjs's fileUrlAllowed, bound to the lecture's
+//    folder), says which requests go on to the disk, and the rest are
+//    answered with nothing. The view itself is one of the allowed ones.
 let partitions = 0;
 
 const BLOCKED_URLS = ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'];
 
 function electronDriver() {
-  const { BrowserWindow, session } = require('electron');
+  const { BrowserWindow, session, net } = require('electron');
   const windows = new Set();
 
   const originOf = (url) => {
@@ -193,13 +200,19 @@ function electronDriver() {
     version: process.versions.chrome,
     where: `Electron ${process.versions.electron}`,
 
-    async open({ w, h, onBlocked, onPageError }) {
+    async open({ w, h, allowFile, onBlocked, onRefusedFile, onPageError }) {
+      if (typeof allowFile !== 'function') throw new Error('pdf: open() needs allowFile(url)');
       partitions += 1;
       const partition = `pdf-${partitions}`;
       const ses = session.fromPartition(partition, { cache: false });
       ses.webRequest.onBeforeRequest({ urls: BLOCKED_URLS }, (details, cb) => {
         onBlocked(originOf(details.url));
         cb({ cancel: true });
+      });
+      ses.protocol.handle('file', (request) => {
+        if (allowFile(request.url)) return net.fetch(request, { bypassCustomProtocolHandlers: true });
+        onRefusedFile(request.url);
+        return new Response('', { status: 403, headers: { 'content-type': 'text/plain' } });
       });
       // A page from a source.md somebody else wrote asks for nothing.
       ses.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
@@ -325,6 +338,18 @@ function loadCore(engineDir) {
   return corePromise;
 }
 
+// The rule for the local files an export's page may load, from the engine
+// the app runs - the one the command line's export and --serve keep, so the
+// app cannot drift from it.
+let localFilesPromise = null;
+function loadLocalFiles(engineDir) {
+  if (!localFilesPromise) {
+    localFilesPromise = import(pathToFileURL(path.join(engineDir, 'local-files.mjs')).href)
+      .catch((e) => { localFilesPromise = null; throw e; });
+  }
+  return localFilesPromise;
+}
+
 function createPdfExporter({ builder, getWindow, engineDir, onReport, dialogTitle }) {
   let current = null;
 
@@ -393,7 +418,10 @@ function createPdfExporter({ builder, getWindow, engineDir, onReport, dialogTitl
     const stale = st.phase === 'build-error';
 
     const core = await loadCore(engineDir());
+    const { fileUrlAllowed } = await loadLocalFiles(engineDir());
     if (job.aborted) return { ok: false, error: 'pdf.aborted' };
+    const lectureDir = st.dir;
+    const allowFile = (u) => fileUrlAllowed(u, lectureDir);
     const driver = electronDriver();
     job.cancels.push(() => { driver.close().catch(() => {}); });
     const dumpDom = kind === 'slides'
@@ -403,8 +431,8 @@ function createPdfExporter({ builder, getWindow, engineDir, onReport, dialogTitl
     try {
       const url = pathToFileURL(view).href;
       const work = kind === 'slides'
-        ? core.exportSlides(driver, { ...core.resolvePdfOptions(options), url, dumpDom: !!dumpDom })
-        : core.exportDocument(driver, { url });
+        ? core.exportSlides(driver, { ...core.resolvePdfOptions(options), url, dumpDom: !!dumpDom, allowFile })
+        : core.exportDocument(driver, { url, allowFile });
       // The export's own promises may never settle once its window is
       // destroyed, so an abort wins the race rather than waiting for them.
       r = await Promise.race([work, job.aborted$]);
@@ -470,5 +498,7 @@ module.exports = {
   dumpDomPath,
   writeAtomic,
   electronDriver,
+  loadCore,
+  loadLocalFiles,
   createPdfExporter,
 };

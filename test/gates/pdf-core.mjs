@@ -86,6 +86,12 @@ function fakeDriver({ failAt = null } = {}) {
           // And the reload client a watch build carries, which is refused
           // but is not the deck's request.
           cb.onBlocked('ws://127.0.0.1:35729');
+          // And a local file the caller's rule refuses, twice, as an iframe
+          // and its reload would ask for it.
+          if (!cb.allowFile('file:///secret.txt')) {
+            cb.onRefusedFile('file:///secret.txt');
+            cb.onRefusedFile('file:///secret.txt#again');
+          }
           cb.onPageError('boom');
           calls.push('load:' + url);
         },
@@ -110,7 +116,10 @@ function fakeDriver({ failAt = null } = {}) {
   return { driver, calls, cb };
 }
 
+// The caller's rule for local files: the deck's own folder.
+const allowFile = (url) => String(url).startsWith('file:///deck/');
 const OPTS = {
+  allowFile,
   url: 'file:///deck/audience.html',
   beats: 'all', size: '16:9', w: 1600, h: 900, zoom: null,
   collapse: 'topic-bold', ceiling: 1.35, dumpDom: true,
@@ -193,6 +202,30 @@ export async function run({ report }) {
     ok(r.kind === 'slides', 'the result says which export it is');
     ok(r.pageErrors.length === 1 && r.pageErrors[0] === 'boom', 'page errors are collected');
     ok(r.version === '999.0' && r.where === '/fake/chrome', 'the driver names itself in the result');
+    ok(JSON.stringify(r.refusedFiles) === JSON.stringify([{ url: 'file:///secret.txt', count: 2 }]),
+      'a refused local file is counted per file, fragment dropped, as plain data', JSON.stringify(r.refusedFiles));
+    const said = formatReport(r, { outLabel: 'slides.pdf' });
+    ok(said.some(l => l.level === 'warn' && /^slides\.pdf: refused 2 request\(s\) for file:\/\/\/secret\.txt – /.test(l.text)),
+      'and the report says which, and why it prints empty', JSON.stringify(said.map(l => l.text)));
+  }
+
+  // ── the rule for local files is the caller's, and required ─────────
+  {
+    const { driver, calls, cb } = fakeDriver();
+    await exportSlides(driver, OPTS);
+    ok(cb.allowFile === allowFile && typeof cb.onRefusedFile === 'function',
+      'open() is handed the caller\'s allowFile and a counter for what it refuses');
+    for (const [what, run] of [
+      ['exportSlides', (d) => exportSlides(d, { ...OPTS, allowFile: undefined })],
+      ['exportDocument', (d) => exportDocument(d, { url: 'file:///deck/print.html' })],
+    ]) {
+      const f = fakeDriver();
+      let err = null;
+      try { await run(f.driver); } catch (e) { err = e; }
+      ok(err && /allowFile/.test(err.message) && f.calls.length === 0,
+        `${what} without allowFile is refused before a page is opened`, err && err.message);
+    }
+    void calls;
   }
 
   {
@@ -212,7 +245,7 @@ export async function run({ report }) {
   // ── the document's order ───────────────────────────────────────────
   {
     const { driver, calls, cb } = fakeDriver();
-    const r = await exportDocument(driver, { url: 'file:///deck/print-notes.html' });
+    const r = await exportDocument(driver, { url: 'file:///deck/print-notes.html', allowFile });
     const order = calls.filter(c => typeof c !== 'string' || !c.startsWith('waitFn:'))
       .map(c => typeof c === 'string' ? c : (c.fn ? 'evaluate:' + c.fn : 'pdf-how'));
     const at = (what) => order.indexOf(what);
@@ -247,7 +280,7 @@ export async function run({ report }) {
   {
     const { driver, calls } = fakeDriver({ failAt: 'evaluate:docCollect' });
     let threw = false;
-    try { await exportDocument(driver, { url: 'file:///deck/print.html' }); } catch (e) { threw = true; }
+    try { await exportDocument(driver, { url: 'file:///deck/print.html', allowFile }); } catch (e) { threw = true; }
     ok(threw && calls[calls.length - 1] === 'page.close' && !calls.some(c => c.pdf),
       'document: a failure before the print still closes the page and prints nothing');
   }
@@ -268,7 +301,7 @@ export async function run({ report }) {
         return driver.open(o);
       },
     };
-    const r = await exportDocument(d2, { url: 'file:///x/print.html' });
+    const r = await exportDocument(d2, { url: 'file:///x/print.html', allowFile });
     ok(r.reloadSockets === 4 + 1,
       'loopback ws(s) on any port is the reload socket, and only that', String(r.reloadSockets));
     ok(JSON.stringify(r.blocked.map(b => b.origin))

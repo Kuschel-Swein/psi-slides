@@ -26,7 +26,9 @@
  *
  * build.js cannot be imported - it calls `main()` at module scope and imports
  * the Markdown stack - so the functions are lifted by name and evaluated with
- * the Node modules they use, the way `image-refs` does it. The build-level
+ * the Node modules they use, the way `image-refs` does it. The asset rule
+ * itself now lives in local-files.mjs, which has no dependencies and is
+ * imported; lint.js's mirror of it is still lifted, and held to it as text. The build-level
  * half (a real build refusing a real deck, the view left on disk) needs
  * `npm install` and lives in `test/settings.mjs`.
  */
@@ -35,6 +37,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { ROOT } from './harness.mjs';
 import { tmpDir } from '../tmp.mjs';
 
@@ -102,9 +105,18 @@ export async function run({ report }) {
      'and safeMatter hands gray-matter refusing engines for javascript and coffee as a second layer');
 
   // ── 2. the asset root ─────────────────────────────────────────────
-  const containment = ['pathWithin', 'realpathLoose', 'assetRootOf', 'assetRootNarrowed', 'assetKindOf', 'assetEscape'];
-  const cb = load('build.js', containment);
-  const cl = load('lint.js', containment);
+  // The rule lives in local-files.mjs, which build.js imports and which has
+  // no dependencies, so the gate imports it; lint.js's mirror is lifted.
+  const containment = ['pathWithin', 'realpathLoose', 'assetRootOf', 'assetRootNarrowed', 'assetRootExposed',
+    'assetKindOf', 'assetEscape'];
+  const cb = await import(pathToFileURL(path.join(ROOT, 'local-files.mjs')).href);
+  const cl = load('lint.js', containment, '\n' + constLine(lintSrc, 'EXPOSED_FOLDERS'));
+  const localSrc = fs.readFileSync(path.join(ROOT, 'local-files.mjs'), 'utf8');
+  ok(constLine(localSrc.replace(/^export /gm, ''), 'EXPOSED_FOLDERS') === constLine(lintSrc, 'EXPOSED_FOLDERS'),
+     'the folders an exposed lecture reads are one list, spelled the same in both files');
+  ok(/^import \{[^}]*\bassetEscape\b[^}]*\} from '\.\/local-files\.mjs';$/m.test(buildSrc)
+     && !/\nfunction (assetEscape|assetRootOf|assetRootNarrowed|assetKindOf|pathWithin|realpathLoose|servePathAllowed)\(/.test(buildSrc),
+     'build.js takes the asset rule from local-files.mjs and defines none of it again');
   const base = fs.realpathSync(tmpDir('psi-untrusted-'));
   const repo = path.join(base, 'repo');            // the asset root
   const lec = path.join(repo, 'lec');               // the lecture's folder
@@ -205,8 +217,11 @@ export async function run({ report }) {
     ok(exts.length > 0 && exts.every(e => cb.assetKindOf('x.' + e) === kind && cl.assetKindOf('x.' + e) === kind),
        `assetKindOf names every one of ${list} a ${kind}, in both files`, line);
   }
-  ok(lift(buildSrc, 'assetKindOf', 'build.js') === lift(lintSrc, 'assetKindOf', 'lint.js'),
-     'and the two copies of assetKindOf are the same text');
+  const unexport = localSrc.replace(/^export /gm, '');
+  for (const fn of ['assetKindOf', 'assetRootNarrowed', 'assetRootExposed', 'assetEscape', 'assetRootOf']) {
+    ok(lift(unexport, fn, 'local-files.mjs') === lift(lintSrc, fn, 'lint.js'),
+       `and the two copies of ${fn} are the same text`);
+  }
 
   // The home folder, injected: the review's fixture was a sibling link to a
   // key, which one level up allows - unless one level up is home.
@@ -234,6 +249,86 @@ export async function run({ report }) {
     ok(c.assetEscape(path.join(talk, 'assets', 'own.png'), talk, home) === null,
        'while the lecture\'s own files are read');
     ok(c.assetRootOf('/deck', home) === '/deck', 'a lecture folder at the top of a disk is its own root');
+  }
+
+  // A source.md directly in the home folder, or at a disk's top: its own
+  // folder is everything the person owns, so only assets/ and fonts/ are
+  // read, and one level up - every account's home - is out of the question.
+  put(path.join(home, 'beside.png'));
+  fs.mkdirSync(path.join(home, 'assets'), { recursive: true });
+  put(path.join(home, 'assets', 'pic.png'));
+  fs.mkdirSync(path.join(home, 'fonts'), { recursive: true });
+  put(path.join(home, 'fonts', 'Face-Regular.woff2'));
+  fs.mkdirSync(path.join(base, 'neighbour'), { recursive: true });
+  put(path.join(base, 'neighbour', 'photo.png'));
+  for (const c of [cb, cl]) {
+    const who = c === cb ? 'local-files.mjs' : 'lint.js';
+    ok(c.assetRootExposed(home, home) && c.assetRootNarrowed(home, home) && c.assetRootOf(home, home) === home,
+       `${who}: a lecture folder that is the home folder is exposed, and its own root`);
+    ok(!c.assetRootExposed(talk, home) && !c.assetRootExposed(talk, other) && c.assetRootExposed('/', home),
+       `${who}: a folder below home is not exposed, the top of a disk is`);
+    ok(c.assetEscape(path.join(home, 'assets', 'pic.png'), home, home) === null
+       && c.assetEscape(path.join(home, 'fonts', 'Face-Regular.woff2'), home, home) === null,
+       `${who}: assets/ and fonts/ of a lecture in the home folder are read`);
+    ok(c.assetEscape(path.join(home, 'beside.png'), home, home) !== null
+       && c.assetEscape(path.join(home, 'outside', 'pic.png'), home, home) !== null,
+       `${who}: a picture beside its source.md, or in any other folder of home, is refused`);
+    ok(c.assetEscape(path.resolve(home, '../neighbour/photo.png'), home, home) !== null,
+       `${who}: and one level up - every account's home - is refused`);
+    ok(c.assetEscape('/assets/x.png', '/', home) === null && c.assetEscape('/etc/x.png', '/', home) !== null,
+       `${who}: a lecture at the top of a disk reads its assets/ and nothing else`);
+  }
+
+  // ── 2b. what a page opened from disk may load ─────────────────────
+  // The PDF exports and the probes open a built view in a browser, and a
+  // deck's own HTML can show a file there that it cannot read - an iframe of
+  // ../../secret.txt, a folder drawn as a listing with the user's name in it.
+  // A page may load what --serve would answer for the same lecture.
+  {
+    put(path.join(lec, 'audience.html'));
+    put(path.join(lec, 'notes.txt'));
+    put(path.join(lec, 'prompter-20260101-1200.jsonl'));
+    fs.mkdirSync(path.join(lec, 'videos'), { recursive: true });
+    put(path.join(lec, 'videos', 'clip.mp4'));
+    put(path.join(repo, 'secret.txt'));
+    put(path.join(repo, 'other.html'));
+    put(path.join(home, 'audience.html'));
+    put(path.join(home, 'Notes.pdf'));
+    const u = (p) => pathToFileURL(p).href;
+    for (const [what, url, dir, want] of [
+      ['the view itself', u(path.join(lec, 'audience.html')) + '#a', lec, true],
+      ['a picture in assets/', u(path.join(lec, 'assets', 'own.png')), lec, true],
+      ['a staged clip in videos/', u(path.join(lec, 'videos', 'clip.mp4')), lec, true],
+      ['a shared picture one level up', u(path.join(repo, 'shared', 'pic.png')), lec, true],
+      ['a text file in the lecture folder (no kind a view loads)', u(path.join(lec, 'notes.txt')), lec, false],
+      ['the source', u(path.join(lec, 'source.md')), lec, false],
+      ['the prompter\'s log', u(path.join(lec, 'prompter-20260101-1200.jsonl')), lec, false],
+      ['a text file one level up', u(path.join(repo, 'secret.txt')), lec, false],
+      ['a page one level up', u(path.join(repo, 'other.html')), lec, false],
+      ['a file two levels up', u(path.join(base, 'outside', 'key')), lec, false],
+      ['the lecture folder as a listing', u(lec) + '/', lec, false],
+      ['the folder above as a listing', u(repo) + '/', lec, false],
+      ['a link in assets/ pointing out', u(path.join(lec, 'assets', 'leak.png')), lec, false],
+      ['a dot-folder', u(path.join(lec, 'assets', '.hidden', 'x.png')), lec, false],
+      ['a file that is not there', u(path.join(lec, 'assets', 'gone.png')), lec, false],
+      ['an http address', 'https://example.org/x.png', lec, false],
+      ['/etc/hosts', 'file:///etc/hosts', lec, false],
+    ]) {
+      ok(cb.fileUrlAllowed(url, dir, home) === want, `a page may ${want ? '' : 'not '}load ${what}`, url);
+    }
+    for (const [what, p, want] of [
+      ['its own view', path.join(home, 'audience.html'), true],
+      ['a picture in its assets/', path.join(home, 'assets', 'pic.png'), true],
+      ['a PDF elsewhere in home', path.join(home, 'Notes.pdf'), false],
+      ['a picture beside source.md', path.join(home, 'beside.png'), false],
+    ]) {
+      ok(cb.fileUrlAllowed(pathToFileURL(p).href, home, home) === want,
+         `a lecture in the home folder: a page may ${want ? '' : 'not '}load ${what}`);
+    }
+    ok(cb.servePathAllowed('audience.html', true) && cb.servePathAllowed('assets/x.png', true)
+       && cb.servePathAllowed('videos/c.mp4', true) && !cb.servePathAllowed('Notes.pdf', true)
+       && !cb.servePathAllowed('Documents/talk/print.html', true) && cb.servePathAllowed('Notes.pdf', false),
+       '--serve of a lecture in the home folder answers the views, assets/, fonts/ and videos/ alone');
   }
 
   // ── 3. writing an output ──────────────────────────────────────────
@@ -357,4 +452,17 @@ export async function run({ report }) {
   const igw0 = lintOf('---\ntitle: T\nbogus-key: 1\n---\n' + BODY.replace('IMG', ''));
   ok(/unknown-frontmatter-key/.test(igw0) && !/unknown-frontmatter-key/.test(igw),
      'and still silences a warning', igw.split('\n')[0]);
+  // The linter is the first look SECURITY.md recommends, so what it prints
+  // from the source must not be obeyed by the terminal: a class token
+  // carrying a clear-screen and a title change (OSC 0) used to reach it raw,
+  // and could print a clean result over the real errors. Every line goes out
+  // through lint.js's copy of build.js's consoleSafe, held to the same text.
+  const esc = lintOf('---\ntitle: T\n---\n' + BODY.replace('## free: A | x {#a}',
+    '## free: A | x {#a .x\x1b[2J\x1b]0;PWNED\x07‮}').replace('IMG', '![](../../outside/key)'));
+  ok(/unknown-class/.test(esc) && /asset-outside-root/.test(esc),
+     'lint.js reports a class token carrying escape sequences, and the error beside it', esc.split('\n')[0]);
+  ok(!/[\x00-\x08\x0b-\x1f\x7f‪-‮⁦-⁩]/.test(esc),
+     'and prints none of its control characters or bidi overrides', JSON.stringify(esc.split('\n')[0]));
+  ok(lift(buildSrc, 'consoleSafe', 'build.js') === lift(lintSrc, 'consoleSafe', 'lint.js'),
+     'and the two copies of consoleSafe are the same text');
 }

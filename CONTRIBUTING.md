@@ -191,8 +191,8 @@ archive does not pretend otherwise.
 **The desktop app is packaged by a third workflow.** `.github/workflows/desktop.yml`
 runs on a push that touches `desktop/` or one of the engine files the app
 stages (`build.js`, `diagram-core.mjs`, `tails.mjs`, `cue-cards.mjs`,
-`commands.mjs`, `pdf-core.mjs`, `pulse-embed.js`, `editor.mjs`, `editor.css`,
-`LICENSE`, the root `package.json` and lockfile – `desktop/test/stage-engine.test.mjs`
+`commands.mjs`, `pdf-core.mjs`, `local-files.mjs`, `pulse-embed.js`, `editor.mjs`,
+`editor.css`, `LICENSE`, the root `package.json` and lockfile – `desktop/test/stage-engine.test.mjs`
 holds that filter against the staging script's own list, because it is the
 third hand-written copy of it), or one of the two the app does not stage but
 its smoke test runs (`pdf-export.mjs`, `chrome-path.mjs`, behind the parity

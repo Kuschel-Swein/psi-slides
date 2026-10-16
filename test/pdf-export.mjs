@@ -32,6 +32,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import dgram from 'node:dgram';
 import net from 'node:net';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -257,6 +258,59 @@ const near = (a, b, tol = 1) => Math.abs(a - b) <= tol;
 // page count and the page size are not.
 function have(tool) {
   return spawnSync(tool, ['-v'], { encoding: 'utf8' }).error === undefined;
+}
+
+// ── pictures, for the --frames check ────────────────────────────────
+//
+// A solid-colour PNG to plant, and a count of the red pixels in a frame
+// Chromium wrote: 8-bit RGB or RGBA, not interlaced, the five row filters.
+// Thirty lines rather than a decoder this test would take on for one check.
+function pngChunk(type, data) {
+  const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+  const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+  const crc = Buffer.alloc(4); crc.writeUInt32BE(zlib.crc32(body) >>> 0);
+  return Buffer.concat([len, body, crc]);
+}
+function solidPng(w, h, [r, g, b]) {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const row = Buffer.concat([Buffer.from([0]), Buffer.from(Array.from({ length: w }, () => [r, g, b]).flat())]);
+  return Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', zlib.deflateSync(Buffer.concat(Array.from({ length: h }, () => row)))), pngChunk('IEND', Buffer.alloc(0))]);
+}
+function redPixels(png) {
+  let at = 8, w = 0, h = 0, type = 0;
+  const idat = [];
+  while (at < png.length) {
+    const len = png.readUInt32BE(at);
+    const kind = png.toString('latin1', at + 4, at + 8);
+    const data = png.subarray(at + 8, at + 8 + len);
+    if (kind === 'IHDR') { w = data.readUInt32BE(0); h = data.readUInt32BE(4); type = data[9]; }
+    if (kind === 'IDAT') idat.push(data);
+    at += 12 + len;
+  }
+  const bpp = type === 6 ? 4 : 3;
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  const stride = w * bpp;
+  let prev = Buffer.alloc(stride);
+  let red = 0;
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (stride + 1)];
+    const cur = Buffer.from(raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1)));
+    for (let i = 0; i < stride; i++) {
+      const a = i >= bpp ? cur[i - bpp] : 0, b = prev[i], c = i >= bpp ? prev[i - bpp] : 0;
+      const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+      const pred = f === 1 ? a : f === 2 ? b : f === 3 ? (a + b) >> 1
+        : f === 4 ? (pa <= pb && pa <= pc ? a : pb <= pc ? b : c) : 0;
+      cur[i] = (cur[i] + pred) & 255;
+    }
+    for (let x = 0; x < w; x++) {
+      const o = x * bpp;
+      if (cur[o] > 200 && cur[o + 1] < 60 && cur[o + 2] < 60) red++;
+    }
+    prev = cur;
+  }
+  return red;
 }
 
 // ── the run ─────────────────────────────────────────────────────────
@@ -787,6 +841,85 @@ Nothing on this slide should reach a listener.
   ok(lr.status === 0, 'the leak deck exports', lr.out.slice(-400));
   ok(!heard.includes('udp'), 'no STUN packet from an RTCPeerConnection reaches its server', heard.join(','));
   ok(!heard.includes('tcp'), 'no WebSocket opened in a Worker reaches its server', heard.join(','));
+
+  // ── what a page may show of the disk ──────────────────────────────
+  // Chromium will not let a page opened from disk read another file, but it
+  // will show one: an iframe of a text file two folders up, the folder above
+  // drawn as a listing with the user's name in its path. The exports and the
+  // probes print or photograph what is shown, so both now load only what
+  // --serve would answer for the lecture (local-files.mjs). The page inside
+  // the lecture's own folder is the control: an iframe still works there.
+  console.log('\nwhat a page may show of the disk: the lecture\'s own files, and nothing further out');
+  const disk = path.join(dir, 'disk');
+  const lec = path.join(disk, 'lec');
+  fs.mkdirSync(path.join(lec, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'far-secret.txt'), 'PSIFARSECRETMARK\n');
+  fs.writeFileSync(path.join(disk, 'near-secret.txt'), 'PSINEARSECRETMARK\n');
+  fs.writeFileSync(path.join(lec, 'inside.html'), '<!doctype html><p>PSIINSIDEPAGEMARK</p>');
+  const RED = solidPng(64, 64, [255, 0, 0]);
+  fs.writeFileSync(path.join(dir, 'far-red.png'), RED);
+  fs.writeFileSync(path.join(lec, 'assets', 'red.png'), RED);
+  fs.writeFileSync(path.join(lec, 'source.md'), `---
+title: The disk fixture
+---
+
+## free: Frames onto the disk {#frames}
+
+Three frames, and one of them is the lecture's own page.
+
+<iframe src="inside.html" style="width:600px;height:80px"></iframe>
+<iframe src="../near-secret.txt" style="width:600px;height:80px"></iframe>
+<iframe src="../../far-secret.txt" style="width:600px;height:80px"></iframe>
+<iframe src="../" style="width:600px;height:200px"></iframe>
+
+## free: A picture from two folders up {#far}
+
+<img src="../../far-red.png" style="display:block;width:640px;height:360px">
+
+## free: A picture from the lecture's own folder {#near}
+
+<img src="assets/red.png" style="display:block;width:640px;height:360px">
+`);
+  const dr = build(lec, ['--print-pdf', '--slides-pdf', '--no-inline-images']);
+  const drLog = (dr.stdout || '') + (dr.stderr || '');
+  ok(dr.status === 0, 'the disk deck exports', drLog.slice(-400));
+  ok(/refused \d+ request\(s\) for file:\/\/\S*far-secret\.txt/.test(dr.stderr || '')
+     && /refused \d+ request\(s\) for file:\/\/\S*near-secret\.txt/.test(dr.stderr || ''),
+     'the export names each file it refused', (dr.stderr || '').split('\n').filter(l => /refused/.test(l)).join(' | '));
+  if (have('pdftotext')) {
+    const textOf = (p) => spawnSync('pdftotext', [p, '-'], { encoding: 'utf8' }).stdout.replace(/\s+/g, ' ');
+    for (const name of ['print.pdf', 'slides.pdf']) {
+      const t = textOf(path.join(lec, name));
+      // The control, in the document: the slide export prints the slide's
+      // collapsed text, where a raw frame does not stand.
+      if (name === 'print.pdf') {
+        ok(/PSIINSIDEPAGEMARK/.test(t), `${name} shows the page from the lecture's own folder – a frame still works`);
+      }
+      ok(!/PSINEARSECRETMARK|PSIFARSECRETMARK/.test(t),
+         `${name} carries neither text file from outside what the build may read`);
+      ok(!/Index of|near-secret\.txt|far-red\.png/.test(t) && !t.includes(os.userInfo().username + '/'),
+         `${name} carries no listing of the folder above`, (/.{20}Index of.{60}/.exec(t) || [''])[0]);
+    }
+  } else {
+    note('pdftotext is not on PATH – skipping the disk text checks.');
+  }
+  // --frames is one of the three probes on openAudienceProbe; a frame is a
+  // picture, so the check is the colour: the red picture from two folders up
+  // must not be in its frame, the one from assets/ must.
+  const fr = build(lec, ['--frames']);
+  ok(fr.status === 0, '--frames runs on the disk deck', ((fr.stdout || '') + (fr.stderr || '')).slice(-400));
+  ok(/--frames: refused file:\/\/\S*far-red\.png/.test(fr.stderr || ''),
+     '--frames names the picture it refused', (fr.stderr || '').split('\n').filter(l => /refused/.test(l)).join(' | '));
+  const frameOf = (id) => {
+    const f = fs.readdirSync(path.join(lec, 'frames')).find(n => new RegExp(`-${id}-b0\\.png$`).test(n));
+    return f ? fs.readFileSync(path.join(lec, 'frames', f)) : null;
+  };
+  const nearPng = frameOf('near');
+  const farPng = frameOf('far');
+  const nearRed = nearPng ? redPixels(nearPng) : -1;
+  const farRed = farPng ? redPixels(farPng) : -1;
+  ok(nearRed > 50000, 'the frame of the lecture\'s own red picture is red – the check can see one', String(nearRed));
+  ok(farRed >= 0 && farRed < 1000, 'the frame of the picture from two folders up is not', String(farRed));
 } finally {
   // $PSI_PDF_KEEP leaves the fixture, the DOM dump and both PDFs in $TMPDIR.
   // A failing DOM assertion is a question about one string in a megabyte of

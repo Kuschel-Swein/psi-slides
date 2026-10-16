@@ -370,10 +370,12 @@ node test/run.mjs --jobs 1                     # one at a time, one browser
 # between settings.mjs and the browser suite in `npm test`: it cannot pass
 # without a findable browser, so it goes after the checks that need none, and
 # it takes seconds rather than minutes, so it goes before the ones that do.
-# 139 assertions, including all four promised diagnostics, the page count of
+# 157 assertions, including all four promised diagnostics, the page count of
 # the *file* rather than of the wrappers, the two documents (A4, the note in
 # print-notes.pdf and not in print.pdf, a fragment link that still resolves,
-# ::: pulse answers printed), the refusals, and one browser for three PDFs.
+# ::: pulse answers printed), the refusals, one browser for three PDFs, and a
+# deck whose frames show files outside the lecture – neither PDF nor a
+# --frames picture carries them.
 node test/pdf-export.mjs                       # or npm run pdf
 PSI_PDF_KEEP=1 node test/pdf-export.mjs        # leave the fixture in $TMPDIR
 
@@ -450,11 +452,22 @@ the file is on `stage-engine.mjs`'s list), `PDF_CSS`, the in-page functions,
 `exportSlides`, `exportDocument` and `formatReport` – which states become
 pages, what leaves the clone, what the print DOM is, every diagnostic, and
 **the order in which a driver is asked for anything**. A driver is `open({w, h,
-onBlocked, onPageError})` returning a page (`load`, `waitFor`, `evaluate`,
+allowFile, onBlocked, onRefusedFile, onPageError})` returning a page (`load`, `waitFor`, `evaluate`,
 `pdf`, `close`) plus `version`, `where` and `close`; it decides nothing, so it
 cannot get the order wrong, and the `pdf-core` gate holds that order with a
 fake driver that records its calls. The app therefore carries no
 playwright-core and `--omit=optional` in `stage-engine.mjs` stays.
+**`allowFile(url)` is the caller's, and an export without one is refused
+before a page opens**: which `file:` requests the page may make, the view
+itself included – `fileUrlAllowed` from `local-files.mjs`, bound to the
+lecture's folder, in `build.js` and in `desktop/main/pdf.js` alike. The
+Playwright driver holds it with a `page.route(/^file:/)` (`routeLocalFiles`,
+which `openAudienceProbe` borrows for `--frames`, `--check-fit` and
+`--squint`), the Electron driver with `ses.protocol.handle('file')`, because
+a page opened from disk *shows* a file it cannot read (an iframe, a folder
+drawn as a listing) and, in Electron alone, may `fetch()` any other file.
+`desktop/test/confine.mjs` (`npm run confine`, a step in `desktop.yml`) holds
+the Electron half in a real Electron.
 
 The order of the beats stays in `AUDIENCE_JS`, where it has always had its one
 definition; the slide export calls it through `window.psiExport`, eleven
@@ -477,6 +490,17 @@ decode the pictures, print on `print` media at the view's own `@page`; the page
 count is read out of the PDF's bytes (`pdfFacts`), because no DOM knows a
 document's pagination. The plan and its decisions per stage are in
 `docs/history/PLAN-desktop-pdf-export.md`.
+
+**`local-files.mjs` is the seventh module, Node-only and zero-dependency**:
+which files on this machine a lecture may reach – the asset root
+(`assetEscape`, `assetRootOf`, `assetRootNarrowed`, `assetRootExposed`,
+`assetKindOf`), what `--serve` answers (`SERVE_MIME`, `servePathAllowed`),
+and what a page the engine opens from disk may load (`fileUrlAllowed`). It
+left `build.js` because the desktop app's PDF export has to apply the same
+rule in Electron's main process, which cannot import `build.js`; `build.js`
+imports it statically, so it is on `stage-engine.mjs`'s list and in
+`desktop.yml`'s filter. `lint.js` keeps its mirror of the asset half, held
+equal as text by the `untrusted` gate, which imports the module itself.
 
 **“Souffleuse” is the live prompter's internal codename.** Every name an author types says *prompter* – the four `--prompter*` flags, the `prompter:` frontmatter block, the `prompter-*.jsonl` / `prompter-*.prompt.txt` files, the `prompter` `--events` type and the `unknown-prompter-setting` lint code – while the codename survives in file and identifier names nobody types: `souffleuse.mjs`, `SOUFFLEUSE_*`, `createSouffleuse`, the `souffleuse-*` socket messages and storage keys, the `psiINT-souffleuse-*` cockpit ids, and the two test files.
 
@@ -508,7 +532,7 @@ Design implications:
 
 ### lint.js is independent
 
-`lint.js` is a **zero-dep** linter – nothing from `node_modules`, so it runs as a pre-commit gate without the Markdown/Shiki stack. It deliberately does not import anything from `build.js`; it re-implements the parsing contract and mirrors the constants (`VALID_TAGS`, `DENSITY_BUDGET`, `VIEW_DEFAULTS`). When you change the parser vocabulary in `build.js`, update `lint.js` in the same commit – the duplication is the price paid for keeping the linter runnable without the Markdown/Shiki stack.
+`lint.js` is a **zero-dep** linter – nothing from `node_modules`, so it runs as a pre-commit gate without the Markdown/Shiki stack. It deliberately does not import anything from `build.js`; it re-implements the parsing contract and mirrors the constants (`VALID_TAGS`, `DENSITY_BUDGET`, `VIEW_DEFAULTS`). When you change the parser vocabulary in `build.js`, update `lint.js` in the same commit – the duplication is the price paid for keeping the linter runnable without the Markdown/Shiki stack. Everything it prints goes through its copy of build.js's `consoleSafe` (held to the same text by the `untrusted` gate), because a finding quotes the source and the linter is the first look `SECURITY.md` recommends at a deck someone sent.
 
 **Two exceptions to that no-imports rule, and both are the same kind of file.** (The code-fence rule is a third import from `tails.mjs`: `fenceTracker`, CommonMark's fence – backticks or tildes, three or more, at most three spaces in, closed by the same run or longer – and every fence-aware reader in both files goes through it; the `tails` gate fails on a hand-written fence regex in either.) The **diagram vocabulary** is imported from `diagram-core.mjs`, which has no dependencies of its own, so importing it costs nothing this file was protecting and removes every table that used to have to change in two places in one commit. **Tables only.** A function from that module would pull the whole compiler in behind it – with the one bend recorded in the `psi-slides-figures` skill, for rules that ARE the vocabulary. The **`{…}` tail grammar and the `::: draw` opener** are imported from `tails.mjs`: zero dependencies, under 400 lines, the slot tables (`CHUNK_SLOTS`, `COLUMN_SLOTS`, `CARDS_SLOTS`, `OVERLAY_SLOTS`, `BACKDROP_SLOTS`, `SIDE_SLOTS`) plus `splitTail`, `parseTail`, `parseDrawOpener` and `formatDrawOpener`, and nothing behind them – so the concern the tables-only rule guards against does not arise, and both files read every tail through one parser. Before it existed the grammar was implemented four times and lint.js reported the same refusal under six codes. `parseTail` never throws; it returns `problems: [{code, msg}]` under five codes – `stray-attribute`, `unknown-class`, `same-slot`, `multiple-ids`, `reserved-id` – and build.js throws the first as a `userFacing` error while lint.js reports each. **The four `::: draw` refusals live in the `psi-slides-figures` skill**, with the reasoning each one encodes.
 
@@ -622,9 +646,9 @@ measurements, slice by slice, are in `docs/history/PLAN-reader-highlights.md`.
 ### A source.md someone sent you
 
 Building a deck must not do more than read it, and three rules in build.js's
-`// ── a source.md someone sent you ──` section keep that – each mirrored in
-`lint.js` and held by the `untrusted` gate and the matching block at the end of
-`test/settings.mjs`:
+`// ── a source.md someone sent you ──` section and in `local-files.mjs` keep
+that – each mirrored in `lint.js` and held by the `untrusted` gate and the
+matching block at the end of `test/settings.mjs`:
 
 - **Frontmatter is YAML only.** gray-matter picks a parser from the word after
   the opening `---`, and `---js` is `eval`. **Call gray-matter only through
@@ -634,7 +658,9 @@ Building a deck must not do more than read it, and three rules in build.js's
   resolved** (`assetEscape`, `assetRootOf`). One level up is the maintainer's
   decision, so lectures side by side can share a picture folder – **except when
   that folder is the home folder or a disk's top** (`assetRootNarrowed`), where
-  the root is the lecture's folder alone; and **never from a folder whose name
+  the root is the lecture's folder alone – **and when the lecture's folder is
+  itself one of those** (`assetRootExposed`), only its `assets/` and `fonts/`
+  (`EXPOSED_FOLDERS`), said once per run by `warnExposedOnce`; and **never from a folder whose name
   starts with a dot**, anywhere below the root; and **a link only when its
   target is the kind of file its name says** (`assetKindOf`: picture, clip or
   face), so `assets/pic.png -> contract.pdf` is refused inside the root too.
@@ -660,8 +686,14 @@ browser, on loopback**, so they carry rules of their own (`runServe`,
 - **`--serve` answers only to its own `Host`** (`serveHostAllowed`: localhost,
   127.0.0.1 or [::1] with its port – DNS rebinding sends another name) and only
   for `servePathAllowed` paths: a `SERVE_MIME` kind, no dot-name, no
-  `prompter-*` / `souffleuse-*`. `source.md` is not served: no view reads it.
-  **A view that starts fetching a new kind of file needs it in `SERVE_MIME`.**
+  `prompter-*` / `souffleuse-*` – and for an exposed lecture folder only the
+  four views, `assets/`, `fonts/` and `videos/`. `source.md` is not served: no
+  view reads it. **A view that starts fetching a new kind of file needs it in
+  `SERVE_MIME`**, and the exports and probes then load it too, since
+  `fileUrlAllowed` is the same rule. Every answer carries `SERVE_HEADERS`
+  (`frame-ancestors 'self'`, `nosniff`, CORP `same-origin`); no
+  `Referrer-Policy`, because YouTube needs a Referer and the embed sets its
+  own.
 - **The watch socket checks Origin before the nonce** (`watchOriginAllowed`:
   `null` / `file://`, or the served origin via `servedPort`), caps messages at
   `WATCH_MAX_PAYLOAD`, and keeps an `error` listener on every socket – without
@@ -1007,7 +1039,7 @@ and `desktop/main/builder.js` and its `events.test.mjs` change in the same
 commit. The human log lines are free to move. The engine the packaged app
 runs is a copy staged by `desktop/scripts/stage-engine.mjs` – `build.js`, the
 six files it reads relative to itself (`commands.mjs` is read and imported),
-the two more it only imports (`tails.mjs`, `pdf-core.mjs`), plus a production `npm ci` that omits optional dependencies – so a new runtime file that `build.js` reads via `import.meta.url`
+the three more it only imports (`tails.mjs`, `pdf-core.mjs`, `local-files.mjs`), plus a production `npm ci` that omits optional dependencies – so a new runtime file that `build.js` reads via `import.meta.url`
 has to be added to that script's `FILES` or the packaged app fails **every**
 build: the read is a bare `readFileSync` inside a renderer, so it throws
 `ENOENT` before any view reaches disk rather than degrading one view.

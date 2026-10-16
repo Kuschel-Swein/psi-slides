@@ -4368,9 +4368,22 @@ console.log('\nlayout generations');
       });
       const get = async (p, headers = {}) => {
         const r = await fetch(base + p, { headers });
-        return { status: r.status, body: await r.text(), range: r.headers.get('content-range') };
+        return { status: r.status, body: await r.text(), range: r.headers.get('content-range'), h: r.headers };
       };
       if (base) {
+        // Hardening on every answer, a refusal included: no other site may
+        // frame a view (the cockpit carries the watch nonce), the browser
+        // takes each file for the type it is served as, and no other origin
+        // may load a picture to learn whether it exists.
+        for (const [p, want] of [['/audience.html', 200], ['/shared/logo.png', 200], ['/other.html', 404]]) {
+          const r = await get(p);
+          ok(r.status === want && r.h.get('content-security-policy') === "frame-ancestors 'self'"
+             && r.h.get('x-content-type-options') === 'nosniff'
+             && r.h.get('cross-origin-resource-policy') === 'same-origin',
+             `--serve answers ${p} (${want}) with frame-ancestors 'self', nosniff and CORP same-origin`,
+             JSON.stringify([r.status, r.h.get('content-security-policy'), r.h.get('x-content-type-options'),
+               r.h.get('cross-origin-resource-policy')]));
+        }
         const tail = await get('/n.pdf', { range: 'bytes=-3' });
         ok(tail.status === 206 && tail.body === 'hij' && tail.range === 'bytes 7-9/10',
            '--serve answers bytes=-3 with the last three bytes', JSON.stringify(tail));
@@ -4492,6 +4505,40 @@ console.log('\nlayout generations');
   const siblingPic = (d) => fs.symlinkSync(path.join(home, 'outside', 'pic.png'), path.join(d, 'assets', 'near.png'));
   const notHome = deck(YAML, '![](near)', siblingPic, { parent: home, home: path.join(base, 'elsewhere') });
   ok(notHome.code === 0, 'the same layout with home elsewhere builds (one level up)', notHome.out.split('\n')[0]);
+  // A lecture whose folder IS the home folder: the lecture's folder alone is
+  // everything the person owns, and one level up is every account's home. It
+  // reads from its assets/ and fonts/ only, and says so once.
+  {
+    const own = path.join(base, 'own-home');
+    fs.mkdirSync(path.join(own, 'assets'), { recursive: true });
+    fs.mkdirSync(path.join(base, 'neighbour'), { recursive: true });
+    fs.writeFileSync(path.join(own, 'beside.png'), PNG);
+    fs.writeFileSync(path.join(own, 'assets', 'pic.png'), PNG);
+    fs.writeFileSync(path.join(base, 'neighbour', 'photo.png'), PNG);
+    const env = { ...process.env, HOME: own };
+    const at = (body) => {
+      fs.writeFileSync(path.join(own, 'source.md'), `${YAML}\n## title: {#title}\n\nHi.\n\n# P {#p}\n\n`
+        + `## free: A | x {#a}\n\n${body}\n\n## free: B | y {#b}\n\nT.\n`);
+      for (const v of ['print', 'print-notes', 'audience', 'speaker']) fs.rmSync(path.join(own, v + '.html'), { force: true });
+      const r = spawnSync(process.execPath, [path.join(ROOT, 'build.js'), path.join(own, 'source.md')],
+        { cwd: ROOT, encoding: 'utf8', env });
+      const l = spawnSync(process.execPath, [path.join(ROOT, 'lint.js'), path.join(own, 'source.md')],
+        { cwd: ROOT, encoding: 'utf8', env });
+      return { code: r.status, out: (r.stdout || '') + (r.stderr || ''), lint: l.stdout || '' };
+    };
+    const ok1 = at('![](assets/pic.png)');
+    ok(ok1.code === 0 && (ok1.out.match(/is your home folder or the top of a disk, so this build/g) || []).length === 1,
+       'a lecture whose folder is home builds from assets/, and says once what it reads', ok1.out.split('\n')[0]);
+    ok(!/asset-outside-root/.test(ok1.lint), 'and lints clean');
+    for (const [what, body] of [['a picture beside source.md', '![](beside.png)'],
+      ['a picture in a neighbouring account\'s folder', '![](../neighbour/photo.png)']]) {
+      const r = at(body);
+      ok(r.code !== 0 && /assets\/ and fonts\/ folders alone/.test(r.out)
+         && !fs.existsSync(path.join(own, 'print.html')),
+         `${what} is refused when the lecture's folder is home, and told why`, r.out.split('\n').find(x => /may not read/.test(x)));
+      ok(/asset-outside-root/.test(r.lint) && /assets\/ and fonts\//.test(r.lint), 'and lint.js says the same', r.lint.split('\n')[0]);
+    }
+  }
   // A link whose name says picture and whose target is a PDF, inside the
   // lecture's own folder: the bytes would have gone into the page as an image.
   const pdf = deck(YAML, '![](pic)', (d) => {
