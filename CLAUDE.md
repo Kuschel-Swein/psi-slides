@@ -354,7 +354,11 @@ node lint.js lectures/ --strict                # warnings → exit 2
 # `:::`), built and linted, asserting the two agree and nothing leaks onto
 # the projection – about 175 decks, five seconds. And test/cli.mjs, the
 # command line's refusals, --help, a folder for a file and a busy port, by
-# spawning build.js – about five seconds.
+# spawning build.js – about five seconds. And test/large-deck.mjs, a generated
+# deck of 2,400 chunks in twelve parts (figures, a figure in a pane, code,
+# math, cards, columns, notes) built and linted, every chunk id and figure
+# counted in the output, and the cost above an eight-chunk deck held under
+# x10 for x4 the chunks, which a quadratic pass would not be – a few seconds.
 # `npm test` runs the gates first so a compiler regression fails in seconds
 # rather than in minutes; gates.yml runs them on push and PR. A spec waits
 # with `settle(page, cap)` from harness.mjs, not a fixed sleep, wherever the

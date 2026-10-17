@@ -561,6 +561,24 @@ fails there rather than merging green. They are not published and their views
 are not tracked. They live here rather than in `lectures/` because that folder
 holds the canonical examples of what the tool supports, and these are tests.
 
+## The large deck
+
+`test/large-deck.mjs` builds a deck no lecture comes near: 2,400 chunks in
+twelve parts, eight chunk shapes in turn, so every part carries reveal
+segments, notes, a code block, formulas, a stepped figure, a figure in a
+`::: side` pane, a card row, columns, an expansion and a footnote. It asserts
+the build writes four views, every chunk id stands in `audience.html` and
+`print.html`, every figure is drawn, and `lint.js` finds no error. It also
+times three sizes (8, 600 and 2,400 chunks, the faster of two builds each)
+and requires the cost above the eight-chunk deck to grow less than tenfold
+for four times the chunks: linear is about x4, a quadratic pass x16. The
+fixed start-up is subtracted because it is most of a build at these sizes
+(0.27 s of 0.48 s for 600 chunks when it was written), and a ratio of totals
+would hide a quadratic pass behind it. `PSI_LARGE_CHUNKS=<n>` runs it at
+another size. It covers the build and the linter only; what a large deck
+costs in the browser – the camera, auto-fit, the cockpit's strip – is not
+measured here.
+
 ## Running it
 
 The runner builds and serves the lectures itself, so it never reports on stale
@@ -627,7 +645,8 @@ line swallowed console errors for as long as it existed.
 ## Measuring coverage
 
 `npm run test:coverage` runs the half of `npm test` that needs no browser –
-the gates, `settings`, `containers`, `cli`, `present` and `reproducible` –
+the gates, `settings`, `containers`, `cli`, `large-deck`, `present` and
+`reproducible` –
 under [c8](https://github.com/bcoe/c8) and prints a table per file, with an
 HTML report in `coverage/` (gitignored). It is a measurement, not a gate: no
 threshold fails a run. c8 reads V8's own coverage through `NODE_V8_COVERAGE`,
