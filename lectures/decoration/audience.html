@@ -139,7 +139,7 @@ body[data-mode=dark][data-pitchblack=on][data-neutrals=tinted] :is(.overlay-card
 body[data-mode=dark][data-pitchblack=on][data-neutrals=tinted] .dock.ov-tint {
   background: color-mix(in oklch, var(--emph) 20%, transparent);
 }
-body[data-code=tint][data-mode=dark][data-pitchblack=on] .chunk-body code:not(pre code):not(.embed-blocked code),
+body[data-code=tint][data-mode=dark][data-pitchblack=on] .chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code),
 body[data-code=tint][data-mode=dark][data-pitchblack=on] .exp-body code:not(pre code) {
   background: color-mix(in oklch, var(--ink) 24%, transparent);
 }
@@ -162,7 +162,9 @@ body[data-theme^=terminal] pre.shiki * {
 body[data-theme^=terminal] .chunk-body pre.shiki,
 body[data-theme^=terminal] .exp-body pre.shiki { background: var(--paper-warm) !important; padding: 0.5em 0.8em; }
 body[data-theme^=terminal] .chunk-body code,
-body[data-theme^=terminal] .exp-body code { color: var(--emph); }
+body[data-theme^=terminal] .exp-body code,
+body[data-theme^=terminal] .chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code),
+body[data-theme^=terminal] .exp-body code:not(pre code) { color: var(--emph); }
 body[data-theme^=terminal] .chunk.expanded .exp-body.on { background: var(--paper-warm); }
 body[data-theme^=terminal] #psiINT-stage-viewport { background: var(--paper); }
 body[data-mode=dark] #psiINT-stage-viewport { background: var(--paper); }
@@ -327,15 +329,17 @@ a:hover { text-decoration-thickness: 2px; }
 .chunk-body ul, .chunk-body ol { margin: 0 0 var(--block-gap) 1.4em; }
 .chunk-body li { margin: 0.45em 0; }
 .chunk-body code { font-family: var(--mono-font); font-size: 0.92em; }
+.chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code),
+.exp-body code:not(pre code) { font-family: var(--mono-font); font-size: 0.92em; }
 code.nb { white-space: nowrap; }
-.chunk-body code:not(pre code):not(.embed-blocked code):not(.nb),
+.chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code):not(.nb),
 .exp-body code:not(pre code):not(.nb) {
   margin: 0 0.25em;
   word-spacing: -0.28em;
 }
-.chunk-body code:not(pre code):not(.embed-blocked code):not(.nb).lead,
+.chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code):not(.nb).lead,
 .exp-body code:not(pre code):not(.nb).lead { margin-left: 0; }
-body[data-code=tint] .chunk-body code:not(pre code):not(.embed-blocked code),
+body[data-code=tint] .chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code),
 body[data-code=tint] .exp-body code:not(pre code) {
   margin: 0;
   word-spacing: normal;
@@ -3003,11 +3007,11 @@ body.toc-visible #psiINT-toc { transform: translateX(0); }
 </style>
 
 <style>
-body[data-font=serif] .chunk-body code:not(pre code):not(.embed-blocked code),
+body[data-font=serif] .chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code),
 body[data-font=serif] .exp-body code:not(pre code) { font-size: 0.885em; }
-body[data-font=sans] .chunk-body code:not(pre code):not(.embed-blocked code),
+body[data-font=sans] .chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code),
 body[data-font=sans] .exp-body code:not(pre code) { font-size: 0.901em; }
-body[data-font=mono] .chunk-body code:not(pre code):not(.embed-blocked code),
+body[data-font=mono] .chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code),
 body[data-font=mono] .exp-body code:not(pre code) { font-size: 0.96em; }
 </style>
 
