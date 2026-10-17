@@ -269,7 +269,10 @@ chunk, one with a picture, a long one with another right after it – is floated
 right of the text column and inside the window, level with the paragraph
 written after it or right under the note that pushed it, with no two
 overlapping and the picture the note's width at its head; at 390 px every one
-falls back to the aside inside the column, its picture capped; a reader's note
+falls back to the aside inside the column, its picture capped; a
+`::: footnote` stands in the margin level with the block it was written after
+and ends before the next part, and at 390 px is the labelled block under its
+chunk again; a reader's note
 card whose highlight stands level with a margin note steps out of its way;
 and the section numbers the build writes (1, 1.1) are the ones in the
 headings and the sidebar, where a lecture under `slide-numbers: off` shows

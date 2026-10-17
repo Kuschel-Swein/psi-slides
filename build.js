@@ -6042,6 +6042,18 @@ function parseLecture(src) {
       const segAt = segmentIndexer(bodyLines, segments, kept);
       currentChunk.expansions.forEach((e) => {
         e.seg = segAt(e.at || 0);
+        // Where a footnote stands among the body's blocks, for the documents'
+        // margin (renderChunk, style: {print-marginalia: margin}): the number
+        // of top-level blocks written before its opener, counted the way the
+        // print body is - every segment joined, the reveal marks out.
+        if (e.kind === 'margin') {
+          const fence = fenceTracker();
+          const before = bodyLines.slice(0, e.at || 0).filter((l) => {
+            const fenceLine = fence.step(l);
+            return fenceLine || fence.inside || !parseRevealMark(l);
+          });
+          e.blocksBefore = marked.lexer(before.join('\n')).filter(t => t.type !== 'space').length;
+        }
         delete e.at;
       });
     }
@@ -8621,20 +8633,22 @@ const STYLE_SPEC = {
   // no sensible reading as a whole printed document, which a deferral would
   // have to invent one for.
   'print-body': { kind: 'enum', values: ['serif', 'sans'], dflt: 'serif' },
-  // Where a ::: marginalia prints. On the projection it stands in the
-  // slide's right margin; in the documents it has been an indented aside in
-  // the text column, and the empty outer margin the print layout keeps
-  // (main's rule in PRINT_CSS's @media print block) is where it belongs.
+  // Where a ::: marginalia and a ::: footnote print. On the projection the
+  // one stands in the slide's right margin and the other under the slide; in
+  // the documents both were blocks in the text column, and the empty outer
+  // margin the print layout keeps (main's rule in PRINT_CSS's @media print
+  // block) is where they belong.
   //
-  //   inline - the aside in the column, as before.
-  //   margin - in the right margin beside the block it is written before,
-  //            on a screen wide enough to have one and on paper; a narrow
-  //            window falls back to the aside.
+  //   margin - the default, in every print view: a marginalia beside the
+  //            block it is written before, a footnote beside the block it is
+  //            written after (renderChunk, footnoteSlots), on a screen wide
+  //            enough to have a margin and on paper; a narrow window falls
+  //            back to the two blocks as they were.
+  //   inline - both in the column, the handout as it was before the margin.
   //
-  // Its default is a deferral, resolved by printMarginalia(): `margin` in a
-  // `kind: document`, `inline` in a lecture, so no lecture's handout moves
-  // until its author writes `print-marginalia: margin`.
-  'print-marginalia': { kind: 'enum', values: ['inline', 'margin'], dflt: '' },
+  // It was a deferral for a while - margin in a kind: document, inline in a
+  // lecture - and the lectures' handouts moved to the margin on purpose.
+  'print-marginalia': { kind: 'enum', values: ['inline', 'margin'], dflt: 'margin' },
   // How a `**bold**` phrase looks. In this tool bold is a selection mark
   // first - the collapse lifts it onto the slide as a bullet of its own - and
   // a typographic weight only by the accident of markdown. `bold` answers for
@@ -8971,14 +8985,12 @@ function lectureKind(frontmatter = {}) {
   return raw;
 }
 const isDocumentKind = (frontmatter) => lectureKind(frontmatter) === 'document';
-// Where a ::: marginalia prints. `inline` is the quiet aside in the text
-// column it has always been; `margin` sets it in the outer margin beside
-// the block that follows it, the way a Tufte book does. The default is a
-// deferral like print-neutrals' - an unset key is `margin` in a document
-// and `inline` in a lecture, so no lecture's handout moves - and this is
-// the one place it is resolved.
-function printMarginalia(st, frontmatter = {}) {
-  return st['print-marginalia'] || (isDocumentKind(frontmatter) ? 'margin' : 'inline');
+// Where a ::: marginalia and a ::: footnote print: `margin` (the default,
+// documents and lectures alike) or `inline`, the blocks in the text column
+// they used to be. One reader, so the body attribute and the footnote slots
+// in renderChunk cannot disagree.
+function printMarginalia(st) {
+  return st['print-marginalia'] || 'margin';
 }
 // The numbers a document prints: 1, 2, … for its parts and 1.1, 1.2, … for
 // the chunks of each part that carry a heading. A chunk before the first
@@ -9553,18 +9565,69 @@ function renderHeadingHtml(chunk, cls = 'chunk-heading', num = '') {
   return `<h2 class="${cls} has-sub"><span class="hd-main">${main}</span> <span class="hd-sub">${sub}</span></h2>`;
 }
 
+// A ::: footnote in the margin (opts.marginNotes, renderChunk). It is lifted
+// out of the body by the parser, which remembers how many of the body's
+// top-level blocks were written before it (blocksBefore); here a sentinel
+// comment goes in front of that block - the last one before the opener, or
+// the first when nothing preceded it - so the note, a right float, stands
+// level with the block it was written after. A block inside a wrapper (a
+// ::: side pane, a ::: marginalia) is not a place: the sentinel goes in front
+// of the outermost wrapper instead. The source is split at a token's raw
+// offset, which needs the tokens' raws to add up to the body; where they do
+// not, the slots go to the end, which is where a footnote has always been.
+function footnoteSlots(body, notes) {
+  const tokens = marked.lexer(body);
+  const blocks = [];
+  let off = 0, depth = 0, outerStart = null;
+  const OPEN = /<(div|aside|figure|section|details)\b[^>]*>/g;
+  const CLOSE = /<\/(div|aside|figure|section|details)>/g;
+  for (const t of tokens) {
+    const start = off;
+    off += t.raw.length;
+    if (t.type === 'space') continue;
+    blocks.push({ start: depth > 0 ? outerStart : start });
+    if (t.type === 'html') {
+      const before = depth;
+      depth += (t.raw.match(OPEN) || []).length - (t.raw.match(CLOSE) || []).length;
+      if (depth < 0) depth = 0;
+      if (before === 0 && depth > 0) outerStart = start;
+    }
+  }
+  const at = off === body.length && blocks.length
+    ? notes.map(n => blocks[Math.min(Math.max(n.blocksBefore || 0, 1), blocks.length) - 1].start)
+    : notes.map(() => body.length);
+  let src = body;
+  notes.map((n, i) => [at[i], i]).sort((a, b) => b[0] - a[0] || b[1] - a[1]).forEach(([pos, i]) => {
+    src = src.slice(0, pos) + `<!--psiINT-fn-${i}-->\n\n` + src.slice(pos);
+  });
+  return src;
+}
+
 function renderChunk(chunk, frontmatter, num, opts = {}) {
   const { tag, body = '', id, width, expansions = [], annotation = '', speakerNotes = [] } = chunk;
   const S = opts.strings || lectureStrings(frontmatter);
   const nums = opts.nums || chunkNumbers([]);
+  const asideHtml = (e) => {
+    const inner = marked.parse(e.body || '');
+    const kind = e.kind || 'expand';
+    return `<aside class="chunk-expansion chunk-expansion-${kind}" data-label="${escapeHtml(kind === 'margin' && e.label === 'note' ? S['aside-note'] : e.label)}">
+${inner}
+</aside>`;
+  };
   // An `outline:` chunk is an ordinary chunk whose body ends with the list,
   // and that is the whole of it. Rendering it through a shell of its own
   // dropped five things the ordinary path reads - its speaker notes, its
   // annotation, its expansions, its backdrop and its overlays - and dropped
   // them without a word, because nothing downstream knew they had been
   // written. Appending the list is one line and inherits all of it.
+  // The footnotes that go into the margin, each at its block (footnoteSlots);
+  // under print-marginalia: inline, and for a footnote on a chunk with no
+  // body, they stay where they always were, after the body.
+  const marginNotes = opts.marginNotes && body ? expansions.filter(e => e.kind === 'margin') : [];
+  const bodySrc = marginNotes.length ? footnoteSlots(body, marginNotes) : body;
   const bodyHtml = (body ? (tag === 'statement'
-      ? markQuietStatementLines(marked.parse(body)) : marked.parse(body)) : '')
+      ? markQuietStatementLines(marked.parse(bodySrc)) : marked.parse(bodySrc)) : '')
+      .replace(/<!--psiINT-fn-(\d+)-->\n?/g, (m, i) => `<div class="fn-slot">${asideHtml(marginNotes[Number(i)])}</div>\n`)
     + (tag === 'outline' ? renderOutlineList(opts.parts || [], opts.partNo || 0) : '');
 
   const idAttr = id ? ` id="${escapeHtml(id)}"` : '';
@@ -9617,13 +9680,7 @@ function renderChunk(chunk, frontmatter, num, opts = {}) {
     `width-${width}`,
   ].join(' ');
 
-  const expansionsHtml = expansions.filter(e => e.kind !== 'pulse').map(e => {
-    const inner = marked.parse(e.body || '');
-    const kind = e.kind || 'expand';
-    return `<aside class="chunk-expansion chunk-expansion-${kind}" data-label="${escapeHtml(kind === 'margin' && e.label === 'note' ? S['aside-note'] : e.label)}">
-${inner}
-</aside>`;
-  }).join('\n');
+  const expansionsHtml = expansions.filter(e => e.kind !== 'pulse' && !marginNotes.includes(e)).map(asideHtml).join('\n');
 
   const annotationHtml = annotation.trim()
     ? `<aside class="presentation-note">
@@ -9968,7 +10025,8 @@ function renderDocument(lecture, opts = {}) {
   // themselves - the default is the lecture's `on`, so the question is
   // whether the key was written, not what it resolved to.
   const labelsWritten = !!(frontmatter.style && typeof frontmatter.style === 'object' && 'labels' in frontmatter.style);
-  const chunkOpts = { withNotes: !!opts.withNotes, strings: S, docNums, noLabels: docMode && !labelsWritten };
+  const chunkOpts = { withNotes: !!opts.withNotes, strings: S, docNums, noLabels: docMode && !labelsWritten,
+    marginNotes: printMarginalia(styleSettings(frontmatter)) === 'margin' };
   const forPrint = (html) => stripDarkTokenColors(stripDiagramPayloads(stripBackdropFrames(html)));
   // The parts a lecture has, and which one each column is, threaded through
   // so an `outline:` chunk can list them. Print reorders the columns (anon
@@ -10009,7 +10067,7 @@ function renderDocument(lecture, opts = {}) {
   // written only when they say something, so a lecture's handout is the
   // bytes it was.
   const kindAttrs = (docMode ? ' data-kind="document"' : '')
-    + (printMarginalia(styleOpts, frontmatter) === 'margin' ? ' data-marginalia="margin"' : '');
+    + (printMarginalia(styleOpts) === 'margin' ? ' data-marginalia="margin"' : '');
   // reader: off ships none of it - no attribute, no sidebar, no script - so
   // the CSS keyed off body[data-reader=on] has nothing to match and the
   // lightbox is the only script left, which is what the key promises.
@@ -11091,7 +11149,8 @@ body[data-blocks=left] .math-display .katex-display > .katex,
 
 /* Layout primitives reflow to linear prose in print. The goal is a
    readable document: columns collapse, side panes stack, marginalia
-   sits inline as a quiet aside. */
+   sits inline as a quiet aside - under style: {print-marginalia: inline},
+   or on a screen too narrow for the margin it stands in otherwise. */
 .cols, .cols-2, .cols-3 { column-count: auto; }
 .cols { margin: 0.8em 0 1.05em; }
 .cols > p, .side-a > p, .side-b > p { margin: 0.4em 0 0.9em; }
@@ -11126,8 +11185,9 @@ body[data-marginalia=margin] main .marginalia figure.figure-img :is(img, svg) { 
 }
 
 /* ── a margin note in the margin (style: {print-marginalia: margin}) ──
-   The default in a kind: document, written by renderDocument as
-   body[data-marginalia=margin]. The aside is a right float whose negative
+   The default in every print view, written by renderDocument as
+   body[data-marginalia=margin]; style: {print-marginalia: inline} is the
+   way back to the blocks in the column. The aside is a right float whose negative
    right margin is its own width and a gap, so its margin box stands wholly
    outside the text column - no line of the text is shortened for it - and
    clear: right stacks a second note under the first instead of beside it.
@@ -11142,7 +11202,10 @@ body[data-marginalia=margin] main .marginalia figure.figure-img :is(img, svg) { 
    page area right of the 38rem column, in cm like the page is. Under the
    breakpoint there is no margin, and the note is the aside above. */
 @media screen and (min-width: ${READER_NOTES_PX}px) {
-  body[data-marginalia=margin] { padding: 0 18.5rem 0 1.5rem; }
+  /* The column is reserved where there is a note to stand in it: a handout
+     with none keeps its centred measure (the reader's own notes column,
+     under reader: on, reserves it anyway). */
+  body[data-marginalia=margin]:has(main :is(.marginalia, .fn-slot)) { padding: 0 18.5rem 0 1.5rem; }
   body[data-marginalia=margin] { --mn-w: 14rem; --mn-gap: 2.5rem; }
 }
 @media print {
@@ -11150,7 +11213,7 @@ body[data-marginalia=margin] main .marginalia figure.figure-img :is(img, svg) { 
   body[data-kind=document][data-marginalia=margin] { --mn-w: 4.4cm; --mn-gap: 0.55cm; }
 }
 @media print, screen and (min-width: ${READER_NOTES_PX}px) {
-  body[data-marginalia=margin] main .marginalia {
+  body[data-marginalia=margin] main :is(.marginalia, .fn-slot) {
     float: right;
     clear: right;
     width: var(--mn-w);
@@ -11163,8 +11226,33 @@ body[data-marginalia=margin] main .marginalia figure.figure-img :is(img, svg) { 
     break-inside: avoid;
     page-break-inside: avoid;
   }
-  body[data-marginalia=margin] main .marginalia :is(p, li) { orphans: 1; widows: 1; }
-  body[data-marginalia=margin] main .marginalia p { margin: 0 0 0.45em; }
+  body[data-marginalia=margin] main :is(.marginalia, .fn-slot) :is(p, li) { orphans: 1; widows: 1; }
+  body[data-marginalia=margin] main :is(.marginalia, .fn-slot) p { margin: 0 0 0.45em; }
+  /* A footnote in the margin (footnoteSlots) is a margin note like the
+     other: its aside sheds the rule, the indent and the NOTE label it wears
+     under the chunk, because the margin already says it is a note. */
+  body[data-marginalia=margin] main .fn-slot > .chunk-expansion {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-size: inherit;
+    color: inherit;
+  }
+  body[data-marginalia=margin] main .fn-slot > .chunk-expansion::before { content: none; }
+  /* A note ends with its chunk: one that runs past the chunk's last line
+     would stand beside the next chunk's heading and read as that chunk's.
+     The chunk clears its floats, so the next one starts below the note. */
+  body[data-marginalia=margin] main .chunk::after { content: ''; display: block; clear: right; }
+}
+/* Under the breakpoint there is no margin, and a footnote is the labelled
+   block under its chunk it always was, although it stands at its block in
+   the source of the page: the chunk becomes a table and the slot its
+   footer, which a table sets after every other row whatever its place.
+   The blocks before the slot share one anonymous cell, so their margins
+   collapse as they did. Only a chunk that has a slot, and only there. */
+@media screen and (max-width: ${READER_NOTES_PX - 0.02}px) {
+  body[data-marginalia=margin] main .chunk:has(> .fn-slot) { display: table; table-layout: fixed; width: 100%; }
+  body[data-marginalia=margin] main .chunk > .fn-slot { display: table-footer-group; }
 }
 
 /* Headings inside a chunk. The chunk's own heading is an h2 at 1.12rem and

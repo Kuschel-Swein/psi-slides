@@ -705,13 +705,24 @@ the bytes it did:
   drops the type word unless `style: {labels}` is written, drops "– print"
   from the title and appends `DOCUMENT_PAGE_CSS` (an `@page` that widens the
   outer margin; an `@page` cannot key off a body attribute).
-- **Margin notes** are `style: {print-marginalia: inline | margin}`, a
-  deferral resolved by `printMarginalia()` – `margin` in a document, `inline`
-  in a lecture. `body[data-marginalia=margin]` floats `.marginalia` right
-  with a negative margin of its own width plus a gap, the construction the
-  reader's printed notes (`.rd-pnote`) already used; on screen from
-  `READER_NOTES_PX` in the column the reader keeps, on paper in the page
-  area. The reader's cards step out of a note's way (`pack()`).
+- **Margin notes** are `style: {print-marginalia: margin | inline}`,
+  `margin` by default in every print view, documents and lectures alike
+  (`printMarginalia()`). `body[data-marginalia=margin]` floats `.marginalia`
+  and `.fn-slot` right with a negative margin of their own width plus a gap,
+  the construction the reader's printed notes (`.rd-pnote`) already used; on
+  screen from `READER_NOTES_PX` in the column the reader keeps, on paper in
+  the page area (on screen reserved only where the page has a note, under
+  `reader: off`); a chunk clears its floats at its end. The reader's cards
+  step out of a note's way (`pack()`).
+- **A `::: footnote` goes into the margin too.** The parser records
+  `blocksBefore`, the number of top-level body blocks before its opener;
+  `footnoteSlots` puts a sentinel comment before the last of them (the first
+  when there are none; before the outermost wrapper when that block is inside
+  one), and renderChunk replaces it with `<div class="fn-slot">` holding the
+  aside. Under the breakpoint the chunk is `display: table` and the slot its
+  `table-footer-group`, so the footnote is the labelled block under the chunk
+  again whatever its place in the markup. Live views are untouched: they
+  render footnotes as they always did.
 - **`### Heading {#id}`** is read by `headingIdOf` in `tails.mjs` for both
   files: the marked `heading` renderer takes the brace off the words in every
   view and writes the id only while `documentHeadingIds` is set, which

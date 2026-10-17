@@ -336,10 +336,9 @@ const STYLE_ENUMS = {
   // Whether the printed document is set in the serif or the sans. The live
   // views answer this with `F` and with `font:`; print had no answer at all.
   'print-body': ['serif', 'sans'],
-  // Where a ::: marginalia prints: the aside in the column, or the outer
-  // margin beside the block it is written before. Unset, it is `margin` in a
-  // `kind: document` and `inline` in a lecture - a deferral the build
-  // resolves (printMarginalia); this file only accepts the two words.
+  // Where a ::: marginalia and a ::: footnote print in the documents: the
+  // outer margin (the default, documents and lectures alike) or the blocks in
+  // the column they used to be.
   'print-marginalia': ['inline', 'margin'],
   // How a `**bold**` phrase the derivation reads looks – live views and the
   // documents separately. Bold is a selection mark here before it is a

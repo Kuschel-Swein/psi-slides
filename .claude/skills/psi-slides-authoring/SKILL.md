@@ -973,13 +973,16 @@ it is on screen; `Esc`, or a click on the slide, gives the frame back. So
 write it to be read *after* the slide, not with it, and keep it short: a
 marginalia shares the chunk's height and cannot grow taller than it.
 
-In the documents it is an indented aside in the text column by default.
-`style: {print-marginalia: margin}` – the default in a `kind: document` – sets
-it in the right margin instead, beside **the block written after it**: write
-the note directly *before* the paragraph it belongs to, as Tufte's side notes
-stand at the line they annotate. Several notes stack under each other, a
-picture in one is the note's width, and a window narrower than 920 px falls
-back to the aside. In a lecture keep to one per chunk (`duplicate-marginalia`):
+In the documents (`print.html`, `print-notes.html`) it stands in the right
+margin, beside **the block written after it**: write the note directly
+*before* the paragraph it belongs to, as Tufte's side notes stand at the line
+they annotate. A `::: footnote` goes into the margin too, beside the block it
+was written *after* – the usual footnote under the body stands level with the
+last block. Several notes stack under each other, a picture in one is the
+note's width, a chunk ends below its notes, and a window narrower than 920 px
+falls back to the aside and to the footnote under the chunk.
+`style: {print-marginalia: inline}` keeps both in the column, the handout as it
+was. In a lecture keep to one marginalia per chunk (`duplicate-marginalia`):
 the projection anchors every one at the top of the margin.
 
 ### `::: slide` / `::: script`
@@ -1371,8 +1374,8 @@ Text.
   `[text](#id)`; it shares the namespace of chunk and part ids (`duplicate-id`,
   `reserved-id`).
 - **Margin notes**: `::: marginalia` stands in the margin beside the block
-  after it, several per chunk; see the directive above. `::: footnote` stays
-  what it is in a lecture, a labelled note at the end of its chunk.
+  after it, several per chunk, and `::: footnote` beside the block before it;
+  see the directive above. Both are lectures' defaults now as well.
 - **The masthead** is the frontmatter: `title`, `subtitle`, `presenter`, then
   `info:` (several lines – a version and date, the university) set small under
   the presenter, then whatever the `## title:` chunk's body says, as the

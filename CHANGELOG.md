@@ -26,14 +26,22 @@ from building the same way is a major version.
   and a key only a lecture reads (`document-no-op`). `kind: slides` is
   refused by both (`unknown-kind`).
 
-- **Margin notes in the margin** – `style: {print-marginalia: margin}`, the
-  default in a `kind: document`. A `::: marginalia` stands in the right
-  margin of the printed document beside the block written after it, on a
-  screen with room for it and on paper, stacking under the note above it;
-  under 920 px it is the indented aside it was. A document's page area
-  moves to leave 5 cm for them. A reader's note card steps out of a margin
-  note's way. A lecture keeps `inline`, so no handout moves until its
-  author writes the key.
+- **Margin notes in the margin, in every printed view** –
+  `style: {print-marginalia: margin}`, the default for documents and
+  lectures' handouts (`print.html`, `print-notes.html`) alike. A
+  `::: marginalia` stands in the right margin beside the block written after
+  it, a `::: footnote` beside the block it was written after – for the usual
+  footnote under the body, level with the last block – on a screen with room
+  for it and on paper, stacking under the note above it, without the NOTE
+  label, and a chunk ends below its notes so none stands beside the next
+  heading. Under 920 px both are the blocks they were, the footnote under
+  its chunk again. A document's page area moves to leave 5 cm for them. A
+  reader's note card steps out of a margin note's way. **This moves every
+  lecture handout that has a footnote or a marginalia**: on screen from
+  920 px its reading column makes room for the margin (a handout with no
+  note keeps its centred measure);
+  `style: {print-marginalia: inline}` is the old handout. The projection and
+  the cockpit are unchanged.
 
 - **The documents on a dark screen, and a serif / sans switch.**
   `print.html` and `print-notes.html` – documents and lecture scripts alike

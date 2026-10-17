@@ -20,6 +20,9 @@
  *  - the section numbers the build writes are the ones a reader sees, in
  *    the headings and in the contents sidebar, where a lecture would show
  *    none under slide-numbers: off;
+ *  - a ::: footnote stands in the margin level with the block written
+ *    before its opener, ends before the next part, and under the breakpoint
+ *    is the labelled block under the chunk again;
  *  - a dark system gets a dark page with legible notes and pictures on a
  *    light panel; the sidebar's Page and Text switches change and store the
  *    scheme and the face, a reload keeps them, Auto forgets the scheme,
@@ -94,6 +97,12 @@ ${para(70, 7)}
 ## Tutorials {#tutorials}
 
 ${para(120, 8)}
+
+${para(12, 11)}
+
+::: footnote
+A source for the tutorials, long enough to run past the short paragraph it stands beside: ${words(40, 12)}.
+:::
 
 # Booklet {#booklet}
 
@@ -212,6 +221,23 @@ export async function run({ page, report }) {
       ok(!nums.slideNum && !nums.label, 'no slide number in the margin and no type word over a chunk');
       ok(nums.sub, 'a ### heading with {#id} carries the id');
 
+      // A footnote: in the margin, level with the block it was written
+      // after, and ended with its chunk - never beside the next heading.
+      const fn = await p.evaluate(() => {
+        const slot = document.querySelector('#tutorials > .fn-slot');
+        if (!slot) return null;
+        const R = (e) => e.getBoundingClientRect();
+        const col = R(document.querySelector('#tutorials > p'));
+        const next = R(document.querySelector('#booklet .column-heading'));
+        return { float: getComputedStyle(slot).float, l: R(slot).left, colR: col.right, t: R(slot).top, b: R(slot).bottom,
+                 anchor: R(slot.nextElementSibling).top, next: next.top,
+                 label: getComputedStyle(slot.querySelector('aside'), '::before').content };
+      });
+      ok(!!fn && fn.float === 'right' && fn.l >= fn.colR + 8 && Math.abs(fn.t - fn.anchor) <= 8,
+         'a footnote stands in the margin, level with the block it was written after', JSON.stringify(fn));
+      ok(!!fn && fn.b <= fn.next, 'and ends before the next part begins, however long it runs', JSON.stringify(fn));
+      ok(!!fn && (fn.label === 'none' || fn.label === 'normal'), 'without the NOTE label it wears under a chunk', JSON.stringify(fn));
+
       // A reader's note card in the column the notes stand in.
       await p.evaluate(() => document.getElementById('requirements').scrollIntoView());
       await p.waitForTimeout(150);
@@ -323,6 +349,17 @@ export async function run({ page, report }) {
          '390px: every note falls back to the aside inside the text column',
          JSON.stringify(g.notes.map(n => [n.float, Math.round(n.l), Math.round(n.r)])));
       ok(g.scrollW <= g.vw, '390px: nothing scrolls sideways', `${g.scrollW} / ${g.vw}`);
+      const fnNarrow = await p.evaluate(() => {
+        const slot = document.querySelector('#tutorials > .fn-slot');
+        const paras = [...document.querySelectorAll('#tutorials > p')];
+        const last = paras[paras.length - 1].getBoundingClientRect();
+        const r = slot.getBoundingClientRect();
+        return { top: r.top, lastBottom: last.bottom, left: r.left, colL: last.left, right: r.right, colR: last.right,
+                 label: getComputedStyle(slot.querySelector('aside'), '::before').content };
+      });
+      ok(fnNarrow.top >= fnNarrow.lastBottom && fnNarrow.left >= fnNarrow.colL - 1 && fnNarrow.right <= fnNarrow.colR + 1
+         && /note/i.test(fnNarrow.label),
+         '390px: the footnote is the labelled block under its chunk it always was', JSON.stringify(fnNarrow));
       const pic = g.notes[1].img;
       ok(!!pic && pic.r - pic.l <= 11 * 16, '390px: a note\'s picture keeps a margin note\'s size in the column',
          JSON.stringify(pic));

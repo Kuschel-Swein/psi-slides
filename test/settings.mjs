@@ -4444,7 +4444,7 @@ console.log('\nlayout generations');
        'a ### heading takes its {#id} and the brace leaves the words');
     ok((pr.match(/<aside class="marginalia">/g) || []).length === 2, 'two margin notes in one chunk both print');
     ok(/@page \{ margin: 2\.2cm 1\.6cm 2\.6cm 2\.2cm; \}/.test(pr), 'and the sheet keeps a margin wide enough for them');
-    ok(/body\[data-marginalia=margin\] main \.marginalia \{\s*float: right;/.test(pr),
+    ok(/body\[data-marginalia=margin\] main :is\(\.marginalia, \.fn-slot\) \{\s*float: right;/.test(pr),
        'the stylesheet floats a note into the margin under the attribute and nowhere else');
 
     const lab = raw(DOC('style:\n  labels: on\n'));
@@ -4454,12 +4454,15 @@ console.log('\nlayout generations');
     ok(!/data-marginalia/.test((inl.print || '').match(/<body [^>]*>/)[0]),
        'style: {print-marginalia: inline} keeps a document\'s notes in the column');
 
-    // A lecture is the bytes it was: no attribute, its numbers, its suffix.
+    // A lecture keeps its four views, its numbers and its suffix, and
+    // its handouts set their notes in the margin too, by default.
     const lec = raw(FM + '## free: A {#a}\n\nText.\n\n::: marginalia\nNote.\n:::\n\n### Sub {#s}\n\nText.\n');
     const lbody = (lec.print.match(/<body [^>]*>/) || [''])[0];
-    ok(lec.code === 0 && lec.files.length === 4 && !/data-kind|data-marginalia/.test(lbody)
+    ok(lec.code === 0 && lec.files.length === 4 && !/data-kind/.test(lbody)
        && /<title>T – print<\/title>/.test(lec.print) && !/sec-num"/.test(lec.print),
-       'a lecture still builds four views, its handout without the document\'s attributes or numbers', lbody);
+       'a lecture still builds four views, its handout without the document\'s attribute or numbers', lbody);
+    ok(/data-marginalia="margin"/.test(lbody) && /data-marginalia="margin"/.test((lec.notes.match(/<body [^>]*>/) || [''])[0]),
+       'and both its handouts set the notes in the margin by default', lbody);
     ok(/<h3 id="s">Sub<\/h3>/.test(lec.print) && /<h3>Sub<\/h3>/.test(lec.html) && !/\{#s\}/.test(lec.html),
        'a ### {#id} in a lecture is an id in the documents and no stray brace on the projection');
     // The masthead: info under the presenter, and the title chunk's words
@@ -4514,8 +4517,31 @@ console.log('\nlayout generations');
        'the switches speak the lecture\'s language, and labels: reaches them');
     ok(!/unknown-label-key/.test(lintOf('---\ntitle: T\nlabels:\n  reader-face-sans: Grotesk\n---\n\n## title: {#title}\n')),
        'and the linter knows their keys');
-    const lecM = raw('---\ntitle: T\nstyle:\n  print-marginalia: margin\n---\n\n## title: {#title}\n\n## free: A {#a}\n\nText.\n');
-    ok(/data-marginalia="margin"/.test(lecM.print || ''), 'and a lecture can ask for its notes in the margin');
+    const lecI = raw('---\ntitle: T\nstyle:\n  print-marginalia: inline\n---\n\n## title: {#title}\n\n## free: A {#a}\n\nText.\n\n::: footnote\nA source.\n:::\n');
+    ok(!/data-marginalia/.test((lecI.print.match(/<body [^>]*>/) || [''])[0]) && !/class="fn-slot"/.test(lecI.print)
+       && /<p>Text\.<\/p>\s*<\/?[^f]/.test(lecI.print) && /<aside class="chunk-expansion chunk-expansion-margin" data-label="note">/.test(lecI.print),
+       'style: {print-marginalia: inline} gives a lecture its handout as it was: no margin, the footnote under the chunk');
+
+    // ::: footnote in the margin: at the block it was written after.
+    {
+      const fnDeck = (body) => raw(FM + '## free: A {#a}\n\n' + body + '\n\n## free: B {#b}\n\nNext.\n');
+      const slotBefore = (html, text) => new RegExp('<div class="fn-slot"><aside class="chunk-expansion chunk-expansion-margin"[^>]*>\\s*<p>[^<]*</p>\\s*</aside></div>\\s*<p>' + text).test(html);
+      const trail = fnDeck('First.\n\nSecond.\n\nLast.\n\n::: footnote\nA source.\n:::');
+      ok(slotBefore(trail.print, 'Last\\.') && !/<\/p>\s*<aside class="chunk-expansion chunk-expansion-margin"/.test(trail.print),
+         'a footnote written after the body stands in the margin level with the last block', trail.print.match(/<article[^>]*id="a"[\s\S]*?<\/article>/)[0].replace(/\s+/g, ' '));
+      const mid = fnDeck('First.\n\n::: footnote\nOn the first.\n:::\n\nSecond.\n\nThird.');
+      ok(slotBefore(mid.print, 'First\\.'), 'one written mid-body stands level with the block it was written after');
+      const lead = fnDeck('::: footnote\nBefore anything.\n:::\n\nFirst.\n\nSecond.');
+      ok(slotBefore(lead.print, 'First\\.'), 'one written before every block stands level with the first');
+      const side = fnDeck('::: side\nLeft.\n::: flip\nRight.\n:::\n\n::: footnote\nOn the panes.\n:::');
+      ok(/<div class="fn-slot">[\s\S]*?<\/div>\s*<div class="side">/.test(side.print),
+         'a block inside a wrapper is no place: the slot stands before the wrapper', side.print.match(/<article[^>]*id="a"[\s\S]*?<\/article>/)[0].replace(/\s+/g, ' ').slice(0, 400));
+      ok(!/fn-slot/.test(trail.html) && !/fn-slot/.test(fs.readFileSync(path.join(trail.dir, 'speaker.html'), 'utf8')),
+         'the projection and the cockpit keep the footnote where they always had it');
+      ok(/body\[data-marginalia=margin\] main \.chunk > \.fn-slot \{ display: table-footer-group; \}/.test(trail.print)
+         && /body\[data-marginalia=margin\] main \.chunk::after \{ content: ''; display: block; clear: right; \}/.test(trail.print),
+         'under the breakpoint the slot is the chunk\'s footer, and a chunk ends below its notes');
+    }
 
     // Refusals: a word the key does not know, a view a document does not
     // have, an id twice, an id of the build's.
