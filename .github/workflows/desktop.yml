@@ -118,6 +118,19 @@ jobs:
         working-directory: desktop
         run: xvfb-run --auto-servernum npm run smoke
 
+      # ubuntu-24.04 restricts unprivileged user namespaces (AppArmor), so
+      # Chromium cannot use its namespace sandbox and Electron falls back to
+      # the setuid helper, which npm unpacks without root or the setuid bit:
+      # Electron then aborts rather than run unsandboxed. The smoke test never
+      # meets it, because Playwright's _electron.launch adds --no-sandbox on
+      # Linux; confine.mjs spawns Electron itself, and should keep the sandbox
+      # on, so the helper gets what the error asks for.
+      - name: Let Electron's sandbox helper run
+        working-directory: desktop
+        run: |
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+
       # The export window's file: rule in a real Electron: a deck's script
       # that reads a file above the asset root prints nothing of it.
       - name: Confinement test
