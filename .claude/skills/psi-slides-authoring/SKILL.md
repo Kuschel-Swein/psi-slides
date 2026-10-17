@@ -1373,6 +1373,10 @@ Text.
 - **Margin notes**: `::: marginalia` stands in the margin beside the block
   after it, several per chunk; see the directive above. `::: footnote` stays
   what it is in a lecture, a labelled note at the end of its chunk.
+- **The masthead** is the frontmatter: `title`, `subtitle`, `presenter`, then
+  `info:` (several lines – a version and date, the university) set small under
+  the presenter, then whatever the `## title:` chunk's body says, as the
+  opening line. (In a lecture the body replaces `info` on the cover.)
 - **A definition list** is raw HTML – `<dl>`, `<dt>`, `<dd>` – and prints with
   the term bold and its description indented. Tables are Markdown tables.
 - **Gone**: the slide number in the margin, the type word over a chunk

@@ -195,6 +195,23 @@ export async function run({ report }) {
     }
   }
 
+  // ── the documents' dark scheme is the dark theme ─────────────────
+  // print.html follows a dark screen with DARK_TOKENS (printDarkCss), a copy
+  // of body[data-theme=dark] in AUDIENCE_CSS so that the gates below can go
+  // on reading that block as text. A copy is held equal here, token by token.
+  {
+    const src = fs.readFileSync(path.join(ROOT, 'build.js'), 'utf8');
+    const tb = src.slice(src.indexOf('const DARK_TOKENS = {'));
+    const tokens = Object.fromEntries([...tb.slice(0, tb.indexOf('\n};')).matchAll(/^\s+'?([a-z-]+)'?: '([^']+)',/gm)]
+      .map(m => [m[1], m[2]]));
+    const theme = (src.match(/body\[data-theme=dark\]\s*\{([^}]*)\}/) || [, ''])[1];
+    const decl = (k) => (theme.match(new RegExp(`--${k}:\\s*([^;]+);`)) || [])[1];
+    const pairs = [['paper', 'paper-own'], ['paper-warm', 'paper-warm'], ['ink', 'ink'], ['ink-soft', 'ink-soft'], ['rule', 'rule'], ['emph', 'emph']];
+    const off = pairs.filter(([t, c]) => tokens[t] !== decl(c)).map(([t, c]) => `${t}: ${tokens[t]} / ${decl(c)}`);
+    ok(Object.keys(tokens).length === 6 && !off.length,
+       'DARK_TOKENS, the documents\' dark scheme, is body[data-theme=dark] token for token', off.join('; '));
+  }
+
   // ── the linter's theme table is the stylesheet's ─────────────────
   // DG_THEMES says which theme loses a column; build.js says what the theme
   // is. Copied numbers, so a gate that reads both and compares.

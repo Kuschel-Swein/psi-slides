@@ -35,6 +35,25 @@ from building the same way is a major version.
   note's way. A lecture keeps `inline`, so no handout moves until its
   author writes the key.
 
+- **The documents on a dark screen, and a serif / sans switch.**
+  `print.html` and `print-notes.html` – documents and lecture scripts alike
+  – follow `prefers-color-scheme` on screen, in the palette of the `dark`
+  theme: the text, the margin notes, tables, the contents sidebar, the
+  reader's highlights and cards, code in Shiki's dark colours, `::: draw`
+  figures drawn in the dark tokens, and every other picture on a panel of
+  the light paper so a drawing made for a white page stays legible (a
+  photograph is never inverted). The sidebar's foot carries two switches,
+  *Page* (Auto / Light / Dark) and *Text* (Serif / Sans, the bundled faces),
+  remembered in the browser under `psi-reader:scheme` and `psi-reader:face`
+  and read before the first paint; without storage they work for the open
+  page. Paper and the PDF stay the author's light page in the authored face.
+  Under `reader: off` the page follows the system and has no switches.
+
+- **A document's masthead shows `info:`** – the version line and the
+  institution – quietly under the presenter, with the title chunk's own words
+  under it. A lecture's cover is unchanged: there the title chunk's body still
+  stands in for `info`.
+
 - **`### Heading {#id}`** gives a subsection inside a chunk an anchor for
   `[text](#id)` in the documents; the brace leaves the words in every view.
   The id shares the chunk ids' namespace – a duplicate or a `psiINT-` one is

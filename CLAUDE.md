@@ -647,6 +647,25 @@ Three anchoring decisions are not guessable from the code:
   a figure is added above. A name that is gone falls back to the stored x/y
   and the card says the spot is approximate.
 
+**Two switches sit over the sidebar's foot, Page (Auto / Light / Dark) and
+Text (Serif / Sans)** (`renderReaderView`, `PRINT_VIEW_JS`). The documents
+follow `prefers-color-scheme` on screen, and a reader's choice wins;
+`PRINT_VIEW_EARLY_JS` in `<head>` reads it before the first paint into
+`html[data-scheme]` / `html[data-face]`. The choices are the reader's, not
+the lecture's: `localStorage` keys `psi-reader:scheme` and `psi-reader:face`
+(`PRINT_PREF_KEYS`), every access in a try. **Paper is never touched**: every
+rule `printDarkCss()` writes is under `@media screen`, so print and the PDF
+export are the author's light page in the authored face. The palette is the
+`dark` theme's – `DARK_TOKENS`, a copy of `body[data-theme=dark]` that the
+`semantics` gate holds equal, because the theme gates read that block as
+text – and the documents now keep Shiki's `--shiki-dark` token colours
+(`stripDarkTokenColors` drops only the dark ground). A picture
+(`figure.figure-img`) stands on a panel of the light paper with the light
+tokens (`PRINT_LIGHT_TOKENS`) set on it, so an SVG drawn for a white page or
+reading `var(--ink)` reads as drawn; a `::: draw` figure needs no panel, it is
+drawn in the tokens. Under `reader: off` there are no switches and the page
+follows the system.
+
 Storage is `localStorage` under `psi-reader:v1:<source folder name>@<hash>` –
 per lecture, not per file. The hash is of the *name* of the folder above
 (`readerStoreKey`), so two `week1/` lectures of two courses no longer share
@@ -679,6 +698,9 @@ the bytes it did:
   `renderColumn`, `renderDocumentToc` (two levels) and `renderReaderContents`
   read it. The number is a `.sec-num` span, which the reader's text skips
   (`SKIP` in `PRINT_HIGHLIGHTS_JS`), so a renumbering moves no highlight.
+- The masthead keeps `info:` under the presenter and puts the title chunk's
+  own words under it (`renderTitleBlock`, `infoWithBody`); a lecture's cover
+  still lets the body stand in for `info`.
 - `renderDocument` writes `data-kind="document"`, forces `data-slide-nums="off"`,
   drops the type word unless `style: {labels}` is written, drops "– print"
   from the title and appends `DOCUMENT_PAGE_CSS` (an `@page` that widens the

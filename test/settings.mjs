@@ -4462,6 +4462,58 @@ console.log('\nlayout generations');
        'a lecture still builds four views, its handout without the document\'s attributes or numbers', lbody);
     ok(/<h3 id="s">Sub<\/h3>/.test(lec.print) && /<h3>Sub<\/h3>/.test(lec.html) && !/\{#s\}/.test(lec.html),
        'a ### {#id} in a lecture is an id in the documents and no stray brace on the projection');
+    // The masthead: info under the presenter, and the title chunk's words
+    // under that - where a lecture's cover lets the body stand in for info.
+    const mast = raw('---\ntitle: A syllabus\npresenter: P\ninfo: |\n  Version 1.2\n  The university\nkind: document\n---\n\n'
+      + '## title: {#title}\n\nHow the course runs.\n\n# Part {#part}\n\n## One {#one}\n\nText.\n');
+    const head = (mast.print || '').match(/<article class="chunk chunk-title"[\s\S]*?<\/article>/)[0];
+    ok(/<div class="title-info"><p>Version 1\.2<\/p><p>The university<\/p><\/div>/.test(head)
+       && /<div class="title-lede"><p>How the course runs\.<\/p>/.test(head)
+       && head.indexOf('title-presenter') < head.indexOf('title-info') && head.indexOf('title-info') < head.indexOf('title-lede'),
+       'a document\'s masthead shows info under the presenter and the title chunk\'s words under that', head.replace(/\s+/g, ' '));
+    const lecCover = raw('---\ntitle: T\ninfo: Version 1\n---\n\n## title: {#title}\n\nThe body.\n\n## free: A {#a}\n\nX.\n');
+    const lecHead = lecCover.print.match(/<article class="chunk chunk-title"[\s\S]*?<\/article>/)[0];
+    ok(!/title-info|title-lede/.test(lecHead) && /<p>The body\.<\/p>/.test(lecHead),
+       'and a lecture\'s cover is as it was: a body there still stands in for info');
+
+    // Dark on screen and the reader's face: in every print view, screen
+    // only, read before the first paint.
+    for (const [what, html] of [['a document', pr], ['a lecture\'s handout', lec.print], ['the notes handout', lec.notes]]) {
+      const headPart = html.slice(0, html.indexOf('</head>'));
+      ok(/<script>\(\(\) => \{ const d = document\.documentElement; try \{ const s = localStorage\.getItem\('psi-reader:scheme'\)/.test(headPart),
+         `${what} reads the stored scheme and face in <head>, before the first paint`);
+      ok(/@media screen and \(prefers-color-scheme: dark\) \{\s*:root:not\(\[data-scheme=light\]\), :root:not\(\[data-scheme=light\]\) body \{\s*color-scheme: dark;/.test(html)
+         && /:root\[data-scheme=dark\] pre\.shiki, :root\[data-scheme=dark\] pre\.shiki span \{ color: var\(--shiki-dark\) !important; \}/.test(html),
+         `${what} follows a dark system, and a reader's choice of dark, with the code's dark palette`);
+      ok(/:root\[data-face=sans\] body \{ font-family: var\(--sans\); \}/.test(html), `${what} takes the reader's face`);
+    }
+    // Paper stays the author's: no dark token is set outside @media screen.
+    {
+      const css = (pr.match(/<style>[\s\S]*?<\/style>/) || [''])[0];
+      let leak = false;
+      const lines = css.split('\n');
+      const stack = [];
+      for (const l of lines) {
+        if (/^@media/.test(l)) stack.push(/screen/.test(l) && !/print/.test(l));
+        if (/data-scheme=dark|prefers-color-scheme/.test(l) && !/^@media/.test(l) && !stack.some(Boolean)) leak = true;
+        if (/^\}/.test(l) && stack.length) stack.pop();
+      }
+      ok(!leak, 'no dark rule stands outside @media screen, so paper and the PDF stay light');
+    }
+    const codeDeck = raw(FM + '## free: Code {#c}\n\n```python\ndef f(x):\n    return x\n```\n');
+    ok(/--shiki-dark:#/.test(codeDeck.print) && !/--shiki-dark-bg/.test(codeDeck.print),
+       'the documents keep each token\'s dark colour and drop the dark ground they never read');
+    ok(/<div class="rd-view"><div class="rd-view-row"><span class="rd-view-label" aria-hidden="true">Page<\/span><div class="rd-seg" role="group" aria-label="Page"><button type="button" data-set-scheme="auto" aria-pressed="false">Auto<\/button>/.test(pr)
+       && /data-set-face="sans" aria-pressed="false">Sans<\/button>/.test(pr),
+       'the reader\'s sidebar carries the page and text switches, as labelled toggle buttons');
+    const roff = raw('---\ntitle: T\nreader: off\n---\n\n## title: {#title}\n\n## free: A {#a}\n\nX.\n');
+    ok(!/class="rd-view"/.test(roff.print) && /prefers-color-scheme: dark/.test(roff.print),
+       'reader: off ships no switches, and the page still follows a dark system');
+    const de = raw('---\ntitle: T\nlang: de\nlabels:\n  reader-scheme: Ansicht\n---\n\n## title: {#title}\n\n## free: A {#a}\n\nX.\n');
+    ok(de.code === 0 && /aria-label="Ansicht"/.test(de.print) && /data-set-scheme="dark" aria-pressed="false">Dunkel</.test(de.print),
+       'the switches speak the lecture\'s language, and labels: reaches them');
+    ok(!/unknown-label-key/.test(lintOf('---\ntitle: T\nlabels:\n  reader-face-sans: Grotesk\n---\n\n## title: {#title}\n')),
+       'and the linter knows their keys');
     const lecM = raw('---\ntitle: T\nstyle:\n  print-marginalia: margin\n---\n\n## title: {#title}\n\n## free: A {#a}\n\nText.\n');
     ok(/data-marginalia="margin"/.test(lecM.print || ''), 'and a lecture can ask for its notes in the margin');
 

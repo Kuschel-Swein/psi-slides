@@ -19,7 +19,12 @@
  *    way rather than covering the author's words;
  *  - the section numbers the build writes are the ones a reader sees, in
  *    the headings and in the contents sidebar, where a lecture would show
- *    none under slide-numbers: off.
+ *    none under slide-numbers: off;
+ *  - a dark system gets a dark page with legible notes and pictures on a
+ *    light panel; the sidebar's Page and Text switches change and store the
+ *    scheme and the face, a reload keeps them, Auto forgets the scheme,
+ *    paper stays light in the authored face, and without storage the
+ *    switches still work.
  *
  * Chromium only, like the rest of the suite; the same layout was checked by
  * eye in WebKit when it landed, and the construction is Tufte's float, which
@@ -244,6 +249,70 @@ export async function run({ page, report }) {
       const { p, ctx } = await open({ width: 1024, height: 800 });
       checkMargin(await geometry(p), ok, '1024px');
       await ctx.close();
+    }
+
+    // ── dark on screen, the reader's two switches, and paper ──
+    {
+      const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
+      const p = await ctx.newPage();
+      p.on('pageerror', e => errors.push(String(e)));
+      const url = `http://127.0.0.1:${port}/print.html`;
+      await p.goto(url, { waitUntil: 'load' });
+      await p.waitForTimeout(200);
+      const look = () => p.evaluate(() => {
+        const cs = (e) => getComputedStyle(e);
+        const lum = (c) => { const m = c.match(/[\d.]+/g).map(Number); return c.startsWith('oklch') ? m[0] : (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
+        const pic = document.querySelector('figure.figure-img');
+        return {
+          scheme: document.documentElement.getAttribute('data-scheme'),
+          face: document.documentElement.getAttribute('data-face'),
+          ink: lum(cs(document.body).color),
+          paper: lum(cs(document.documentElement).backgroundColor),
+          note: lum(cs(document.querySelector('.marginalia')).color),
+          pic: pic ? lum(cs(pic).backgroundColor) : null,
+          font: cs(document.body).fontFamily,
+          pressed: [...document.querySelectorAll('.rd-view [aria-pressed=true]')].map(b => b.textContent).join(','),
+          stored: (() => { try { return [localStorage.getItem('psi-reader:scheme'), localStorage.getItem('psi-reader:face')]; } catch (e) { return ['x', 'x']; } })(),
+        };
+      });
+      let l = await look();
+      ok(l.ink > 0.8 && l.paper < 0.3 && l.note > 0.5 && l.scheme === null && l.pressed === 'Auto,Serif',
+         'a dark system gets a dark page: light ink, a dark ground, a legible margin note, and Auto pressed', JSON.stringify(l));
+      ok(l.pic !== null && l.pic > 0.8, 'and a picture stands on a panel of the light paper', JSON.stringify(l));
+      await p.click('.rd-view [data-set-scheme=light]');
+      await p.click('.rd-view [data-set-face=sans]');
+      l = await look();
+      ok(l.scheme === 'light' && l.ink < 0.3 && l.paper > 0.8 && /IBM Plex Sans/.test(l.font) && l.pressed === 'Light,Sans'
+         && l.stored.join() === 'light,sans',
+         'Light and Sans take the page light and the text into the sans, and are stored', JSON.stringify(l));
+      await p.reload({ waitUntil: 'load' });
+      await p.waitForTimeout(200);
+      l = await look();
+      ok(l.scheme === 'light' && /IBM Plex Sans/.test(l.font) && l.pressed === 'Light,Sans',
+         'a reload keeps both choices', JSON.stringify(l));
+      // Dark system, dark chosen, sans chosen - and printed.
+      await p.emulateMedia({ media: 'print', colorScheme: 'dark' });
+      await p.evaluate(() => document.documentElement.setAttribute('data-scheme', 'dark'));
+      l = await look();
+      ok(l.ink < 0.3 && !/IBM Plex Sans/.test(l.font), 'on paper the page is the author\'s: light, in the authored face, whatever the reader chose', JSON.stringify(l));
+      await p.emulateMedia({ media: 'screen', colorScheme: 'dark' });
+      await p.click('.rd-view [data-set-scheme=auto]');
+      l = await look();
+      ok(l.scheme === null && l.ink > 0.8 && l.stored[0] === null, 'Auto hands the page back to the system and forgets the choice', JSON.stringify(l));
+      await ctx.close();
+      // A browser that refuses storage: the switches still switch.
+      const ctx2 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      await ctx2.addInitScript(() => { Object.defineProperty(window, 'localStorage', { get() { throw new Error('denied'); } }); });
+      const q = await ctx2.newPage();
+      const qErr = [];
+      q.on('pageerror', e => qErr.push(String(e)));
+      await q.goto(url, { waitUntil: 'load' });
+      await q.waitForTimeout(200);
+      await q.click('.rd-view [data-set-scheme=dark]');
+      const dk = await q.evaluate(() => [document.documentElement.getAttribute('data-scheme'), getComputedStyle(document.body).color]);
+      ok(dk[0] === 'dark' && /oklch\(0\.95/.test(dk[1]) && !qErr.length,
+         'without storage the switch still works, for as long as the page is open', JSON.stringify([dk, qErr]));
+      await ctx2.close();
     }
 
     // ── a phone: no margin, so the note is the aside in the column ──

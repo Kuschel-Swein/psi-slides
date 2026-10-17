@@ -421,6 +421,8 @@ const LABEL_KEYS = new Set([
   'reader-next', 'reader-filter-all', 'reader-filter-notes', 'reader-export',
   'reader-import', 'reader-delete-all', 'reader-help', 'reader-help-what', 'reader-help-keys',
   'reader-help-where', 'reader-help-risk', 'reader-help-backup', 'reader-fold',
+  'reader-scheme', 'reader-scheme-auto', 'reader-scheme-light', 'reader-scheme-dark',
+  'reader-face', 'reader-face-serif', 'reader-face-sans',
   'reader-export-file',
   'reader-export-line', 'reader-imported', 'reader-import-none',
   'reader-import-skipped', 'reader-deleted-all',

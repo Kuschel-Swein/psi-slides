@@ -122,7 +122,7 @@ seconds.
 | --- | --- |
 | `refusals` | build and lint agree on what is refused |
 | `accepts` | every construct still parses |
-| `semantics` | the emitted SVG *means* what the source says, plus what the source means to the editor that rewrites it – the span table |
+| `semantics` | the emitted SVG *means* what the source says, plus what the source means to the editor that rewrites it – the span table. Also `DARK_TOKENS`, the documents' dark scheme, held token for token to `body[data-theme=dark]` |
 | `corpus` | every `::: draw` block in the repository still compiles, and each file holds exactly the number it is said to |
 | `cue-cards` | the note-to-cards grammar in `cue-cards.mjs`, rule by rule; that the module reaches `speaker.html` as `window.PSI_CARDS`; and which `---` buys a beat – `segmentsKept` spelled in build.js and lint.js alike, with fixture decks run through `lint.js` for `empty-beat` in both directions: the five things that ride a beat without painting on it, and the two shapes that buy nothing; and which beat a note is filed on – `noteSegments` lifted out of build.js as text, because the chunk-note fallback reads the last segment with WORDS in it and a trailing `---` used to take that answer away |
 | `step-classes` | which classes a beat can carry, derived from `DG_STEP_FIXED` rather than restated |
@@ -273,7 +273,11 @@ falls back to the aside inside the column, its picture capped; a reader's note
 card whose highlight stands level with a margin note steps out of its way;
 and the section numbers the build writes (1, 1.1) are the ones in the
 headings and the sidebar, where a lecture under `slide-numbers: off` shows
-none. What the build writes for a document – the one view, the numbers in the
+none. Then the dark screen: a dark system gets a dark page with a legible
+margin note and a picture on a light panel; the sidebar's *Light* and *Sans*
+change the page and the face and are stored, a reload keeps them, printing
+gives the light page in the authored face whatever was chosen, *Auto* forgets
+the scheme, and a browser whose `localStorage` throws still switches. What the build writes for a document – the one view, the numbers in the
 markup, the refusals, the linter's silence – is `test/settings.mjs`. The
 other is `reader`, the contents sidebar `print.html` and `print-notes.html` carry
 under `reader: on` – that its entries are the slides with the numbers the page

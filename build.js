@@ -7889,6 +7889,15 @@ const STRINGS = {
     // The contents sidebar folds each part to its heading: the name of the
     // button beside a heading that opens or closes its list of slides.
     'reader-fold': 'Slides in this part',
+    // The two switches over the sidebar's foot (PRINT_VIEW_JS): how the page
+    // is lit and which face the running text is set in.
+    'reader-scheme': 'Page',
+    'reader-scheme-auto': 'Auto',
+    'reader-scheme-light': 'Light',
+    'reader-scheme-dark': 'Dark',
+    'reader-face': 'Text',
+    'reader-face-serif': 'Serif',
+    'reader-face-sans': 'Sans',
     'reader-export-file': 'highlights',
     'reader-export-line': 'Exported on {date}. Highlights: {n}, with a note: {notes}.',
     'reader-imported': 'Imported: {added} new, {updated} updated, {orphaned} not found in this version.',
@@ -7966,6 +7975,13 @@ const STRINGS = {
     'reader-help-risk': 'Dieser Speicher ist nicht sicher: Er ist weg, wenn Websitedaten gelöscht werden oder ein privates Fenster geschlossen wird, und Browser dürfen ihn selbst löschen – Safari, vor allem auf iPhone und iPad, nach sieben Tagen Safari-Nutzung, an denen du diese Seite nicht genutzt hast.',
     'reader-help-backup': 'Exportiere deshalb regelmäßig, als Sicherung: Der Export ist eine lesbare .md-Datei, und importiert bringt er die Markierungen zurück – hier, in einem anderen Browser oder auf einem anderen Gerät.',
     'reader-fold': 'Folien dieses Teils',
+    'reader-scheme': 'Seite',
+    'reader-scheme-auto': 'Auto',
+    'reader-scheme-light': 'Hell',
+    'reader-scheme-dark': 'Dunkel',
+    'reader-face': 'Schrift',
+    'reader-face-serif': 'Serif',
+    'reader-face-sans': 'Sans',
     'reader-export-file': 'markierungen',
     'reader-export-line': 'Exportiert am {date}. Markierungen: {n}, mit Notiz: {notes}.',
     'reader-imported': 'Importiert: {added} neu, {updated} aktualisiert, {orphaned} in dieser Fassung nicht gefunden.',
@@ -8099,6 +8115,30 @@ const THEME_NAMES = [
 // Which of them want dark chrome. Drives body[data-mode], which the surface
 // overrides key off – see the dark-surfaces block in AUDIENCE_CSS.
 const DARK_THEME_NAMES = ['dark', 'terminal-amber', 'terminal-green'];
+// The `dark` theme's palette, for the documents' dark scheme (printDarkCss):
+// the same palette on the reader's screen as body[data-theme=dark] in
+// AUDIENCE_CSS, one dark theme across the four views rather than a second
+// one invented for print. A copy, because the theme gates read that block
+// as text; the semantics gate holds the two equal.
+const DARK_TOKENS = {
+  paper: 'oklch(0.17 0.005 260)',
+  'paper-warm': 'oklch(0.22 0.008 260)',
+  ink: 'oklch(0.95 0 0)',
+  'ink-soft': 'oklch(0.68 0.01 260)',
+  rule: 'oklch(0.38 0.01 260)',
+  emph: 'oklch(0.76 0.15 35)',
+};
+// The documents' own paper palette, the one :root in PRINT_CSS sets. Named
+// so the dark scheme can put it back on the few things that must stay on
+// light paper there - a picture drawn for a white page, the reversed cover.
+const PRINT_LIGHT_TOKENS = {
+  ink: '#1f1f24',
+  'ink-soft': '#6b6b72',
+  paper: '#fafaf7',
+  rule: '#c8c8c0',
+  emph: '#8b2e00',
+};
+const tokenDecls = (t, indent = '  ') => Object.entries(t).map(([k, v]) => `${indent}--${k}: ${v};`).join('\n');
 
 // How a slide number is drawn, in cycle order (hotkey L). One source of
 // truth: the runtime's own cycle, both validator entries below and the two
@@ -8348,6 +8388,11 @@ function codeTag(st, sizing, view) {
   if (view === 'print') {
     const em = st['print-body'] === 'sans' ? sizing.sans : sizing.serif;
     if (em) rules.push(`${inlineCodeSel('print')} { font-size: ${em}em; }`);
+    // The reader may set the text in the other face on screen
+    // (PRINT_VIEW_JS), and the code size is a pairing with the prose face.
+    const faced = ['serif', 'sans'].filter(f => sizing[f])
+      .map(f => `${inlineCodeSel('print', `:root[data-face=${f}] body`)} { font-size: ${sizing[f]}em; }`);
+    if (faced.length) rules.push(`@media screen {\n${faced.join('\n')}\n}`);
   } else {
     for (const face of ['serif', 'sans', 'mono']) {
       if (!sizing[face]) continue;
@@ -9132,7 +9177,7 @@ function groundAttrFor(cover, art) {
   return (cover.ground === 'ink' && !art.scrim) ? ' data-cover-ground="ink"' : '';
 }
 
-function renderTitleBlock({ title, subtitle, presenter, affiliation, info, contact, notice, bodyHtml, bodyIsArt, bodyInField, variant }) {
+function renderTitleBlock({ title, subtitle, presenter, affiliation, info, contact, notice, bodyHtml, bodyIsArt, bodyInField, variant, infoWithBody }) {
   // The body stands in for `info` only where the composition has nowhere
   // else to put it. Where it does - as a picture in its own track, or as the
   // lede in a masthead's field - the info lines are still the meta.
@@ -9141,7 +9186,12 @@ function renderTitleBlock({ title, subtitle, presenter, affiliation, info, conta
   // the three slots beside it either: a cover whose body is a drawing still
   // has an author, an institution and an address.
   const bodyPlaced = bodyIsArt || bodyInField;
-  const infoLines = (bodyHtml && !bodyPlaced)
+  // A document's masthead (infoWithBody, renderChunk under kind: document)
+  // keeps both: the info lines are its version and its institution, quiet
+  // under the presenter, and the body is the opening line under all of it.
+  // A slide has room for one of the two and the body wins there.
+  const lede = infoWithBody && bodyHtml && !bodyPlaced ? `<div class="title-lede">${bodyHtml}</div>` : '';
+  const infoLines = (bodyHtml && !bodyPlaced && !infoWithBody)
     ? null // chunk body overrides `info` (PRD §3 rules)
     : splitInfo(info);
   const metaHtml = infoLines
@@ -9162,6 +9212,7 @@ function renderTitleBlock({ title, subtitle, presenter, affiliation, info, conta
     ${subtitle ? `<p class="title-subtitle">${escapeHtml(subtitle)}</p>` : ''}
     ${claimFirst ? '' : field}
     ${renderCredits({ presenter, affiliation, contact, notice, metaHtml, footBand: FOOT_BAND_COVERS.has(variant) })}
+    ${lede}
   `.trim();
 }
 
@@ -9542,7 +9593,7 @@ function renderChunk(chunk, frontmatter, num, opts = {}) {
   ${numHtml}
   ${closing
     ? renderClosingBlock(chunk, bodyHtml, frontmatter, cover)
-    : renderTitleBlock({ ...frontmatter, bodyHtml, bodyIsArt: cover.bodyIsArt, bodyInField: cover.bodyInField, variant: cover.variant })}
+    : renderTitleBlock({ ...frontmatter, bodyHtml, bodyIsArt: cover.bodyIsArt, bodyInField: cover.bodyInField, variant: cover.variant, infoWithBody: !!opts.docNums })}
   ${renderOverlayLayer(chunk.overlays, where)}
 </article>`;
   }
@@ -9797,8 +9848,25 @@ function renderReaderContents(columns, nums, S, docNums = null) {
   <ol class="rd-list">
 ${groups}
   </ol>
+  ${renderReaderView(S)}
   <div class="rd-foot" data-reader-slot="tools"></div>
 </nav>`;
+}
+
+// The reader's two switches, over the foot of the contents: the page light,
+// dark or as the system has it, and the running text in the serif or the
+// sans. Written by the build so their words come out of STRINGS; wired by
+// PRINT_VIEW_JS, which also says which button is pressed. Toggle buttons in
+// a labelled group, so each is one Tab stop with a name and a state.
+function renderReaderView(S) {
+  const seg = (label, attr, pairs) => `<div class="rd-view-row"><span class="rd-view-label" aria-hidden="true">${escapeHtml(label)}</span>`
+    + `<div class="rd-seg" role="group" aria-label="${escapeHtml(label)}">`
+    + pairs.map(([v, k]) => `<button type="button" ${attr}="${v}" aria-pressed="false">${escapeHtml(S[k])}</button>`).join('')
+    + '</div></div>';
+  return `<div class="rd-view">`
+    + seg(S['reader-scheme'], 'data-set-scheme', [['auto', 'reader-scheme-auto'], ['light', 'reader-scheme-light'], ['dark', 'reader-scheme-dark']])
+    + seg(S['reader-face'], 'data-set-face', [['serif', 'reader-face-serif'], ['sans', 'reader-face-sans']])
+    + '</div>';
 }
 
 // The per-figure asset table is the only heavy part of the diagram payload
@@ -9839,16 +9907,17 @@ function stripDiagramPayloads(html) {
 }
 
 // Shiki emits both palettes on every token: the light one as the inline
-// color, the dark one as a --shiki-dark custom property beside it. Print
-// has no themes at all – no data-theme, no theme cycle, no stylesheet that
-// reads the variable – so in print that second colour is a few bytes per
-// token that nothing can ever consume. Measured on lectures/python-intro,
-// the code-heaviest lecture in the repo: 23 KB of a 525 KB print file.
-// Rewrites only the inside of a start tag, so a code fence that happens to
-// quote the property name is text content and stays untouched.
+// color, the dark one as a --shiki-dark custom property beside it. The
+// documents read the token colour since they follow a dark screen
+// (printDarkCss), at about 23 KB of a 525 KB print file on
+// lectures/python-intro, the code-heaviest lecture in the repo; what they
+// still never read is the dark *ground*, --shiki-dark-bg, because a listing
+// in a document stands on the page's own paper. Rewrites only the inside of
+// a start tag, so a code fence that happens to quote the property name is
+// text content and stays untouched.
 function stripDarkTokenColors(html) {
   return html.replace(/<(?:pre|span)\b[^>]*>/g, tag => tag
-    .replace(/--shiki-dark(?:-bg)?:#[0-9a-fA-F]{3,8};?/g, '')
+    .replace(/--shiki-dark-bg:#[0-9a-fA-F]{3,8};?/g, '')
     .replace(/style="([^"]*);"/, 'style="$1"'));
 }
 
@@ -9983,6 +10052,7 @@ function renderDocument(lecture, opts = {}) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(title)}${titleSuffix ? ` – ${escapeHtml(titleSuffix)}` : ''}</title>
+${PRINT_VIEW_EARLY_JS}
 <style>
 ${shipCss(PRINT_CSS)}
 ${shipCss(DIAGRAM_CSS)}
@@ -10000,7 +10070,7 @@ ${toc}
 ${pulseTop}${namedHtml}
 ${pulseEnd}</main>
 <script>${shipJs(PRINT_JS)}</script>
-${pulseScript}${readerOn ? `${readerData}<script>${shipJs(PRINT_READER_JS)}${shipJs(PRINT_HIGHLIGHTS_JS)}</script>\n` : ''}</body>
+${pulseScript}${readerOn ? `${readerData}<script>${shipJs(PRINT_READER_JS)}${shipJs(PRINT_VIEW_JS)}${shipJs(PRINT_HIGHLIGHTS_JS)}</script>\n` : ''}</body>
 </html>
 `;
 }
@@ -10015,6 +10085,62 @@ ${pulseScript}${readerOn ? `${readerData}<script>${shipJs(PRINT_READER_JS)}${shi
 const READER_WIDE_PX = 1216;
 const READER_NOTES_PX = 920;
 
+// ── the documents on a dark screen, and the reader's face ────────────
+// print.html is read on screens after the lecture, and a reader whose system
+// is dark got a white page. It follows prefers-color-scheme now, and the
+// reader's sidebar carries a switch - light, dark, or the system's - and one
+// for the face of the running text, serif or sans (PRINT_VIEW_JS). Both are
+// the reader's, remembered in their browser under PRINT_PREF_KEYS, and both
+// stop at the screen: every rule here is under @media screen, so paper and
+// the PDF export are the author's document as it always was.
+//
+// The palette is the `dark` theme's (DARK_TOKENS), so the documents and the
+// projection are one dark theme. The rules are written once for a scope and
+// emitted twice: under the system's dark preference unless the reader chose
+// light, and under the reader's choice of dark - the order a stored choice
+// has to win in, without a script having to run first.
+//
+// What a plain swap of the tokens would get wrong, each answered below: code
+// (Shiki emits the dark palette as --shiki-dark on every token, and the
+// documents now keep it), a picture drawn for a white page (it stands on a
+// panel of the light paper, with the light tokens, so an SVG that reads
+// var(--ink) is drawn as its author saw it; a photograph is not inverted),
+// the asides whose ground is a light tint, the reader's yellow, and the two
+// grounds that put white type on the accent, which the dark theme lifts.
+const PRINT_PREF_KEYS = { scheme: 'psi-reader:scheme', face: 'psi-reader:face' };
+function printDarkCss(S) {
+  const light = tokenDecls(PRINT_LIGHT_TOKENS, '    ');
+  return `
+  ${S}, ${S} body {
+    color-scheme: dark;
+${tokenDecls(DARK_TOKENS, '    ')}
+  }
+  ${S} pre { background: color-mix(in oklch, var(--ink) 7%, transparent); }
+  ${S} pre.shiki, ${S} pre.shiki span { color: var(--shiki-dark) !important; }
+  ${S} .speaker-note { --note-border: oklch(0.6 0.1 240); --note-bg: oklch(0.24 0.03 240); --note-label: oklch(0.78 0.08 240); }
+  ${S} .presentation-note { --note-border: oklch(0.66 0.12 80); --note-bg: oklch(0.25 0.03 80); --note-label: oklch(0.8 0.1 80); }
+  ${S} :is(figure.figure-img, .chunk-title[data-cover=panel]) {
+${light}
+  }
+  ${S} figure.figure-img {
+    background: var(--paper);
+    color: var(--ink);
+    padding: 0.6rem;
+    border-radius: var(--radius-card);
+  }
+  ${S} .cards.cg-paper > ul > li, ${S} .cards.cg-paper > ol > li, ${S} .cards.cg-paper > :not(ul):not(ol) { background: var(--paper-warm); }
+  ${S} .cards.cg-accent > ul > li, ${S} .cards.cg-accent > ol > li, ${S} .cards.cg-accent > :not(ul):not(ol),
+  ${S} :is(.overlay-card, .dock).ov-accent { color: var(--paper); }
+  ${S} figure.figure-embed .embed-frame { background: var(--paper-warm); }
+  ${S} body[data-reader=on] { --rd-hl: oklch(0.42 0.08 95); --rd-hl-strong: oklch(0.6 0.13 94); }
+  ${S} .rd-pin-dot, ${S} svg .rd-pin text { color: #1f1f24; fill: #1f1f24; }`;
+}
+// Read before the first paint, in <head>, so a dark reader never sees a white
+// flash: the stored choices become two attributes on <html>, and nothing
+// else. Every read is in a try - a browser that refuses storage gets the
+// system's scheme and the author's face.
+const PRINT_VIEW_EARLY_JS = `<script>(() => { const d = document.documentElement; try { const s = localStorage.getItem('${PRINT_PREF_KEYS.scheme}'); const f = localStorage.getItem('${PRINT_PREF_KEYS.face}'); if (s === 'light' || s === 'dark') d.setAttribute('data-scheme', s); if (f === 'serif' || f === 'sans') d.setAttribute('data-face', f); } catch (e) { /* no storage: the system decides */ } })();</script>`;
+
 const PRINT_CSS = `
 /* A reveal marker below the top level (BEAT_MARK): print shows every beat at once. */
 .beat-mark { display: none !important; }
@@ -10026,11 +10152,7 @@ const PRINT_CSS = `
      and --body-scale moves that type here too. */
   --radius-card:  0.3em;
   --radius-tight: 0.1em;
-  --ink: #1f1f24;
-  --ink-soft: #6b6b72;
-  --paper: #fafaf7;
-  --rule: #c8c8c0;
-  --emph: #8b2e00;
+${tokenDecls(PRINT_LIGHT_TOKENS)}
   /* The hue style: {neutrals} moves the greys onto. Print has no themes -
      one palette, no A key - so there is one hue here and not five, and it
      is the print accent's own: #8b2e00 is about hue 40 in oklch. */
@@ -10641,6 +10763,11 @@ body[data-slide-nums=horizontal] .chunk:has(> .chunk-label) > .chunk-num::before
 }
 .chunk-title .title-notice { font-style: italic; }
 .chunk-title [data-caps] { letter-spacing: 0.055em; }
+/* A document's opening line under its masthead (renderTitleBlock,
+   infoWithBody): the author's words, at the size of the text. */
+.chunk-title .title-lede { margin-top: 1rem; max-width: 34rem; }
+.chunk-title .title-lede > :first-child { margin-top: 0; }
+.chunk-title .title-lede > :last-child { margin-bottom: 0; }
 body[data-title-caps=on] .chunk-title .title-presenter,
 body[data-title-caps=on] .chunk-title .title-affiliation,
 body[data-title-caps=on][data-headline=eyebrow] .chunk-title .title-main {
@@ -11414,6 +11541,19 @@ pre.shiki .line { display: inline; }
   html { font-size: clamp(15px, calc(12px + 0.3vw), 18px); }
 }
 
+/* ── dark on screen, and the reader's face (printDarkCss) ─────────────
+   The system's preference unless the reader chose light, then the reader's
+   choice of dark. Screen only: paper keeps the author's light page. */
+@media screen and (prefers-color-scheme: dark) {${printDarkCss(':root:not([data-scheme=light])')}
+}
+@media screen {${printDarkCss(':root[data-scheme=dark]')}
+  /* The running text in the face the reader picked; headings inherit it,
+     so the page stays one face. The author's style: {print-body} is what
+     paper gets and what a reader who picked nothing sees. */
+  :root[data-face=serif] body { font-family: var(--serif); }
+  :root[data-face=sans] body { font-family: var(--sans); }
+}
+
 /* ── the reader's layout and contents sidebar (reader: on, screen only) ──
    A document read on a screen after the lecture gets two margins: the
    contents on the left, and on the right a column for the reader's own
@@ -11739,6 +11879,26 @@ body[data-reader=on] {
      rebuilt document no longer has the words for. It scrolls on its own
      when the list is long, so the contents above keep their room. */
   .rd-foot { flex: none; max-height: 40vh; overflow-y: auto; border-top: 0.5pt solid var(--rule); margin-top: 0.75rem; padding-top: 0.6rem; }
+  /* The two switches (renderReaderView): a label and a row of small
+     segmented buttons each, over the foot, quiet like the menu under them. */
+  .rd-view { flex: none; border-top: 0.5pt solid var(--rule); margin-top: 0.75rem; padding-top: 0.55rem; display: grid; gap: 0.35rem; }
+  .rd-view-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .rd-view-label { font-size: 0.72rem; }
+  .rd-seg { display: inline-flex; border: 0.5pt solid var(--rule); border-radius: var(--radius-tight); overflow: hidden; }
+  .rd-seg button {
+    font: inherit;
+    font-size: 0.72rem;
+    line-height: 1;
+    padding: 0.32rem 0.5rem;
+    color: var(--ink-soft);
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+  .rd-seg button + button { border-left: 0.5pt solid var(--rule); }
+  .rd-seg button:hover, .rd-seg button:focus-visible { color: var(--ink); }
+  .rd-seg button:focus-visible { outline: 2px solid var(--emph); outline-offset: -2px; }
+  .rd-seg button[aria-pressed=true] { color: var(--paper); background: var(--ink); }
   .rd-notice, .rd-foot-head { margin: 0 0 0.4rem; }
   .rd-foot-head { color: var(--ink); font-weight: 600; }
   .rd-orphans { list-style: none; margin: 0; padding: 0; }
@@ -12029,7 +12189,7 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
    small glyphs - the chevron, the ? - stay small inside. No display is set
    here, so an attribute or a width that hides a control still does. */
 @media screen and (pointer: coarse) {
-  body[data-reader=on].rd-ready :is(.rd-toggle, .rd-close, .rd-menu button, .rd-nav button, .rd-mark-btn,
+  body[data-reader=on].rd-ready :is(.rd-toggle, .rd-close, .rd-menu button, .rd-nav button, .rd-mark-btn, .rd-seg button,
       .rd-fig-btn, .rd-lb-bar button, .rd-actions button, .rd-orphans button, .rd-undo) {
     min-width: 44px;
     min-height: 44px;
@@ -12586,6 +12746,58 @@ const PRINT_READER_JS = `
   });
   const onWidth = () => { if (!overlay.matches && isOpen()) setOpen(false, false); };
   if (overlay.addEventListener) overlay.addEventListener('change', onWidth);
+})();
+`;
+
+// The reader's two switches (renderReaderView): the scheme - auto, light or
+// dark - and the face of the running text. A press sets the attribute
+// PRINT_VIEW_EARLY_JS set at load, stores the choice under PRINT_PREF_KEYS,
+// and marks the pressed button; auto removes the attribute and the stored
+// word, so the system decides again. The keys are the reader's and not the
+// lecture's: one choice for every document the browser opens from this
+// origin, and a choice made in another tab arrives through the storage
+// event. Every access is in a try - without storage the switches still
+// work, for as long as the page is open. Same template-literal rules as
+// every inlined block.
+const PRINT_VIEW_JS = `
+(() => {
+  const d = document.documentElement;
+  const box = document.querySelector('.rd-view');
+  if (!box) return;
+  const KEYS = { scheme: '${PRINT_PREF_KEYS.scheme}', face: '${PRINT_PREF_KEYS.face}' };
+  const authoredFace = document.body.getAttribute('data-print-body') === 'sans' ? 'sans' : 'serif';
+  const store = (k, v) => {
+    try { if (v) localStorage.setItem(KEYS[k], v); else localStorage.removeItem(KEYS[k]); } catch (e) { /* this tab only */ }
+  };
+  const paint = () => {
+    const scheme = d.getAttribute('data-scheme') || 'auto';
+    const face = d.getAttribute('data-face') || authoredFace;
+    for (const b of box.querySelectorAll('[data-set-scheme]')) b.setAttribute('aria-pressed', String(b.getAttribute('data-set-scheme') === scheme));
+    for (const b of box.querySelectorAll('[data-set-face]')) b.setAttribute('aria-pressed', String(b.getAttribute('data-set-face') === face));
+  };
+  const apply = (attr, v) => { if (v) d.setAttribute(attr, v); else d.removeAttribute(attr); };
+  box.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const scheme = b.getAttribute('data-set-scheme');
+    const face = b.getAttribute('data-set-face');
+    if (scheme) {
+      const v = scheme === 'auto' ? null : scheme;
+      apply('data-scheme', v);
+      store('scheme', v);
+    } else if (face) {
+      apply('data-face', face);
+      store('face', face);
+    }
+    paint();
+  });
+  window.addEventListener('storage', (e) => {
+    if (e.key === KEYS.scheme) apply('data-scheme', e.newValue === 'light' || e.newValue === 'dark' ? e.newValue : null);
+    else if (e.key === KEYS.face) apply('data-face', e.newValue === 'serif' || e.newValue === 'sans' ? e.newValue : null);
+    else return;
+    paint();
+  });
+  paint();
 })();
 `;
 
@@ -14589,7 +14801,7 @@ function renderTitleChunk(chunk, frontmatter, num) {
   const groundAttr = groundAttrFor(cover, art);
   const block = closing
     ? renderClosingBlock(chunk, bodyHtml, frontmatter, cover)
-    : renderTitleBlock({ ...frontmatter, bodyHtml, bodyIsArt: cover.bodyIsArt, bodyInField: cover.bodyInField, variant: cover.variant });
+    : renderTitleBlock({ ...frontmatter, bodyHtml, bodyIsArt: cover.bodyIsArt, bodyInField: cover.bodyInField, variant: cover.variant, infoWithBody: false });
   return `<article class="chunk chunk-title" data-tag="${closing ? 'closing' : 'title'}" data-width="full" data-cover="${cover.variant}"${closingAttr}${closingArtAttr}${alignAttr}${bdAttr}${scrimAttr}${groundAttr}${chunkStyleAttrs(chunk)} data-chunk-id="${escapeHtml(chunkId)}"${numAttr}${idAttr}${ratioStyle}>
   ${art.html}
   <div class="chunk-content">
