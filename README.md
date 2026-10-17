@@ -210,7 +210,7 @@ If you would rather not use the skill, the minimum useful set is:
 - [`lectures/tutorial/source.md`](lectures/tutorial/source.md) – the canonical
   reference for the basics; with `lectures/diagrams/` and `lectures/decoration/`
   it shows every directive in real use.
-- [`CLAUDE.md`](CLAUDE.md) – the conventions, the parsing contract, and the
+- [`CLAUDE.md`](https://github.com/UBA-PSI/psi-slides/blob/main/CLAUDE.md) – the conventions, the parsing contract, and the
   things that are easy to get wrong.
 - `node lint.js <source.md>` after every edit. It catches unknown types and
   widths, missing or duplicate IDs, unclosed directives, over-budget chunks
@@ -240,7 +240,7 @@ it.
 - **You want slide transitions, or motion for its own sake.** A slide change is a pan, a cut or a fade (`transition:`), and nothing more elaborate is planned. The other motion is three mechanisms, all of them on the same key and all of them inside one slide: reveal segments uncover blocks of text in place; a `::: draw` block can be stepped, so elements appear, disappear, move, and the arrows between them re-route as they go; and a `::: backdrop` can open or close its window over the slide, which is how a title is revealed in the paper a photograph gives up.
 - **You want the cockpit on a tablet and the slides on the projector.** The design rules it out: the cockpit is a window the audience view opened, and the two talk to each other as parent and popup, which means same machine, same browser, same profile. Syncing over a network is deferred, not planned.
 - **You need more than KaTeX covers.** `$inline$` and `$$display$$` work and render at build time, but that is KaTeX, not LaTeX: no equation numbering or `\ref`, no `mhchem`, no TikZ. If your lecture is a mathematics lecture, check [KaTeX's supported functions](https://katex.org/docs/supported.html) before committing.
-- **You need polls, quizzes, or any audience interaction during the talk.** Named and deferred in `PRD.md`. What exists is `::: pulse`, a question in the two documents that a reader answers afterwards; the projection carries none.
+- **You need polls, quizzes, or any audience interaction during the talk.** Named and deferred in [`PRD.md`](https://github.com/UBA-PSI/psi-slides/blob/main/PRD.md). What exists is `::: pulse`, a question in the two documents that a reader answers afterwards; the projection carries none.
 - **Your room's browser is old or locked down.** See [Requirements](#requirements) – the stylesheets use modern CSS with no fallbacks.
 - **You want a dependable dependency.** One `build.js` of over thirty-two thousand lines, one maintainer, and a test suite of fast checks without a browser plus a browser suite for what only a built page can break. The source format is stable within a major version; nothing behind it is promised. It is used in earnest, but it is used by the person who wrote it.
 - **Nobody is going to speak.** If the artefact is a document that has to carry itself – a retrospective, a project report, something you send to the people who could not attend – then the cockpit and the collapse mechanism are machinery you will not use. That is the sibling project, [**psi-briefing**](https://github.com/UBA-PSI/psi-briefing): text-dense 16:9 slides in one HTML file that carries everything it needs, written as Markdown and laid out by inference from the shape of the content. The line between the two is whether anyone is talking.
@@ -274,13 +274,22 @@ What is different here is the combination: one text rendered at two densities, a
 | [`docs/artifact/`](docs/artifact/) | The figure language, published on the project site as `figures.html`: first the case for it, then the manual from nothing: a figure built a line at a time, then beats, then every class and statement, fifteen design rules and a gallery. Every drawing on it is compiled by the build rather than redrawn. |
 | [`editor.md`](editor.md) | Design and build log for the experimental graphical editor: what it edits, what it refuses to edit, and why. |
 | [`docs/comparison.md`](docs/comparison.md) | Beamer, reveal.js, Quarto, Marp, Slidev, PowerPoint and friends, compared in both directions. |
-| [`PRD.md`](PRD.md) | Design rationale. Why four views, why this type set, why collapse has two mechanisms and not four. |
+| [`PRD.md`](https://github.com/UBA-PSI/psi-slides/blob/main/PRD.md) | The original specification and the design rationale: why four views, why this type set, why collapse has two mechanisms and not four. Written before 1.0.0 and not kept current. |
 | [`speaker.md`](speaker.md) | The cockpit spec and the `postMessage` sync protocol – which fields travel, which stay local. |
-| [`CHANGELOG.md`](CHANGELOG.md) | What is in each release, and what the known limits are. |
+| [`CHANGELOG.md`](https://github.com/UBA-PSI/psi-slides/blob/main/CHANGELOG.md) | What is in each release, and what the known limits are. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | What is useful to send, and what to read before touching the code. |
-| [`HANDOFF.md`](HANDOFF.md) | Build diary, slice by slice, including the decisions deliberately not taken. German. |
-| [`CLAUDE.md`](CLAUDE.md) | Repo conventions and a map of `build.js`. Useful to any contributor, not just to Claude. |
+| [`HANDOFF.md`](https://github.com/UBA-PSI/psi-slides/blob/main/HANDOFF.md) | Build diary, slice by slice, including the decisions deliberately not taken. German. |
+| [`CLAUDE.md`](https://github.com/UBA-PSI/psi-slides/blob/main/CLAUDE.md) | Repo conventions and a map of `build.js`. Useful to any contributor, not just to Claude. |
 | [`.claude/skills/psi-slides-authoring/`](.claude/skills/psi-slides-authoring/SKILL.md) | The authoring contract in one artefact, for handing to an LLM assistant. |
+
+**Which document is authoritative.** For the source format, the
+`psi-slides-authoring` skill and the three tracked lectures (`tutorial`,
+`diagrams`, `decoration`); for the engine's internals, `CLAUDE.md`, which a
+gate holds against the command line. `PRD.md` and `HANDOFF.md` record how
+decisions were made and are not kept current: where one of them disagrees
+with the code, the code wins. `CHANGELOG.md`, `CLAUDE.md`, `HANDOFF.md`,
+`PRD.md` and the open plans are left out of the release archive and live in
+the repository.
 
 **The diagram editor is experimental**: automated tests cover it extensively, but broad human testing has not happened yet. The same goes for the `editor:` frontmatter key, which decides whether the live views carry the editor at all.
 
@@ -373,7 +382,7 @@ Press `?` in either live view for the full on-screen reference. The ones you nee
 
 ## What is stable and what is not
 
-The **source format is the interface**: a change that stops an existing `source.md` from building the same way is a major version. 2.0.0 is one: a lecture written for 1.0.0 may need an edit, and the [changelog](CHANGELOG.md)'s Breaking list says which. That is a promise about the format, not about the internals – `build.js` is one file and its insides are rearranged whenever it helps. Two consequences worth knowing:
+The **source format is the interface**: a change that stops an existing `source.md` from building the same way is a major version. 2.0.0 is one: a lecture written for 1.0.0 may need an edit, and the [changelog](https://github.com/UBA-PSI/psi-slides/blob/main/CHANGELOG.md)'s Breaking list says which. That is a promise about the format, not about the internals – `build.js` is one file and its insides are rearranged whenever it helps. Two consequences worth knowing:
 
 - **`{#id}` attributes are frozen once authored.** They anchor cross-references, TOC entries, sync snapshots, and `localStorage`. Renaming a heading is free; renumbering an ID is not.
 - **Generated HTML is disposable.** Rebuild it, do not commit it. The only tracked outputs are the three reference lectures – `lectures/tutorial/`, `lectures/diagrams/` and `lectures/decoration/` – so the tour and the two construct references can be browsed straight from the repository. Rebuild those with `npm run build:tracked`, which skips the WebP step so the bytes do not depend on the encoder installed.

@@ -8,3 +8,18 @@ desktop/ export-ignore
 # decided, kept for contributors reading the history, not for someone building
 # slides from the tarball.
 docs/history/ export-ignore
+
+# The same reasoning for the working documents at the top of the repository:
+# the assistant brief, the build diary, the original specification, the open
+# plans and to-do lists, and the changelog. Each is written for someone
+# changing psi-slides and is partly a record of an earlier state; a reader of
+# the tarball gets the README, the guides it links and the lectures. The
+# release notes link the changelog at the tag, and the README links these
+# files on GitHub. Anchored with a slash so a lecture folder cannot match.
+/CLAUDE.md export-ignore
+/HANDOFF.md export-ignore
+/PRD.md export-ignore
+/CHANGELOG.md export-ignore
+/PLAN-*.md export-ignore
+/TODO-*.md export-ignore
+/docs/TODO-*.md export-ignore

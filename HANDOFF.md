@@ -1,5 +1,7 @@
 # Handoff – Content-Fidelity Slice (shiki + images + layouts)
 
+> **Build diary, not a specification.** Sections were appended as slices landed and are not revised afterwards, so an older section describes an older state. For the current source format see the `psi-slides-authoring` skill and the tracked lectures; for the engine's internals, `CLAUDE.md`.
+
 Stand nach dem Content-Fidelity-Slice + Polish-Pass. Was der letzte HANDOFF als *Empfehlung A / C* skizziert hatte (Code-Highlighting, Image-Shorthand, Mermaid) ist zu großen Teilen umgesetzt: **shiki** läuft build-time und färbt alle Code-Fences ein, **Image-Shorthand `![](fig-id)`** löst gegen `assets/fig-id.{svg,png,jpg,…}` auf, und das **Layout-Vokabular** ist um drei Primitive erweitert – `::: cols N`, `::: side / ::: flip`, `::: marginalia` – plus **zweizeilige Action-Titles** (`|` im Heading) und **Klick-zum-Fokussieren** für Figures/Code/Marginalia. `python-intro` ist mit all dem als Lecture-Script neu geschrieben.
 
 Nach dem Bau-Slice sind drei kleinere UX-Korrekturen gelandet (siehe §Polish-Pass unten): Focus-Overlay hat jetzt solid-paper Background, Text-Selection ist in den Live-Views unterdrückt, und das Marginalia-Vokabular ist in `python-intro` zugunsten von Expandables reduziert (2 Marginalia → 2 Expandables, plus 6 neue Expandables).

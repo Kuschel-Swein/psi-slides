@@ -1,4 +1,6 @@
-# Lecture Medium – Specification v0.1
+# Lecture Medium – Specification v0.1 (historical)
+
+> **Historical document.** This is the specification psi-slides was first built against, before 1.0.0; the engine is at 2.0.0 and this file is not kept current. It stays for the design rationale. Where it disagrees with the code, the code wins. The current source format is the `psi-slides-authoring` skill plus the three tracked lectures (`tutorial`, `diagrams`, `decoration`); the engine's internals are in `CLAUDE.md`.
 
 A medium for live university lecturing that is neither slides nor document. The content lives on a bounded 2D plane as typographically composed chunks arranged in columns; the lecturer navigates by camera motion between chunks; the same source produces a printable study version. Authored in plain Markdown, rendered by a small amount of static HTML and JS, built by a small Node script. Designed to be written this week, iterated all semester.
 

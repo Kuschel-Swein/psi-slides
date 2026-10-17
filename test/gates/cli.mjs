@@ -100,6 +100,12 @@ export async function run({ report }) {
   report.ok(!dead.length, 'every row is a flag main() reads', dead.join(', '));
 
   // CLAUDE.md's commands block: the fenced bash block under "## Commands".
+  // The release archive leaves CLAUDE.md out (.gitattributes), so an unpacked
+  // tarball has nothing to compare against; a checkout without it still fails.
+  if (!fs.existsSync(path.join(ROOT, 'CLAUDE.md')) && !fs.existsSync(path.join(ROOT, '.git'))) {
+    report.note('no CLAUDE.md and no .git: an unpacked release archive, commands block not checked');
+    return;
+  }
   const claude = fs.readFileSync(path.join(ROOT, 'CLAUDE.md'), 'utf8');
   const head = claude.indexOf('## Commands');
   const open = claude.indexOf('```bash', head);

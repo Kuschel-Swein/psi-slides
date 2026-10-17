@@ -182,7 +182,10 @@ archives**: the README and the site link
 file is called exactly that.
 
 Each archive is the repository tree at the tag – sources, every lecture, the
-docs, the checked-in site fonts, `package.json` and the lockfile – plus the
+docs, the checked-in site fonts, `package.json` and the lockfile, minus what
+`.gitattributes` marks `export-ignore` (`desktop/`, `docs/history/`, and the
+working documents at the top: `CLAUDE.md`, `HANDOFF.md`, `PRD.md`,
+`CHANGELOG.md`, the open `PLAN-*.md` and `TODO-*.md`) – plus the
 four built HTML views for all four published lectures, so a reader can open
 the tutorial straight out of the archive. Building their own still needs
 `npm install`; the renderer depends on marked, Shiki and KaTeX, and the
