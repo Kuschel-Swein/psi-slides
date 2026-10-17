@@ -85,6 +85,7 @@ code:not(pre code):not(.chunk-heading code):not(.nb) {
   word-spacing: -0.28em;
 }
 code:not(pre code):not(.chunk-heading code):not(.nb).lead { margin-left: 0; }
+code:not(pre code):not(.chunk-heading code):not(.nb).trail { margin-right: 0; }
 body[data-code=tint] code:not(pre code):not(.chunk-heading code) {
   margin: 0;
   word-spacing: normal;
@@ -1955,7 +1956,7 @@ copies the changed block to the clipboard instead. The editor is experimental.</
 </svg><figcaption class="dg-hint"></figcaption></figure>
 
 
-<p><strong>The split boxes are two boxes with <code>gap 0</code>.</strong> IV and counter carry different tones and sit flush against each other; <code>between iv0,n0 offset 0,1.35</code> puts the <code class="nb">Enc</code> box under the middle of the pair instead of guessing it against one of the two. The twelve arrows in the lower half carry neither <code class="nb">@tag</code> nor <code class="nb">show</code>: <strong>an edge is only as visible as its two ends</strong>, so each arrives by itself in the step where its second endpoint does.</p>
+<p><strong>The split boxes are two boxes with <code class="trail">gap 0</code>.</strong> IV and counter carry different tones and sit flush against each other; <code>between iv0,n0 offset 0,1.35</code> puts the <code class="nb">Enc</code> box under the middle of the pair instead of guessing it against one of the two. The twelve arrows in the lower half carry neither <code class="nb">@tag</code> nor <code class="nb">show</code>: <strong>an edge is only as visible as its two ends</strong>, so each arrives by itself in the step where its second endpoint does.</p>
 
   
   
@@ -2255,7 +2256,7 @@ narrow box has room for a word only along its length, and the alternative is one
 letter per line. It applies to every label, not only to a box&#39;s – the same class
 does the same thing on a container caption, a brace and an edge label.</p>
 <p><strong>Which way an outline aims is the <code class="nb">point</code> option, not the class name.</strong>
-Write <code>{.chevron} point left</code>; there is no class <code class="nb">.chevron-left</code>. <code class="nb">point</code> applies to <code class="nb">.chevron</code> and
+Write <code class="trail">{.chevron} point left</code>; there is no class <code class="nb">.chevron-left</code>. <code class="nb">point</code> applies to <code class="nb">.chevron</code> and
 <code class="nb">.wedge</code>; on a shape with no point the build refuses it instead of reading past
 it.</p>
 
@@ -2322,7 +2323,7 @@ line still wins, that being a statement about this one element.</p>
 
 <p><strong><code class="nb">.emph</code>, <code class="nb">.dim</code> and <code class="nb">.ghost</code> are one channel written three ways.</strong> They are
 classes on an element&#39;s own line; they are the verbs a <code class="nb">step</code> has for them
-(<code>dim a, b</code>); and on a <code class="nb">bars</code> line the same three words name column numbers.
+(<code class="lead trail">dim a, b</code>); and on a <code class="nb">bars</code> line the same three words name column numbers.
 Learn one form and you have all three.</p>
 <p><strong>The fourth state – ordinary prominence – has no name.</strong> <code class="nb">{!dim}</code>
 takes the class off instead of adding a fourth word, and that holds for every
@@ -2365,7 +2366,7 @@ above are all three. With no <code class="nb">w</code> the box grows to the type
 directions, bounded to 0.6–1.5× the base size. Text width is <em>estimated</em> at
 build time – there is no browser – so the size chosen comes out a shade too
 small, which is the safe direction.</p>
-<p><strong>The first box overflows on purpose, and the build says so:</strong> <code>box g1 is 1.2 units wide but its label needs about 1.64</code>. That is the case to avoid: a fixed <code class="nb">w</code> too small for the label, and neither <code class="nb">.shrink</code> nor <code class="nb">.fit</code>. It is the
+<p><strong>The first box overflows on purpose, and the build says so:</strong> <code class="trail">box g1 is 1.2 units wide but its label needs about 1.64</code>. That is the case to avoid: a fixed <code class="nb">w</code> too small for the label, and neither <code class="nb">.shrink</code> nor <code class="nb">.fit</code>. It is the
 one warning this lecture builds with.</p>
 
   
@@ -2392,7 +2393,7 @@ one warning this lecture builds with.</p>
 </svg><figcaption class="dg-hint"></figcaption></figure>
 
 
-<p><strong><code class="nb">move</code> shifts an element, and everything hanging off it goes too.</strong> The proxy gets <code>move px to between cl,sv</code>, and because the layout is worked out again at every step, the two dashed arrows still hang off it, the short line on the label still points at it, and the <code class="nb">container</code> suddenly holds a row instead of two. <code>hide direct</code> takes the direct arrow away. <code class="nb">to</code> names a position and <code class="nb">by</code> shifts by an amount – and <strong>the build refuses <code>move @tag to …</code></strong>, which would stack the whole set on one point; for a set, <code class="nb">by</code> is what is meant.</p>
+<p><strong><code class="nb">move</code> shifts an element, and everything hanging off it goes too.</strong> The proxy gets <code class="trail">move px to between cl,sv</code>, and because the layout is worked out again at every step, the two dashed arrows still hang off it, the short line on the label still points at it, and the <code class="nb">container</code> suddenly holds a row instead of two. <code>hide direct</code> takes the direct arrow away. <code class="nb">to</code> names a position and <code class="nb">by</code> shifts by an amount – and <strong>the build refuses <code>move @tag to …</code></strong>, which would stack the whole set on one point; for a set, <code class="nb">by</code> is what is meant.</p>
 <p><strong>A beat can also take a class off, and <code class="nb">{!class}</code> is the only word for it.</strong> A <code class="nb">style</code> step adds classes, and many slots spell their base state as the absence of every member – ordinary prominence, a solid stroke, the normal type size – so without <code class="nb">{!class}</code> a beat could leave such a state and never reach it again. The last beat here takes <code class="nb">.dim</code> and <code class="nb">.emph</code> off and gives the figure its opening weighting back. <strong>The mark removes the exact name written, not the slot</strong>: <code class="nb">{!dim}</code> clears no <code class="nb">.ghost</code>, and a later beat may set <code class="nb">.dim</code> again.</p>
 
   
@@ -2457,7 +2458,7 @@ one warning this lecture builds with.</p>
   <span class="chunk-num" aria-hidden="true"><i>2</i><i>1</i></span>
   
   <h2 class="chunk-heading">One question across, one question along</h2>
-  <p><strong>A box label and an edge label are two different questions, and only one of them has nine answers.</strong> A box label sits somewhere in a rectangle of space, so there are three answers across and three down. An edge label lies on one side of its line or the other, and that is all. On an edge the choice is therefore the option <code>side &lt;word&gt;</code>, not a class, and the build refuses <code class="nb">{.top}</code> on an edge. Which pair can choose at all is settled only once the line is routed, so naming the other one draws a warning.</p>
+  <p><strong>A box label and an edge label are two different questions, and only one of them has nine answers.</strong> A box label sits somewhere in a rectangle of space, so there are three answers across and three down. An edge label lies on one side of its line or the other, and that is all. On an edge the choice is therefore the option <code class="trail">side &lt;word&gt;</code>, not a class, and the build refuses <code class="nb">{.top}</code> on an edge. Which pair can choose at all is settled only once the line is routed, so naming the other one draws a warning.</p>
 
   
   
@@ -2611,7 +2612,7 @@ one warning this lecture builds with.</p>
 
 
 <p><strong>Seven statements expand at parse time into ordinary elements.</strong> <code class="nb">zone</code> becomes a box and a text; <code class="nb">bars</code> becomes a box per column (<code class="nb">f-0</code> … <code class="nb">f-11</code>), a baseline and – where a second string is written – a text per label; <code class="nb">grid</code> a cell per field (<code class="nb">g-&lt;column&gt;-&lt;row&gt;</code>); <code class="nb">plot</code> a frame with gridlines and axes; <code class="nb">table</code> a box per cell; <code class="nb">lanes</code> a band per lane; <code class="nb">sequence</code> a head, a lifeline, a message and a note per entry. Everything downstream treats the result like any other element: the <code class="nb">brace</code> spans three columns because three columns are three ordinary boxes, and a <code class="nb">style</code> step tints three cells because they are boxes. What makes that work is that a coordinate may be another element&#39;s – every cell is placed against an edge of the frame the same statement lays. The other four come later: <code class="nb">plot</code> on <em>A frame to draw in</em>, and <code class="nb">table</code>, <code class="nb">lanes</code> and <code class="nb">sequence</code> in Part 6.</p>
-<p><strong>An edge is one of the things a coordinate can be read off.</strong> <code class="nb">w1.cx</code>, <code class="nb">w1.cy</code>, <code>above w1 gap 0.2</code> – what is read is the wire&#39;s bounding box. That counts as soon as a sentence describes the wire rather than one of its ends. Pinned to a box, such a sentence keeps its distance from the box and loses it from the line the moment a fraction or a height changes, with no warning. An edge has no name until you give it one, and the name goes in front, as it does on every other statement: in the slot before the first endpoint, <code>edge w1 mix -&gt; log</code>. Staying anonymous costs nothing, the slot being optional. Place in a circle – an element against an edge that itself hangs off it – and you get <code>placement cycle</code> with the line number.</p>
+<p><strong>An edge is one of the things a coordinate can be read off.</strong> <code class="nb">w1.cx</code>, <code class="nb">w1.cy</code>, <code>above w1 gap 0.2</code> – what is read is the wire&#39;s bounding box. That counts as soon as a sentence describes the wire rather than one of its ends. Pinned to a box, such a sentence keeps its distance from the box and loses it from the line the moment a fraction or a height changes, with no warning. An edge has no name until you give it one, and the name goes in front, as it does on every other statement: in the slot before the first endpoint, <code class="trail">edge w1 mix -&gt; log</code>. Staying anonymous costs nothing, the slot being optional. Place in a circle – an element against an edge that itself hangs off it – and you get <code>placement cycle</code> with the line number.</p>
 <p><strong><code class="nb">cell</code> counts in the height of a grid unit on both axes, exactly as <code class="nb">pad</code> does.</strong> A <code class="nb">grid</code> cell is meant to be square, and a number meaning the unit&#39;s width across and its height down would give squares only where the unit is itself square.</p>
 <p><strong>The spacing <em>inside</em> these statements is <code class="nb">space</code>, not <code class="nb">gap</code>.</strong> A placement stands on the same line, and there <code class="nb">gap</code> means the distance to another element. The distance between two columns is a different thing and takes a different word.</p>
 
@@ -2785,7 +2786,7 @@ one warning this lecture builds with.</p>
   
   <h2 class="chunk-heading">A curve, and the label beside it</h2>
   <p><strong>The curves are ordinary edges.</strong> <code class="nb">.smooth</code> draws the same waypoints as a curve running <em>through</em> them instead of as straight segments – an interpolating spline, so a waypoint stays exactly where it was written. The skew warning stays quiet on a curve, its premise not holding: two nearly level points are the shape there rather than two ends that missed each other.</p>
-<p><strong>“weaker” is an edge label <em>beside</em> the line, and the ground travels with it.</strong> A fill class on an edge draws a ground behind the label; without a <code>side top</code>, <code>side bottom</code>, <code>side left</code> or <code>side right</code> it stays on the line and knocks it out, which is what <em>The road straight down</em> does with “yes” and “no”. With one of them it moves clear and takes the ground along. For the name of a curve that is the only choice: on the line it would knock out exactly what it names. The ground still has work to do, because the diagonal and two gridlines run under the curve.</p>
+<p><strong>“weaker” is an edge label <em>beside</em> the line, and the ground travels with it.</strong> A fill class on an edge draws a ground behind the label; without a <code class="trail">side top</code>, <code class="trail">side bottom</code>, <code>side left</code> or <code>side right</code> it stays on the line and knocks it out, which is what <em>The road straight down</em> does with “yes” and “no”. With one of them it moves clear and takes the ground along. For the name of a curve that is the only choice: on the line it would knock out exactly what it names. The ground still has work to do, because the diagonal and two gridlines run under the curve.</p>
 <p><strong>A label beside a curve has to be short.</strong> The label is moved clear along the normal <em>at the middle</em> of the curve, but the curve goes on climbing, so a long label runs back into its own line at both ends instead of staying beside it. Beside a horizontal or vertical edge the question does not arise, and there a label may be as long as it needs to be.</p>
 
   
@@ -2926,7 +2927,7 @@ and the two arrows between them.</p>
   <p><strong>Placement is a grid square, or a relation to a neighbour.</strong></p>
 <ul>
 <li><strong><code>at 2,1</code></strong> puts an element in a grid square.</li>
-<li><strong><code>right of mix gap 0.6</code></strong> places it against a neighbour, as do <code>left of</code>, <code class="nb">above</code> and <code class="nb">below</code>.</li>
+<li><strong><code>right of mix gap 0.6</code></strong> places it against a neighbour, as do <code class="trail">left of</code>, <code class="nb">above</code> and <code class="nb">below</code>.</li>
 <li><strong><code>between a,b</code></strong> is the point on the line joining two elements.</li>
 <li><strong><code>offset dx,dy</code></strong> is a nudge any of the three accepts on the end.</li>
 </ul>
@@ -2942,9 +2943,9 @@ and the two arrows between them.</p>
   <span class="chunk-num" aria-hidden="true"><i>3</i><i>3</i></span>
   
   <h2 class="chunk-heading has-sub"><span class="hd-main">A coordinate can be another element&#39;s</span> <span class="hd-sub">fractions, edges and pictures</span></h2>
-  <p><strong>A coordinate can be another element&#39;s, plus or minus a little</strong> – <code>at mix.cx,src.cy+0.4</code>. Anywhere an <code class="nb">X,Y</code> pair goes, that form goes.</p>
+  <p><strong>A coordinate can be another element&#39;s, plus or minus a little</strong> – <code class="trail">at mix.cx,src.cy+0.4</code>. Anywhere an <code class="nb">X,Y</code> pair goes, that form goes.</p>
 <p><strong>An anchor can carry a fraction</strong>: <code class="nb">mix.right:0.3</code> slides the attachment point along that edge, so two arrows between the same pair of boxes run side by side rather than on top of each other. At the end of a placement, <code>gap 0</code> makes two boxes touch and <code>flush left</code> lines up their left edges.</p>
-<p><strong>An edge is one of the things a coordinate can name.</strong> <code>text n &quot;only after the handshake&quot; above w1 gap 0.2</code> sets a phrase against the wire it describes rather than against a box at one end of it, so the label follows its line instead of drifting off it the next time a box changes height. Name the edge first, in the slot before the arrow&#39;s first end: <code>edge w1 mix -&gt; log</code>. An edge has no name until you write one, and most edges never need one.</p>
+<p><strong>An edge is one of the things a coordinate can name.</strong> <code>text n &quot;only after the handshake&quot; above w1 gap 0.2</code> sets a phrase against the wire it describes rather than against a box at one end of it, so the label follows its line instead of drifting off it the next time a box changes height. Name the edge first, in the slot before the arrow&#39;s first end: <code class="trail">edge w1 mix -&gt; log</code>. An edge has no name until you write one, and most edges never need one.</p>
 <p><strong>A picture can be an element too.</strong> <code>image alice avatar-alice w 0.4</code> finds the file exactly as <code class="nb">![](fig-id)</code> does, and an SVG drawing takes the theme&#39;s colours there in the same way.</p>
 
   
@@ -2972,7 +2973,7 @@ and the two arrows between them.</p>
 </svg><figcaption class="dg-hint"></figcaption></figure>
 
 
-<p><strong><code>step leak</code> shows the logfile, and <code>step blame</code> emphasises the leak and the box it runs to.</strong> The words a step knows are <code class="nb">show</code>, <code class="nb">hide</code>, <code>move … to</code>, <code>move … by</code>, the three attention verbs <code class="nb">emph</code>, <code class="nb">dim</code> and <code class="nb">ghost</code>, plus <code class="nb">style</code> and <code class="nb">label</code>.</p>
+<p><strong><code>step leak</code> shows the logfile, and <code>step blame</code> emphasises the leak and the box it runs to.</strong> The words a step knows are <code class="nb">show</code>, <code class="nb">hide</code>, <code class="trail">move … to</code>, <code class="trail">move … by</code>, the three attention verbs <code class="nb">emph</code>, <code class="nb">dim</code> and <code class="nb">ghost</code>, plus <code class="nb">style</code> and <code class="nb">label</code>.</p>
 <p><strong>Anything attached to something invisible is invisible too</strong>, which is why <code>step leak</code> names only the logfile. An arrow is only as visible as the two things it joins, a <code class="nb">container</code> or a <code class="nb">brace</code> only as visible as its members, and a <code class="nb">text</code> with a line drawn to something only as visible as what it points at. So showing the boxes shows the arrows between them, and most of a figure needs no <code class="nb">show</code> of its own.</p>
 
   
@@ -3030,7 +3031,7 @@ and the two arrows between them.</p>
 </div></div>
 
 
-<p><strong>A pinned beat rides one the slide already has rather than adding one</strong>, so this chunk takes two presses, not four. <code>from 0</code> is refused – that is the beat the slide opens on, so write the words above the marker – and so is a <code class="nb">from</code> inside an <code>::: overlay from N</code> or a <code>::: dock from N</code>, which numbers its own markers already.</p>
+<p><strong>A pinned beat rides one the slide already has rather than adding one</strong>, so this chunk takes two presses, not four. <code>from 0</code> is refused – that is the beat the slide opens on, so write the words above the marker – and so is a <code class="nb">from</code> inside an <code>::: overlay from N</code> or a <code class="trail">::: dock from N</code>, which numbers its own markers already.</p>
 
   
   
@@ -3069,7 +3070,7 @@ and the two arrows between them.</p>
 
 
 <p><strong>The diamond is the outline an audience needs no explanation for.</strong> Most people learned it at school: a question is asked here, and it goes on in two ways. What that costs is room. The widest strip a diamond offers is half its width by half its height, so the build sizes it at twice what a rectangle would need – two or three words, with the explanation in a note beside it, as on the left here. A whole sentence in a diamond would take four times the area of the boxes around it and become the figure.</p>
-<p><strong>The four labels sit <em>on</em> the line, and each one says so on its own tail.</strong> A fill class on an edge draws a ground behind the label; with no <code>side top</code>, <code>side bottom</code>, <code>side left</code> or <code>side right</code> beside it, the label stays on the line and knocks it out behind itself. That is the right form for a word that <em>names</em> the line – “yes”, “no”, a port number, a message type – the way a street sign belongs to the street and the street runs past it either side. A sentence describing what <em>travels</em> along the line belongs beside it: <em>Three roles, one incident</em> does that, and the ROC curves on <em>A frame to draw in</em> take the ground along when they do. Mixing the two in one figure means the audience has to sort each label before it can read any of them, so everything here is on the line.</p>
+<p><strong>The four labels sit <em>on</em> the line, and each one says so on its own tail.</strong> A fill class on an edge draws a ground behind the label; with no <code class="trail">side top</code>, <code class="trail">side bottom</code>, <code>side left</code> or <code>side right</code> beside it, the label stays on the line and knocks it out behind itself. That is the right form for a word that <em>names</em> the line – “yes”, “no”, a port number, a message type – the way a street sign belongs to the street and the street runs past it either side. A sentence describing what <em>travels</em> along the line belongs beside it: <em>Three roles, one incident</em> does that, and the ROC curves on <em>A frame to draw in</em> take the ground along when they do. Mixing the two in one figure means the audience has to sort each label before it can read any of them, so everything here is on the line.</p>
 
   
   
@@ -3102,7 +3103,7 @@ and the two arrows between them.</p>
 
 <p><strong>The bands are equal, their contents are not, and that is why they are no <code class="nb">container</code>.</strong> A container measures itself against what it holds, so three bands with different numbers of boxes would come out different lengths at both ends, which is what a swimlane diagram must not show. <code class="nb">lanes</code> lays the frame, divides it into bands of equal height and writes the names turned on end in front of the left edge; the bands are <code class="nb">.clear</code> so that everything in them reads over them. It needs no time axis: the reading direction is the axis.</p>
 <p><strong>Every hand-off changes band, and <code class="nb">.elbow</code> is the routing for it.</strong> The class draws two waypoints itself – a rail across the gap, on the axis the two ends are further apart on – instead of the same double bend written out by hand on every edge. A straight line would do something else: it would run diagonally through a band it never enters, and an audience reads that as involvement.</p>
-<p><strong>The one edge label sits <em>beside</em> the line, not on it.</strong> “same sender” describes what travels along the line, and a sentence with a rule through the middle of it is read as two fragments before it is read as a sentence. <code>side top</code> lifts it over the line; on a vertical edge it would be <code>side left</code> and <code>side right</code>, and which pair applies is known only once the edge has been routed – so the wrong pair is a warning at build time rather than an error at parse time. The label is moved clear by what it measures <em>across</em> the line: beside a horizontal edge its height, beside a vertical one its width, there with a margin, because a gap across a line of type needs more air than one above it. This label needs no ground: there is nothing but band under it. What a ground does, and how large it may be, is on <em>A frame to draw in</em>.</p>
+<p><strong>The one edge label sits <em>beside</em> the line, not on it.</strong> “same sender” describes what travels along the line, and a sentence with a rule through the middle of it is read as two fragments before it is read as a sentence. <code>side top</code> lifts it over the line; on a vertical edge it would be <code>side left</code> and <code class="trail">side right</code>, and which pair applies is known only once the edge has been routed – so the wrong pair is a warning at build time rather than an error at parse time. The label is moved clear by what it measures <em>across</em> the line: beside a horizontal edge its height, beside a vertical one its width, there with a margin, because a gap across a line of type needs more air than one above it. This label needs no ground: there is nothing but band under it. What a ground does, and how large it may be, is on <em>A frame to draw in</em>.</p>
 
   
   
@@ -3147,7 +3148,7 @@ and the two arrows between them.</p>
   
   <h2 class="chunk-heading">One word draws all six brackets</h2>
   <p><strong>Every bracket in that tree is the same word, written six times.</strong> <code class="nb">.elbow</code> leaves one end on the axis the two are further apart on, runs a rail across the gap and arrives on the same axis; both attachment points are forced onto that axis, whatever the automatic choice would otherwise have taken. The rail is measured between the two elements&#39; <em>facing edges</em>, not between their centres, so it lies on one line for both children of an issuer and the pair reads as one bracket rather than as two connectors. By hand that would be twelve waypoints, recomputed every time a level changes its spacing. Put the rail somewhere else with <code class="nb">via</code>; both on one line is an error. <code class="nb">.elbow</code> shares a slot with <code class="nb">.smooth</code>, so a line takes one or the other.</p>
-<p><strong>Its dashed box stands around the whole set before the set is assembled.</strong> It is written into the same beat as the issuers (<code>show @issuers, scope</code>), though its other two members arrive a beat later. Without the written <code class="nb">show</code> the usual rule applies: an outline is only as visible as its members and fits itself to the ones you can see, so it would first have grown around the issuer alone and then opened downwards. Naming it gets you both the visibility <em>and</em> the full extent. That is what the exception is for.</p>
+<p><strong>Its dashed box stands around the whole set before the set is assembled.</strong> It is written into the same beat as the issuers (<code class="lead trail">show @issuers, scope</code>), though its other two members arrive a beat later. Without the written <code class="nb">show</code> the usual rule applies: an outline is only as visible as its members and fits itself to the ones you can see, so it would first have grown around the issuer alone and then opened downwards. Naming it gets you both the visibility <em>and</em> the full extent. That is what the exception is for.</p>
 
   
   
