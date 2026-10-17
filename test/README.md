@@ -660,8 +660,11 @@ which a child process inherits, so the `build.js` runs that `cli.mjs` and
 
 **Read `build.js`'s line figure with care.** V8 counts a template literal as
 one expression, so the moment `const AUDIENCE_CSS = …` is evaluated every line
-of that stylesheet counts as covered. About 23,700 of the file's 37,000 lines
-are inside the two dozen literal constants – the inlined runtime and
-stylesheets – and read 99.8 %; the Node-side logic outside them read 77 % on
-the first measurement, against 91.6 % for the file as a whole. The function
-and branch columns are not inflated this way.
+of that stylesheet counts as covered. About 20,900 of the file's 37,000 lines
+are inside its two dozen multi-line literal constants – the inlined runtime
+and stylesheets – and read 100 %; the Node-side logic outside them read
+81.4 % when this was written, against 91.9 % for the file as a whole.
+`tools/coverage-logic.mjs` computes that split from `coverage/lcov.info`, and
+`test:coverage` prints its line last; that is the figure to watch, and the
+one that should not fall when the literals move into files of their own. The
+function and branch columns are not inflated this way.
