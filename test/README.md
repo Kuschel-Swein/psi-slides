@@ -647,9 +647,12 @@ line swallowed console errors for as long as it existed.
 `npm run test:coverage` runs the half of `npm test` that needs no browser –
 the gates, `settings`, `containers`, `cli`, `large-deck`, `present` and
 `reproducible` –
-under [c8](https://github.com/bcoe/c8) and prints a table per file, with an
-HTML report in `coverage/` (gitignored). It is a measurement, not a gate: no
-threshold fails a run. c8 reads V8's own coverage through `NODE_V8_COVERAGE`,
+under [c8](https://github.com/bcoe/c8) and prints a table per file, with
+`coverage/lcov.info` and an HTML report in `coverage/lcov-report/`
+(gitignored, about 10 MB). c8's raw V8 data – one file per process, over a
+gigabyte for one run, because the suites spawn `build.js` some fifteen
+hundred times – is deleted when the report is written, pass or fail. It is a
+measurement, not a gate: no threshold fails a run. c8 reads V8's own coverage through `NODE_V8_COVERAGE`,
 which a child process inherits, so the `build.js` runs that `cli.mjs` and
 `reproducible.mjs` spawn are counted too. The browser suite and
 `pdf-export.mjs` are left out, which is why `chrome-path.mjs` and

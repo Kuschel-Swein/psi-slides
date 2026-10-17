@@ -130,6 +130,7 @@ desktop/.env
 # published and therefore tracked - see build-playground.mjs --check.
 tools/font-playground/node_modules/
 
-# npm run test:coverage writes its report here (c8, HTML and lcov); a
+# npm run test:coverage writes its report here (c8: lcov.info and an HTML
+# report under lcov-report/); a
 # measurement, regenerated on demand, never committed.
 /coverage/

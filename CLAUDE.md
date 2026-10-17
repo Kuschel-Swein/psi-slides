@@ -372,7 +372,8 @@ node lint.js lectures/ --strict                # warnings → exit 2
 # deck of their own rather than hunting shapes in a real one: test/README.md.
 npm run gate                                   # all gates
 npm run test:coverage                          # browser-free suites under c8, a
-                                               # table plus coverage/; no threshold
+                                               # table plus coverage/lcov-report/;
+                                               # no threshold
                                                # (test/README.md, Measuring coverage)
 node test/gates/run.mjs semantics              # gates whose name matches
 node test/run.mjs                              # all specs
