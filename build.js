@@ -3311,49 +3311,38 @@ function markAddresses(text) {
 
 // ── marked renderer overrides (code highlighting + image shorthand) ──
 
-// A code span that opens its block. The spaced look puts a margin on both
-// sides of a span with a space in it, and at the head of a paragraph, a list
-// item, a table cell or a row's body that margin is an indent: the line
-// starts a quarter em to the right of the lines under it. No selector can
-// say "nothing but white space before me" - :first-child counts elements and
+// Which side of a spaced code span keeps its margin. The spaced look puts a
+// margin on both sides of a span with a space in it, and that margin is only
+// right next to a space. At the head of a paragraph, a list item, a table
+// cell or a row's body it is an indent: the line starts a quarter em to the
+// right of the lines under it. Glued to a character - "`inf upload`:" or
+// "(`a b`)" - it is a gap before the colon, or after the bracket, that reads
+// as a typo. No selector can see either - :first-child counts elements and
 // does not see a text node - so the build marks the span, the way the
-// codespan renderer marks .nb. Only the bare tag is matched, which is the
-// span the margin is on; a listing is preceded by its pre and never by one
-// of these openers.
-const CODE_LEAD_RE = /(<(?:p|li|td|th|dd)(?:\s[^>]*)?>|<span class="row-body">|<br\s*\/?>)(\s*)<code>/g;
-// A spaced span glued to a character - "`inf upload`:" or "(`a b`)" - has
-// nothing to be separated from on that side, and the margin there is a gap
-// before the colon, or after the bracket, that reads as a typo. So the side
-// that touches a character loses its margin too: .lead on the left, as for a
-// span that opens its block, and .trail on the right. Only a bare span is
-// looked at (a .nb span carries no margin), and a code span's text is escaped
-// and holds no tag, so [^<]* is the whole of it. A tag next to the span is
-// not a character (</strong>: stays as it is), and a no-break space is a
-// space, though it arrives as an entity like a glued quote does.
-const CODE_SPAN_RE = /<code( class="lead")?>([^<]*)<\/code>/g;
-const NBSP_ENTITY_RE = /^&(?:nbsp|#160|#x0*a0);/i;
-function gluedAfter(s, end) {
-  const c = s[end];
-  if (!c || c === '<' || /\s/.test(c)) return false;
-  return !NBSP_ENTITY_RE.test(s.slice(end, end + 8));
-}
-function gluedBefore(s, at) {
-  const c = s[at - 1];
-  if (!c || c === '>' || /\s/.test(c)) return false;
-  if (c !== ';') return true;
-  const amp = s.lastIndexOf('&', at - 1);
-  return amp < 0 || at - amp > 8 || !NBSP_ENTITY_RE.test(s.slice(amp, at));
-}
+// codespan renderer marks .nb: .lead drops the left margin, .trail the
+// right. Only a bare span is looked at (a .nb span carries no margin), and a
+// code span's text is escaped and holds no tag, so [^<]* is the whole of it;
+// a listing is preceded by its pre and never by one of these openers. A tag
+// next to the span is not a character (</strong>: stays as it is), and a
+// no-break space is a space, though it arrives as an entity like a glued
+// quote does.
+const CODE_SPAN_RE = /(<(?:p|li|td|th|dd)(?:\s[^>]*)?>|<span class="row-body">|<br\s*\/?>)?(\s*)<code>([^<]*)<\/code>/g;
+const CODE_SEP = String.raw`[\s<>]|&(?:nbsp|#160|#x0*a0);`;
+const CODE_SEP_BEFORE = new RegExp(`(?:^|${CODE_SEP})$`, 'i');
+const CODE_SEP_AFTER = new RegExp(`^(?:$|${CODE_SEP})`, 'i');
+const gluedBefore = (s, at) => !CODE_SEP_BEFORE.test(s.slice(Math.max(0, at - 10), at));
+const gluedAfter = (s, end) => !CODE_SEP_AFTER.test(s.slice(end, end + 10));
 marked.use({
   hooks: {
     postprocess(html) {
-      return html.replace(CODE_LEAD_RE, '$1$2<code class="lead">')
-        .replace(CODE_SPAN_RE, (m, lead, body, at, s) => {
-          const cls = [];
-          if (lead || gluedBefore(s, at)) cls.push('lead');
-          if (gluedAfter(s, at + m.length)) cls.push('trail');
-          return `<code${cls.length ? ` class="${cls.join(' ')}"` : ''}>${body}</code>`;
-        });
+      if (!html.includes('<code>')) return html;
+      return html.replace(CODE_SPAN_RE, (m, opener = '', ws, body, at, s) => {
+        const lead = opener || (!ws && gluedBefore(s, at));
+        const trail = gluedAfter(s, at + m.length);
+        if (!lead && !trail) return m;
+        const cls = [lead && 'lead', trail && 'trail'].filter(Boolean).join(' ');
+        return `${opener}${ws}<code class="${cls}">${body}</code>`;
+      });
     },
   },
 });
@@ -8363,7 +8352,7 @@ const CODE_XHEIGHT_RATIO = 0.96;
 // browser's own monospace at 1em ("Abgabe mit inf upload:" on a closing
 // slide, the gap inside the span twice the gaps around it).
 const INLINE_CODE_SEL = {
-  live: ['.chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code)', '.exp-body code:not(pre code)'],
+  live: ['.chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code)'],
   print: ['code:not(pre code):not(.chunk-heading code)'],
 };
 // One selector list, written once and distributed over its parts, so the
@@ -10389,7 +10378,7 @@ ${inlineCodeSel('print', '', ':not(.nb)')} {
 /* A span that opens its block keeps the right-hand margin only: on the left
    it would indent the line. One glued to a character loses the margin on
    that side, or the colon after it stands off. Marked by the build, see
-   CODE_LEAD_RE and CODE_SPAN_RE. */
+   CODE_SPAN_RE. */
 ${inlineCodeSel('print', '', ':not(.nb).lead')} { margin-left: 0; }
 ${inlineCodeSel('print', '', ':not(.nb).trail')} { margin-right: 0; }
 ${inlineCodeSel('print', 'body[data-code=tint]')} {
@@ -16320,10 +16309,7 @@ a:hover { text-decoration-thickness: 2px; }
    affected: .cards > ul > li sets its own margin at a higher specificity,
    and their spacing is the grid's. */
 .chunk-body li { margin: 0.45em 0; }
-.chunk-body code { font-family: var(--mono-font); font-size: 0.92em; }
-/* The same face and size for a span in running text outside .chunk-body –
-   a cover, a closing slide, a divider, an overlay card, a dock. */
-${inlineCodeSel('live')} { font-family: var(--mono-font); font-size: 0.92em; }
+.chunk code { font-family: var(--mono-font); font-size: 0.92em; }
 /* See the codespan renderer: a span with no space in it is one token and is
    not broken across lines. Bare element selector, so the heading, the
    expansions and the cockpit get it too. */
@@ -16364,7 +16350,7 @@ ${inlineCodeSel('live', '', ':not(.nb)')} {
 /* A span that opens its block keeps the right-hand margin only: on the left
    it would indent the line. One glued to a character loses the margin on
    that side, or the colon after it stands off. Marked by the build, see
-   CODE_LEAD_RE and CODE_SPAN_RE. */
+   CODE_SPAN_RE. */
 ${inlineCodeSel('live', '', ':not(.nb).lead')} { margin-left: 0; }
 ${inlineCodeSel('live', '', ':not(.nb).trail')} { margin-right: 0; }
 ${inlineCodeSel('live', 'body[data-code=tint]')} {
