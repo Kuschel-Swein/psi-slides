@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Animated Infographics – print</title>
+<script>(() => { const d = document.documentElement; try { const s = localStorage.getItem('psi-reader:scheme'); const f = localStorage.getItem('psi-reader:face'); if (s === 'light' || s === 'dark') d.setAttribute('data-scheme', s); if (f === 'serif' || f === 'sans') d.setAttribute('data-face', f); } catch (e) { /* no storage: the system decides */ } })();</script>
 <style>
 .beat-mark { display: none !important; }
 :root {
@@ -417,6 +418,9 @@ body[data-slide-nums=horizontal] .chunk:has(> .chunk-label) > .chunk-num::before
 }
 .chunk-title .title-notice { font-style: italic; }
 .chunk-title [data-caps] { letter-spacing: 0.055em; }
+.chunk-title .title-lede { margin-top: 1rem; max-width: 34rem; }
+.chunk-title .title-lede > :first-child { margin-top: 0; }
+.chunk-title .title-lede > :last-child { margin-bottom: 0; }
 body[data-title-caps=on] .chunk-title .title-presenter,
 body[data-title-caps=on] .chunk-title .title-affiliation,
 body[data-title-caps=on][data-headline=eyebrow] .chunk-title .title-main {
@@ -818,6 +822,76 @@ pre.shiki .line { display: inline; }
   main { padding-top: 4rem; }
   html { font-size: clamp(15px, calc(12px + 0.3vw), 18px); }
 }
+@media screen and (prefers-color-scheme: dark) {
+  :root:not([data-scheme=light]), :root:not([data-scheme=light]) body {
+    color-scheme: dark;
+    --paper: oklch(0.17 0.005 260);
+    --paper-warm: oklch(0.22 0.008 260);
+    --ink: oklch(0.95 0 0);
+    --ink-soft: oklch(0.68 0.01 260);
+    --rule: oklch(0.38 0.01 260);
+    --emph: oklch(0.76 0.15 35);
+  }
+  :root:not([data-scheme=light]) pre { background: color-mix(in oklch, var(--ink) 7%, transparent); }
+  :root:not([data-scheme=light]) pre.shiki, :root:not([data-scheme=light]) pre.shiki span { color: var(--shiki-dark) !important; }
+  :root:not([data-scheme=light]) .speaker-note { --note-border: oklch(0.6 0.1 240); --note-bg: oklch(0.24 0.03 240); --note-label: oklch(0.78 0.08 240); }
+  :root:not([data-scheme=light]) .presentation-note { --note-border: oklch(0.66 0.12 80); --note-bg: oklch(0.25 0.03 80); --note-label: oklch(0.8 0.1 80); }
+  :root:not([data-scheme=light]) :is(figure.figure-img, .chunk-title[data-cover=panel]) {
+    --ink: #1f1f24;
+    --ink-soft: #6b6b72;
+    --paper: #fafaf7;
+    --rule: #c8c8c0;
+    --emph: #8b2e00;
+  }
+  :root:not([data-scheme=light]) figure.figure-img {
+    background: var(--paper);
+    color: var(--ink);
+    padding: 0.6rem;
+    border-radius: var(--radius-card);
+  }
+  :root:not([data-scheme=light]) .cards.cg-paper > ul > li, :root:not([data-scheme=light]) .cards.cg-paper > ol > li, :root:not([data-scheme=light]) .cards.cg-paper > :not(ul):not(ol) { background: var(--paper-warm); }
+  :root:not([data-scheme=light]) .cards.cg-accent > ul > li, :root:not([data-scheme=light]) .cards.cg-accent > ol > li, :root:not([data-scheme=light]) .cards.cg-accent > :not(ul):not(ol),
+  :root:not([data-scheme=light]) :is(.overlay-card, .dock).ov-accent { color: var(--paper); }
+  :root:not([data-scheme=light]) figure.figure-embed .embed-frame { background: var(--paper-warm); }
+  :root:not([data-scheme=light]) body[data-reader=on] { --rd-hl: oklch(0.42 0.08 95); --rd-hl-strong: oklch(0.6 0.13 94); }
+  :root:not([data-scheme=light]) .rd-pin-dot, :root:not([data-scheme=light]) svg .rd-pin text { color: #1f1f24; fill: #1f1f24; }
+}
+@media screen {
+  :root[data-scheme=dark], :root[data-scheme=dark] body {
+    color-scheme: dark;
+    --paper: oklch(0.17 0.005 260);
+    --paper-warm: oklch(0.22 0.008 260);
+    --ink: oklch(0.95 0 0);
+    --ink-soft: oklch(0.68 0.01 260);
+    --rule: oklch(0.38 0.01 260);
+    --emph: oklch(0.76 0.15 35);
+  }
+  :root[data-scheme=dark] pre { background: color-mix(in oklch, var(--ink) 7%, transparent); }
+  :root[data-scheme=dark] pre.shiki, :root[data-scheme=dark] pre.shiki span { color: var(--shiki-dark) !important; }
+  :root[data-scheme=dark] .speaker-note { --note-border: oklch(0.6 0.1 240); --note-bg: oklch(0.24 0.03 240); --note-label: oklch(0.78 0.08 240); }
+  :root[data-scheme=dark] .presentation-note { --note-border: oklch(0.66 0.12 80); --note-bg: oklch(0.25 0.03 80); --note-label: oklch(0.8 0.1 80); }
+  :root[data-scheme=dark] :is(figure.figure-img, .chunk-title[data-cover=panel]) {
+    --ink: #1f1f24;
+    --ink-soft: #6b6b72;
+    --paper: #fafaf7;
+    --rule: #c8c8c0;
+    --emph: #8b2e00;
+  }
+  :root[data-scheme=dark] figure.figure-img {
+    background: var(--paper);
+    color: var(--ink);
+    padding: 0.6rem;
+    border-radius: var(--radius-card);
+  }
+  :root[data-scheme=dark] .cards.cg-paper > ul > li, :root[data-scheme=dark] .cards.cg-paper > ol > li, :root[data-scheme=dark] .cards.cg-paper > :not(ul):not(ol) { background: var(--paper-warm); }
+  :root[data-scheme=dark] .cards.cg-accent > ul > li, :root[data-scheme=dark] .cards.cg-accent > ol > li, :root[data-scheme=dark] .cards.cg-accent > :not(ul):not(ol),
+  :root[data-scheme=dark] :is(.overlay-card, .dock).ov-accent { color: var(--paper); }
+  :root[data-scheme=dark] figure.figure-embed .embed-frame { background: var(--paper-warm); }
+  :root[data-scheme=dark] body[data-reader=on] { --rd-hl: oklch(0.42 0.08 95); --rd-hl-strong: oklch(0.6 0.13 94); }
+  :root[data-scheme=dark] .rd-pin-dot, :root[data-scheme=dark] svg .rd-pin text { color: #1f1f24; fill: #1f1f24; }
+  :root[data-face=serif] body { font-family: var(--serif); }
+  :root[data-face=sans] body { font-family: var(--sans); }
+}
 @media screen {
   .rd-contents[hidden], .rd-toggle[hidden] { display: none !important; }
   body[data-reader=on].rd-ready .rd-contents {
@@ -1085,6 +1159,24 @@ body[data-reader=on] {
   }
   .rd-toast .rd-undo { font-size: inherit; color: inherit; font-weight: 600; }
   .rd-foot { flex: none; max-height: 40vh; overflow-y: auto; border-top: 0.5pt solid var(--rule); margin-top: 0.75rem; padding-top: 0.6rem; }
+  .rd-view { flex: none; border-top: 0.5pt solid var(--rule); margin-top: 0.75rem; padding-top: 0.55rem; display: grid; gap: 0.35rem; }
+  .rd-view-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .rd-view-label { font-size: 0.72rem; }
+  .rd-seg { display: inline-flex; border: 0.5pt solid var(--rule); border-radius: var(--radius-tight); overflow: hidden; }
+  .rd-seg button {
+    font: inherit;
+    font-size: 0.72rem;
+    line-height: 1;
+    padding: 0.32rem 0.5rem;
+    color: var(--ink-soft);
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+  .rd-seg button + button { border-left: 0.5pt solid var(--rule); }
+  .rd-seg button:hover, .rd-seg button:focus-visible { color: var(--ink); }
+  .rd-seg button:focus-visible { outline: 2px solid var(--emph); outline-offset: -2px; }
+  .rd-seg button[aria-pressed=true] { color: var(--paper); background: var(--ink); }
   .rd-notice, .rd-foot-head { margin: 0 0 0.4rem; }
   .rd-foot-head { color: var(--ink); font-weight: 600; }
   .rd-orphans { list-style: none; margin: 0; padding: 0; }
@@ -1317,7 +1409,7 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
   }
 }
 @media screen and (pointer: coarse) {
-  body[data-reader=on].rd-ready :is(.rd-toggle, .rd-close, .rd-menu button, .rd-nav button, .rd-mark-btn,
+  body[data-reader=on].rd-ready :is(.rd-toggle, .rd-close, .rd-menu button, .rd-nav button, .rd-mark-btn, .rd-seg button,
       .rd-fig-btn, .rd-lb-bar button, .rd-actions button, .rd-orphans button, .rd-undo) {
     min-width: 44px;
     min-height: 44px;
@@ -1586,6 +1678,10 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
 
 <style>
 code:not(pre code):not(.chunk-heading code) { font-size: 0.885em; }
+@media screen {
+:root[data-face=serif] body code:not(pre code):not(.chunk-heading code) { font-size: 0.885em; }
+:root[data-face=sans] body code:not(pre code):not(.chunk-heading code) { font-size: 0.901em; }
+}
 </style>
 
 
@@ -1603,6 +1699,7 @@ code:not(pre code):not(.chunk-heading code) { font-size: 0.885em; }
 <li class="rd-group"><div class="rd-part-row"><a class="rd-part" href="#language">The language in five lines</a><button type="button" class="rd-fold" aria-expanded="false" aria-controls="psiINT-rd-part-5" aria-label="Slides in this part: The language in five lines"><svg viewBox="0 0 10 10" aria-hidden="true" focusable="false"><path d="M3.5 2 L6.5 5 L3.5 8"/></svg></button></div><ol id="psiINT-rd-part-5"><li><a href="#diagram-slots" data-rd="diagram-slots"><span class="rd-num">31</span><span class="rd-text">Every line has the same six slots</span></a></li><li><a href="#diagram-placement" data-rd="diagram-placement"><span class="rd-num">32</span><span class="rd-text">Where an element goes</span></a></li><li><a href="#diagram-coords" data-rd="diagram-coords"><span class="rd-num">33</span><span class="rd-text">A coordinate can be another element&#39;s</span></a></li><li><a href="#diagram-beats-rule" data-rd="diagram-beats-rule"><span class="rd-num">34</span><span class="rd-text">What a step block says</span></a></li><li><a href="#diagram-beats-pinned" data-rd="diagram-beats-pinned"><span class="rd-num">35</span><span class="rd-text">Words that arrive with a step</span></a></li></ol></li>
 <li class="rd-group"><div class="rd-part-row"><span class="rd-part">Five arrangements</span><button type="button" class="rd-fold" aria-expanded="false" aria-controls="psiINT-rd-part-6" aria-label="Slides in this part: Five arrangements"><svg viewBox="0 0 10 10" aria-hidden="true" focusable="false"><path d="M3.5 2 L6.5 5 L3.5 8"/></svg></button></div><ol id="psiINT-rd-part-6"><li><a href="#flowchart" data-rd="flowchart"><span class="rd-num">36</span><span class="rd-text">The road straight down</span></a></li><li><a href="#swimlane" data-rd="swimlane"><span class="rd-num">37</span><span class="rd-text">Three roles, one incident</span></a></li><li><a href="#tree" data-rd="tree"><span class="rd-num">38</span><span class="rd-text">Leaves first, and the brackets follow</span></a></li><li><a href="#tree-elbow" data-rd="tree-elbow"><span class="rd-num">39</span><span class="rd-text">One word draws all six brackets</span></a></li><li><a href="#table" data-rd="table"><span class="rd-num">40</span><span class="rd-text">One line per row</span></a></li><li><a href="#sequence" data-rd="sequence"><span class="rd-num">41</span><span class="rd-text">A protocol down the page</span></a></li><li><a href="#seq-names" data-rd="seq-names"><span class="rd-num">42</span><span class="rd-text">Every part of a sequence keeps a name</span></a></li><li><a href="#seqmore" data-rd="seqmore"><span class="rd-num">43</span><span class="rd-text">What else a message can be</span></a></li><li><a href="#seq-entries" data-rd="seq-entries"><span class="rd-num">44</span><span class="rd-text">A self-message, a note, and the air between bands</span></a></li><li><a href="#seq-labels" data-rd="seq-labels"><span class="rd-num">45</span><span class="rd-text">What a label sits on, and the column of numbers</span></a></li><li><a href="#autoplay" data-rd="autoplay"><span class="rd-num">46</span><span class="rd-text">A figure that plays itself</span></a></li><li><a href="#end" data-rd="end"><span class="rd-num">47</span><span class="rd-text">The drawing lives in the source</span></a></li></ol></li>
   </ol>
+  <div class="rd-view"><div class="rd-view-row"><span class="rd-view-label" aria-hidden="true">Page</span><div class="rd-seg" role="group" aria-label="Page"><button type="button" data-set-scheme="auto" aria-pressed="false">Auto</button><button type="button" data-set-scheme="light" aria-pressed="false">Light</button><button type="button" data-set-scheme="dark" aria-pressed="false">Dark</button></div></div><div class="rd-view-row"><span class="rd-view-label" aria-hidden="true">Text</span><div class="rd-seg" role="group" aria-label="Text"><button type="button" data-set-face="serif" aria-pressed="false">Serif</button><button type="button" data-set-face="sans" aria-pressed="false">Sans</button></div></div></div>
   <div class="rd-foot" data-reader-slot="tools"></div>
 </nav><script>document.body.classList.add('rd-ready');for (const e of document.querySelectorAll('.rd-contents, .rd-toggle')) e.hidden = false;</script>
 <main>
@@ -1700,17 +1797,17 @@ copies the changed block to the clipboard instead. The editor is experimental.</
   <h2 class="chunk-heading has-sub"><span class="hd-main">Your first buffer overflow</span> <span class="hd-sub">a code block beside a drawing</span></h2>
   <div class="side"><div class="side-a">
 
-<pre class="shiki shiki-themes github-light github-dark-default" style="background-color:#fff;color:#24292e" tabindex="0"><code><span class="line"><span style="color:#D73A49">int</span><span style="color:#6F42C1"> main</span><span style="color:#24292E">(</span><span style="color:#D73A49">void</span><span style="color:#24292E">) {</span></span>
-<span class="line"><span style="color:#D73A49">  int</span><span style="color:#24292E">  myvalue </span><span style="color:#D73A49">=</span><span style="color:#D73A49"> 0x</span><span style="color:#005CC5">42</span><span style="color:#24292E">;</span></span>
-<span class="line"><span style="color:#D73A49">  char</span><span style="color:#E36209"> mystring</span><span style="color:#24292E">[</span><span style="color:#005CC5">16</span><span style="color:#24292E">];</span></span>
+<pre class="shiki shiki-themes github-light github-dark-default" style="background-color:#fff;color:#24292e;--shiki-dark:#e6edf3" tabindex="0"><code><span class="line"><span style="color:#D73A49;--shiki-dark:#FF7B72">int</span><span style="color:#6F42C1;--shiki-dark:#D2A8FF"> main</span><span style="color:#24292E;--shiki-dark:#E6EDF3">(</span><span style="color:#D73A49;--shiki-dark:#FF7B72">void</span><span style="color:#24292E;--shiki-dark:#E6EDF3">) {</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#FF7B72">  int</span><span style="color:#24292E;--shiki-dark:#E6EDF3">  myvalue </span><span style="color:#D73A49;--shiki-dark:#FF7B72">=</span><span style="color:#D73A49;--shiki-dark:#FF7B72"> 0x</span><span style="color:#005CC5;--shiki-dark:#79C0FF">42</span><span style="color:#24292E;--shiki-dark:#E6EDF3">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#FF7B72">  char</span><span style="color:#E36209;--shiki-dark:#FFA657"> mystring</span><span style="color:#24292E;--shiki-dark:#E6EDF3">[</span><span style="color:#005CC5;--shiki-dark:#79C0FF">16</span><span style="color:#24292E;--shiki-dark:#E6EDF3">];</span></span>
 <span class="line"></span>
-<span class="line"><span style="color:#6F42C1">  scanf</span><span style="color:#24292E">(</span><span style="color:#032F62">"</span><span style="color:#005CC5">%s</span><span style="color:#032F62">"</span><span style="color:#24292E">, mystring);</span></span>
+<span class="line"><span style="color:#6F42C1;--shiki-dark:#D2A8FF">  scanf</span><span style="color:#24292E;--shiki-dark:#E6EDF3">(</span><span style="color:#032F62;--shiki-dark:#A5D6FF">"</span><span style="color:#005CC5;--shiki-dark:#FF7B72">%s</span><span style="color:#032F62;--shiki-dark:#A5D6FF">"</span><span style="color:#24292E;--shiki-dark:#E6EDF3">, mystring);</span></span>
 <span class="line"></span>
-<span class="line"><span style="color:#D73A49">  if</span><span style="color:#24292E"> (myvalue </span><span style="color:#D73A49">==</span><span style="color:#D73A49"> 0x</span><span style="color:#005CC5">deadbeef</span><span style="color:#24292E">)</span></span>
-<span class="line"><span style="color:#6F42C1">    printf</span><span style="color:#24292E">(</span><span style="color:#032F62">"Success!</span><span style="color:#005CC5">\n</span><span style="color:#032F62">"</span><span style="color:#24292E">);</span></span>
-<span class="line"><span style="color:#D73A49">  else</span></span>
-<span class="line"><span style="color:#6F42C1">    printf</span><span style="color:#24292E">(</span><span style="color:#032F62">"</span><span style="color:#005CC5">%x\n</span><span style="color:#032F62">"</span><span style="color:#24292E">, myvalue);</span></span>
-<span class="line"><span style="color:#24292E">}</span></span></code></pre>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#FF7B72">  if</span><span style="color:#24292E;--shiki-dark:#E6EDF3"> (myvalue </span><span style="color:#D73A49;--shiki-dark:#FF7B72">==</span><span style="color:#D73A49;--shiki-dark:#FF7B72"> 0x</span><span style="color:#005CC5;--shiki-dark:#79C0FF">deadbeef</span><span style="color:#24292E;--shiki-dark:#E6EDF3">)</span></span>
+<span class="line"><span style="color:#6F42C1;--shiki-dark:#D2A8FF">    printf</span><span style="color:#24292E;--shiki-dark:#E6EDF3">(</span><span style="color:#032F62;--shiki-dark:#A5D6FF">"Success!</span><span style="color:#005CC5;--shiki-dark:#FF7B72">\n</span><span style="color:#032F62;--shiki-dark:#A5D6FF">"</span><span style="color:#24292E;--shiki-dark:#E6EDF3">);</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#FF7B72">  else</span></span>
+<span class="line"><span style="color:#6F42C1;--shiki-dark:#D2A8FF">    printf</span><span style="color:#24292E;--shiki-dark:#E6EDF3">(</span><span style="color:#032F62;--shiki-dark:#A5D6FF">"</span><span style="color:#005CC5;--shiki-dark:#FF7B72">%x\n</span><span style="color:#032F62;--shiki-dark:#A5D6FF">"</span><span style="color:#24292E;--shiki-dark:#E6EDF3">, myvalue);</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E6EDF3">}</span></span></code></pre>
 </div><div class="side-b">
 
 
@@ -2792,7 +2889,7 @@ and the two arrows between them.</p>
   
   <h2 class="chunk-heading has-sub"><span class="hd-main">Every line has the same six slots</span> <span class="hd-sub"><code>kind name label placement options tail</code></span></h2>
   <p><strong>Every line in a <code>::: draw</code> block has the same six slots, in this order</strong>, and most lines fill three or four of them:</p>
-<pre class="shiki shiki-themes github-light github-dark-default" style="background-color:#fff;color:#24292e" tabindex="0"><code><span class="line"><span>box   mix   "Mix"   right of src gap 0.6   w 1.2    {.tone-2 @crypto}</span></span>
+<pre class="shiki shiki-themes github-light github-dark-default" style="background-color:#fff;color:#24292e;--shiki-dark:#e6edf3" tabindex="0"><code><span class="line"><span>box   mix   "Mix"   right of src gap 0.6   w 1.2    {.tone-2 @crypto}</span></span>
 <span class="line"><span>kind  name  label   placement              options  tail</span></span></code></pre>
 <p><strong>The name is how later lines refer to an element and is never drawn; the label is what the audience reads</strong>, and <code class="nb">&quot;&quot;</code> is a legal empty one. A name is letters, digits, <code class="nb">_</code> and <code class="nb">-</code>, and a line starting with <code class="nb">#</code> is a comment.</p>
 <p><strong>Inside the tail, the first character says what a word is: <code class="nb">.</code> starts a class and <code class="nb">@</code> starts a tag.</strong></p>
@@ -2868,7 +2965,7 @@ and the two arrows between them.</p>
   
   
   <aside class="chunk-expansion chunk-expansion-expand" data-label="The source of that figure">
-<pre class="shiki shiki-themes github-light github-dark-default" style="background-color:#fff;color:#24292e" tabindex="0"><code><span class="line"><span>box  src  "Sender"</span></span>
+<pre class="shiki shiki-themes github-light github-dark-default" style="background-color:#fff;color:#24292e;--shiki-dark:#e6edf3" tabindex="0"><code><span class="line"><span>box  src  "Sender"</span></span>
 <span class="line"><span>box  mix  "Mix"        right of src gap 1.05</span></span>
 <span class="line"><span>box  dst  "Receiver"   right of mix gap 1.05</span></span>
 <span class="line"><span>box  log  "Logfile"    below mix gap 0.9  {.dashed}</span></span>
@@ -3388,7 +3485,7 @@ too.</p>
   });
 })();
 </script>
-<script type="application/json" id="psiINT-reader-data">{"key":"diagrams@7f0951ad","name":"diagrams","title":"Animated Infographics","s":{"reader-close":"Close contents","reader-mark":"Highlight","reader-note":"Note (optional)","reader-remove":"Remove","reader-removed":"Highlight removed.","reader-undo":"Undo","reader-orphans":"No longer found in this version","reader-orphan-remove":"remove","reader-session":"This browser does not let the page save highlights – they are lost when the tab is closed.","reader-nav":"Highlights","reader-prev":"Previous highlight","reader-next":"Next highlight","reader-filter-all":"all","reader-filter-notes":"with note","reader-export":"Export highlights (.md)","reader-import":"Import","reader-delete-all":"Delete all","reader-help":"About highlights","reader-help-what":"Select words to highlight them and add a note. Figures, diagrams, images, code and formulas have a button in their corner that marks them whole; open a figure to mark a spot in it.","reader-help-keys":"On a keyboard: n and p step through the highlights, m marks a spot in an open figure.","reader-help-where":"Highlights and notes are stored only in this browser, on this device.","reader-help-risk":"That storage can be lost: clearing site data or closing a private window deletes it, and browsers may delete it on their own – Safari, notably on iPhone and iPad, after seven days of Safari use in which this page was not used.","reader-help-backup":"So export regularly, as a backup: the export is a readable .md file, and importing it brings the highlights back – here, in another browser or on another device.","reader-fold":"Slides in this part","reader-export-file":"highlights","reader-export-line":"Exported on {date}. Highlights: {n}, with a note: {notes}.","reader-imported":"Imported: {added} new, {updated} updated, {orphaned} not found in this version.","reader-import-none":"This file holds no highlights.","reader-import-skipped":"Entries that could not be read: {n}.","reader-deleted-all":"All highlights deleted.","reader-fig-mark":"Highlight this figure","reader-lb-spot":"Mark a spot","reader-lb-close":"Close","reader-fig":"Figure “{key}”","reader-fig-at":"Figure “{key}”, at “{label}”","reader-fig-spot":"Figure “{key}”, a spot in it","reader-fig-approx":"Approximate: that part is no longer in this version of the figure.","reader-code-mark":"Highlight this code","reader-formula-mark":"Highlight this formula","reader-code":"Code, line {line}","reader-code-block":"Code “{key}”","reader-formula":"Formula “{key}”"}}</script>
+<script type="application/json" id="psiINT-reader-data">{"key":"diagrams@7f0951ad","name":"diagrams","title":"Animated Infographics","s":{"reader-close":"Close contents","reader-mark":"Highlight","reader-note":"Note (optional)","reader-remove":"Remove","reader-removed":"Highlight removed.","reader-undo":"Undo","reader-orphans":"No longer found in this version","reader-orphan-remove":"remove","reader-session":"This browser does not let the page save highlights – they are lost when the tab is closed.","reader-nav":"Highlights","reader-prev":"Previous highlight","reader-next":"Next highlight","reader-filter-all":"all","reader-filter-notes":"with note","reader-export":"Export highlights (.md)","reader-import":"Import","reader-delete-all":"Delete all","reader-help":"About highlights","reader-help-what":"Select words to highlight them and add a note. Figures, diagrams, images, code and formulas have a button in their corner that marks them whole; open a figure to mark a spot in it.","reader-help-keys":"On a keyboard: n and p step through the highlights, m marks a spot in an open figure.","reader-help-where":"Highlights and notes are stored only in this browser, on this device.","reader-help-risk":"That storage can be lost: clearing site data or closing a private window deletes it, and browsers may delete it on their own – Safari, notably on iPhone and iPad, after seven days of Safari use in which this page was not used.","reader-help-backup":"So export regularly, as a backup: the export is a readable .md file, and importing it brings the highlights back – here, in another browser or on another device.","reader-fold":"Slides in this part","reader-scheme":"Page","reader-scheme-auto":"Auto","reader-scheme-light":"Light","reader-scheme-dark":"Dark","reader-face":"Text","reader-face-serif":"Serif","reader-face-sans":"Sans","reader-export-file":"highlights","reader-export-line":"Exported on {date}. Highlights: {n}, with a note: {notes}.","reader-imported":"Imported: {added} new, {updated} updated, {orphaned} not found in this version.","reader-import-none":"This file holds no highlights.","reader-import-skipped":"Entries that could not be read: {n}.","reader-deleted-all":"All highlights deleted.","reader-fig-mark":"Highlight this figure","reader-lb-spot":"Mark a spot","reader-lb-close":"Close","reader-fig":"Figure “{key}”","reader-fig-at":"Figure “{key}”, at “{label}”","reader-fig-spot":"Figure “{key}”, a spot in it","reader-fig-approx":"Approximate: that part is no longer in this version of the figure.","reader-code-mark":"Highlight this code","reader-formula-mark":"Highlight this formula","reader-code":"Code, line {line}","reader-code-block":"Code “{key}”","reader-formula":"Formula “{key}”"}}</script>
 <script>(() => {
   const body = document.body;
   const nav = document.getElementById('psiINT-reader-contents');
@@ -3498,6 +3595,45 @@ too.</p>
   });
   const onWidth = () => { if (!overlay.matches && isOpen()) setOpen(false, false); };
   if (overlay.addEventListener) overlay.addEventListener('change', onWidth);
+})();
+(() => {
+  const d = document.documentElement;
+  const box = document.querySelector('.rd-view');
+  if (!box) return;
+  const KEYS = { scheme: 'psi-reader:scheme', face: 'psi-reader:face' };
+  const authoredFace = document.body.getAttribute('data-print-body') === 'sans' ? 'sans' : 'serif';
+  const store = (k, v) => {
+    try { if (v) localStorage.setItem(KEYS[k], v); else localStorage.removeItem(KEYS[k]); } catch (e) { }
+  };
+  const paint = () => {
+    const scheme = d.getAttribute('data-scheme') || 'auto';
+    const face = d.getAttribute('data-face') || authoredFace;
+    for (const b of box.querySelectorAll('[data-set-scheme]')) b.setAttribute('aria-pressed', String(b.getAttribute('data-set-scheme') === scheme));
+    for (const b of box.querySelectorAll('[data-set-face]')) b.setAttribute('aria-pressed', String(b.getAttribute('data-set-face') === face));
+  };
+  const apply = (attr, v) => { if (v) d.setAttribute(attr, v); else d.removeAttribute(attr); };
+  box.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const scheme = b.getAttribute('data-set-scheme');
+    const face = b.getAttribute('data-set-face');
+    if (scheme) {
+      const v = scheme === 'auto' ? null : scheme;
+      apply('data-scheme', v);
+      store('scheme', v);
+    } else if (face) {
+      apply('data-face', face);
+      store('face', face);
+    }
+    paint();
+  });
+  window.addEventListener('storage', (e) => {
+    if (e.key === KEYS.scheme) apply('data-scheme', e.newValue === 'light' || e.newValue === 'dark' ? e.newValue : null);
+    else if (e.key === KEYS.face) apply('data-face', e.newValue === 'serif' || e.newValue === 'sans' ? e.newValue : null);
+    else return;
+    paint();
+  });
+  paint();
 })();
 (() => {
   const body = document.body;
