@@ -649,6 +649,76 @@ body[data-blocks=left] .math-display .katex-display > .katex,
 }
 .marginalia > :first-child { margin-top: 0; }
 .marginalia > :last-child { margin-bottom: 0; }
+body[data-marginalia=margin] main .marginalia figure.figure-img { margin: 0.2em 0 0.4em; text-align: left; }
+body[data-marginalia=margin] main .marginalia p:empty { display: none; }
+body[data-marginalia=margin] main .marginalia figure.figure-img :is(img, svg) { display: block; max-width: min(100%, 11rem); height: auto; }
+@media print, screen and (min-width: 920px) {
+  body[data-marginalia=margin] main .marginalia figure.figure-img :is(img, svg) { max-width: 100%; }
+}
+@media screen and (min-width: 920px) {
+  body[data-marginalia=margin] { padding: 0 18.5rem 0 1.5rem; }
+  body[data-marginalia=margin] { --mn-w: 14rem; --mn-gap: 2.5rem; }
+}
+@media print {
+  body[data-marginalia=margin] { --mn-w: 3.3cm; --mn-gap: 0.45cm; }
+  body[data-kind=document][data-marginalia=margin] { --mn-w: 4.4cm; --mn-gap: 0.55cm; }
+}
+@media print, screen and (min-width: 920px) {
+  body[data-marginalia=margin] main .marginalia {
+    float: right;
+    clear: right;
+    width: var(--mn-w);
+    margin: 0.2em calc(-1 * (var(--mn-w) + var(--mn-gap))) 0.6rem 0;
+    padding: 0;
+    border: 0;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: var(--ink-soft);
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  body[data-marginalia=margin] main .marginalia :is(p, li) { orphans: 1; widows: 1; }
+  body[data-marginalia=margin] main .marginalia p { margin: 0 0 0.45em; }
+}
+.chunk :is(h3, h4, h5, h6),
+.column-lede :is(h3, h4, h5, h6) {
+  font-size: 1rem;
+  line-height: 1.35;
+  letter-spacing: normal;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+.chunk h3, .column-lede h3 { font-weight: 600; margin: 1.5em 0 0.35em; }
+.chunk :is(h4, h5, h6), .column-lede :is(h4, h5, h6) {
+  font-weight: 500;
+  font-style: italic;
+  margin: 1.1em 0 0.15em;
+}
+.chunk :is(h3, h4, h5, h6) + :is(p, ul, ol, dl) { margin-top: 0; }
+dl { margin: 0.5em 0 1em; }
+dt { font-weight: 600; margin: 0.7em 0 0.1em; break-after: avoid; page-break-after: avoid; }
+dt:first-child { margin-top: 0; }
+dd { margin: 0 0 0.35em 1.4em; }
+dd > :first-child { margin-top: 0; }
+dd > :last-child { margin-bottom: 0; }
+.sec-num { font-variant-numeric: tabular-nums; margin-right: 0.3em; }
+.column-heading .sec-num { margin-right: 0.45em; }
+.toc-document ol { list-style: none; padding-left: 0; margin: 0; }
+.toc-document > ol > li { margin: 0.55em 0 0; font-size: 1rem; }
+.toc-document ol ol { margin: 0.15em 0 0 2.1em; }
+.toc-document ol ol li { margin: 0.1em 0; font-size: 0.92rem; }
+.toc-document .toc-num {
+  display: inline-block;
+  min-width: 2.1em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+}
+.toc-document ol ol .toc-num { min-width: 2.6em; }
+body[data-kind=document] .toc { page-break-after: auto; break-after: auto; margin-bottom: 2rem; }
+.toc-document > ol > li { break-inside: avoid; page-break-inside: avoid; }
+body[data-kind=document] strong { color: inherit; }
+body[data-kind=document] .column-lede { color: var(--ink); max-width: none; }
+body[data-kind=document] .rd-part-num { font-variant-numeric: tabular-nums; margin-right: 0.25em; }
 .slide-explicit {
   margin: 0.5em 0;
   padding-left: 0.9rem;
@@ -712,7 +782,7 @@ pre.shiki { background: transparent !important; padding: 0; margin: 0.4em 0 0.9e
 pre.shiki code { font-size: inherit; }
 pre.shiki .line { display: inline; }
 @media print {
-  body { background: white; }
+  html, body { background: white; }
   html { font-size: 9pt; line-height: 1.44; }
   .chunk { margin: 1.2rem 0 1.7rem; }
   main { padding: 0; max-width: 38rem; margin: 0; }
@@ -731,6 +801,15 @@ pre.shiki .line { display: inline; }
     border-bottom: 0;
     break-after: page;
     page-break-after: always;
+  }
+  body[data-kind=document] .chunk-title {
+    min-height: 0;
+    justify-content: flex-start;
+    padding: 0 0 1.4rem;
+    margin: 0 0 1.8rem;
+    border-bottom: 0.5pt solid var(--rule);
+    break-after: auto;
+    page-break-after: auto;
   }
   pre { background: rgba(0,0,0,0.03); }
 }
@@ -1091,6 +1170,8 @@ body[data-reader=on] {
   .rd-filter button[aria-pressed=true] { color: var(--ink); background: var(--rd-hl); }
   body[data-reader=on].rd-ready .rd-contents li > a[data-rd] { grid-template-columns: 1.9em minmax(0, 1fr) auto; }
   body[data-reader=on][data-slide-nums=off].rd-ready .rd-contents li > a[data-rd] { grid-template-columns: minmax(0, 1fr) auto; }
+  body[data-reader=on][data-kind=document].rd-ready .rd-contents li > a[data-rd] { grid-template-columns: 2.3em minmax(0, 1fr) auto; }
+  body[data-kind=document] .rd-contents .rd-num { display: block; text-align: left; }
   .rd-contents .rd-part:has(.rd-count, .rd-sum) { display: flex; align-items: baseline; gap: 0.35em; }
   .rd-group.is-open .rd-sum, .rd-group:not(.is-open) .rd-part .rd-count { display: none; }
   .rd-count, .rd-sum {
@@ -4077,7 +4158,7 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
   const WS = /\s/;
   const SHY = '\u00ad';
   const UI = '[data-rd-ui]';
-  const SKIP = UI + ', .speaker-note, pulse-question, pulse-deck, pulse-summary, .chunk-num, .chunk-label, .psi-diagram, figure, '
+  const SKIP = UI + ', .speaker-note, pulse-question, pulse-deck, pulse-summary, .chunk-num, .chunk-label, .sec-num, .psi-diagram, figure, '
     + '.katex, .math-display, pre, button, script, style, svg, video, iframe, textarea';
   const BLOCKISH = /^(UL|OL|DL|TABLE|THEAD|TBODY|TFOOT|TR|SECTION|ARTICLE|DIV|BLOCKQUOTE|MAIN|ASIDE|NAV|HEADER|FOOTER)$/;
   let persistent = true;
@@ -4641,6 +4722,19 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
       }
       if (items.length && items[0].top < 0) forward();
     }
+    const inMargin = Array.from(main.querySelectorAll('.marginalia'))
+      .filter(n => getComputedStyle(n).float === 'right')
+      .map(n => { const r = n.getBoundingClientRect(); return { top: r.top + window.scrollY, bottom: r.bottom + window.scrollY }; })
+      .sort((a, b) => a.top - b.top);
+    if (inMargin.length) {
+      let floor = -Infinity;
+      for (const it of items) {
+        let top = Math.max(it.top, floor);
+        for (const n of inMargin) if (top < n.bottom + gap && top + it.h + gap > n.top) top = n.bottom + gap;
+        it.top = top;
+        floor = top + it.h + gap;
+      }
+    }
     for (const it of items) it.card.style.top = Math.round(it.top) + 'px';
   };
   const paperNodes = [];
@@ -4984,7 +5078,7 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
   const plain = (el) => {
     if (!el) return '';
     const c = el.cloneNode(true);
-    for (const x of c.querySelectorAll('.katex-mathml, .rd-count, .rd-sum, .chunk-num, .chunk-label, [data-rd-ui]')) x.remove();
+    for (const x of c.querySelectorAll('.katex-mathml, .rd-count, .rd-sum, .chunk-num, .chunk-label, .sec-num, .rd-part-num, [data-rd-ui]')) x.remove();
     return oneLine(c.textContent);
   };
   const slideLine = (chunk) => {
