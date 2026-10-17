@@ -3399,10 +3399,16 @@ console.log('\nlayout generations');
     ok(/\n\.chunk-body code \{ font-family: var\(--mono-font\); font-size: 0\.92em; \}/.test(dflt.html)
        && /\ncode \{ font-family: var\(--mono\); font-size: 0\.92em; \}/.test(dflt.print),
        'the base rule is unguarded and still says 0.92em, which is what plain resets to');
-    ok(/\n\.chunk-body code:not\(pre code\):not\(\.embed-blocked code\):not\(\.nb\)[\s\S]{0,120}?word-spacing: -0\.28em/.test(dflt.html)
+    // Running text outside .chunk-body - a cover's, a closing slide's or a
+    // divider's body, an overlay card, a dock - is still running text. A
+    // span there used to get none of the rules below, not even the mono face:
+    // the browser's own monospace at 1em, with the wide mono space inside.
+    ok(/\n\.chunk code:not\(pre code\):not\(\.chunk-heading code\):not\(\.embed-blocked code\),\n\.exp-body code:not\(pre code\) \{ font-family: var\(--mono-font\); font-size: 0\.92em; \}/.test(dflt.html),
+       'live, the face reaches inline code anywhere in a chunk, as it does on paper');
+    ok(/\n\.chunk code:not\(pre code\):not\(\.chunk-heading code\):not\(\.embed-blocked code\):not\(\.nb\)[\s\S]{0,120}?word-spacing: -0\.28em/.test(dflt.html)
        && /\ncode:not\(pre code\):not\(\.chunk-heading code\):not\(\.nb\)[\s\S]{0,120}?word-spacing: -0\.28em/.test(dflt.print),
        'the spaced rule is the unattributed one, in both stylesheets, reaching only a span with whitespace in it');
-    ok(/body\[data-code=tint\] \.chunk-body code:not\(pre code\):not\(\.embed-blocked code\)[\s\S]{0,220}?padding: 0 0\.28em/.test(dflt.html)
+    ok(/body\[data-code=tint\] \.chunk code:not\(pre code\):not\(\.chunk-heading code\):not\(\.embed-blocked code\)[\s\S]{0,220}?padding: 0 0\.28em/.test(dflt.html)
        && /body\[data-code=tint\][\s\S]{0,600}?background: color-mix\(in oklch, var\(--ink\) 7%, transparent\)/.test(dflt.html),
        'and tint is the addition on top of it, behind the attribute');
     ok(/body\[data-code=tint\][\s\S]{0,200}?margin: 0;\n  word-spacing: normal;/.test(dflt.html)
@@ -3410,7 +3416,7 @@ console.log('\nlayout generations');
        'tint cancels the spaced pair, or a span would carry a ground and a gap at once');
     // The size is per lecture, because the ratio it encodes is a property of
     // the roster: Literata over JetBrains Mono is not IBM Plex Sans over it.
-    ok(/body\[data-font=serif\] \.chunk-body code:not\(pre code\):not\(\.embed-blocked code\),\nbody\[data-font=serif\] \.exp-body code:not\(pre code\) \{ font-size: 0\.885em; \}/.test(dflt.html)
+    ok(/body\[data-font=serif\] \.chunk code:not\(pre code\):not\(\.chunk-heading code\):not\(\.embed-blocked code\),\nbody\[data-font=serif\] \.exp-body code:not\(pre code\) \{ font-size: 0\.885em; \}/.test(dflt.html)
        && /body\[data-font=sans\][^{]*\{ font-size: 0\.901em; \}/.test(dflt.html)
        && /body\[data-font=mono\][^{]*\{ font-size: 0\.96em; \}/.test(dflt.html),
        'the live size is emitted once per reading face, so the code follows the F key');
@@ -3426,7 +3432,7 @@ console.log('\nlayout generations');
     ok(!/font-size: 0\.885em|font-size: 0\.901em|font-size: 0\.96em/.test(plain.html)
        && !/font-size: 0\.885em/.test(plain.print),
        'and emits no per-face size at all, which is half of the way back to the 1.0.0 rendering');
-    ok(/body\[data-code=plain\] \.chunk-body code:not\(pre code\):not\(\.embed-blocked code\),\nbody\[data-code=plain\] \.exp-body code:not\(pre code\) \{\n  margin: 0;\n  word-spacing: normal;\n  font-size: 0\.92em;\n\}/.test(plain.html)
+    ok(/body\[data-code=plain\] \.chunk code:not\(pre code\):not\(\.chunk-heading code\):not\(\.embed-blocked code\),\nbody\[data-code=plain\] \.exp-body code:not\(pre code\) \{\n  margin: 0;\n  word-spacing: normal;\n  font-size: 0\.92em;\n\}/.test(plain.html)
        && /body\[data-code=plain\] code:not\(pre code\):not\(\.chunk-heading code\) \{\n  margin: 0;\n  word-spacing: normal;\n  font-size: 0\.92em;\n\}/.test(plain.print),
        'and is the other half: one reset, after the stylesheet so it outranks any size that lands there');
   }

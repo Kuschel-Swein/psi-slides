@@ -8324,10 +8324,17 @@ const CODE_XHEIGHT_RATIO = 0.96;
 // Inline code in running text, and only there. A span in a heading has its
 // own treatment (.chunk-heading code, smaller again and upright), a listing
 // is a block rather than a span, and the blocked-embed card is chrome.
-// Specificity is carried by the :not() arguments - (0,2,4) live, (0,1,4) on
+// Specificity is carried by the :not() arguments - (0,3,5) live, (0,1,4) on
 // paper - so both sit above the base rules they add to.
+//
+// Live, it is anywhere in a chunk, as on paper, and not only in .chunk-body:
+// a cover's or a closing slide's body, a divider's, an overlay card and a
+// dock all stand outside it, and a span there got none of this - not the
+// size, not the spaced pair, not even the mono face, which fell back to the
+// browser's own monospace at 1em ("Abgabe mit inf upload:" on a closing
+// slide, the gap inside the span twice the gaps around it).
 const INLINE_CODE_SEL = {
-  live: ['.chunk-body code:not(pre code):not(.embed-blocked code)', '.exp-body code:not(pre code)'],
+  live: ['.chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code)', '.exp-body code:not(pre code)'],
   print: ['code:not(pre code):not(.chunk-heading code)'],
 };
 // One selector list, written once and distributed over its parts, so the
@@ -15931,7 +15938,8 @@ body[data-theme^=terminal] .chunk-body pre.shiki,
 body[data-theme^=terminal] .exp-body pre.shiki { background: var(--paper-warm) !important; padding: 0.5em 0.8em; }
 /* Inline code and the shiki inline span inherit current color too. */
 body[data-theme^=terminal] .chunk-body code,
-body[data-theme^=terminal] .exp-body code { color: var(--emph); }
+body[data-theme^=terminal] .exp-body code,
+${inlineCodeSel('live', 'body[data-theme^=terminal]')} { color: var(--emph); }
 /* Exp-body card gets a slightly lighter background than paper so it
    still reads as a frame in terminal mode. */
 body[data-theme^=terminal] .chunk.expanded .exp-body.on { background: var(--paper-warm); }
@@ -16281,6 +16289,9 @@ a:hover { text-decoration-thickness: 2px; }
    and their spacing is the grid's. */
 .chunk-body li { margin: 0.45em 0; }
 .chunk-body code { font-family: var(--mono-font); font-size: 0.92em; }
+/* The same face and size for a span in running text outside .chunk-body –
+   a cover, a closing slide, a divider, an overlay card, a dock. */
+${inlineCodeSel('live')} { font-family: var(--mono-font); font-size: 0.92em; }
 /* See the codespan renderer: a span with no space in it is one token and is
    not broken across lines. Bare element selector, so the heading, the
    expansions and the cockpit get it too. */
