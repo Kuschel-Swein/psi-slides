@@ -584,7 +584,7 @@ The prose face is a per-deck choice *and* the reader's `F` key, so the live view
 
 **`code: plain` restores the pre-2.0 rendering of an inline span**, and it is the only value that needs saying so. The key is shaped like every other one in `styleBodyAttrs`: the default is the unattributed rule, so a deck that says nothing writes no `data-code` at all, and `tint` and `plain` are each reached through the attribute. `plain` rides in the same `<style>` tag as the sizes rather than in the stylesheet, because that is the only place it can outrank them – both land after `AUDIENCE_CSS` at the same specificity, and a reset written up there would lose on source order.
 
-`inlineCodeSel()` in build.js is the one place that says what running text is: not `.chunk-heading code`, not `pre code`, not the blocked-embed card, not `.link-code` (a `<button>`, not a `<code>`).
+`inlineCodeSel()` in build.js is the one place that says what running text is: not `.chunk-heading code`, not `pre code`, not the blocked-embed card, not `.link-code` (a `<button>`, not a `<code>`). **Live, it is any `code` in a `.chunk`, as on paper, not only in `.chunk-body`** – a cover's, a closing slide's and a divider's body, an overlay card and a dock all stand outside `.chunk-body`, and a span there used to get none of the look and not even the mono face (the browser's own monospace at 1em). The base face rule is `.chunk code` for the same reason. **A span glued to a character loses the margin on that side**, as one that opens its block does: `CODE_SPAN_RE` marks it `.lead` (left) or `.trail` (right), so `` `inf upload`: `` keeps the colon against the span.
 
 ## Reaching the 1.0.0 look (and why there is no `layout:` key)
 

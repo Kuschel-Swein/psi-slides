@@ -85,6 +85,7 @@ code:not(pre code):not(.chunk-heading code):not(.nb) {
   word-spacing: -0.28em;
 }
 code:not(pre code):not(.chunk-heading code):not(.nb).lead { margin-left: 0; }
+code:not(pre code):not(.chunk-heading code):not(.nb).trail { margin-right: 0; }
 body[data-code=tint] code:not(pre code):not(.chunk-heading code) {
   margin: 0;
   word-spacing: normal;
@@ -1874,7 +1875,7 @@ by using it.</p>
   <span class="chunk-label">definition</span>
   <h2 class="chunk-heading has-sub"><span class="hd-main">Chunks and columns</span> <span class="hd-sub">the two terms the rest of the tour uses</span></h2>
   <p><strong>A <em>chunk</em> is one <code class="nb">##</code> heading and everything written under it.</strong> In the projection it gets a screen of its own; in the printed document it is a section of the page. It is the nearest thing here to what another tool calls a slide.</p>
-<p><strong>A <em>column</em> is a run of chunks on one theme, opened by a <code># Heading</code>.</strong> It is the part of a lecture that <code class="nb">Shift</code> and an arrow moves you through in one press, and it is what the contents list on <code class="nb">T</code> shows – chunks never appear there.</p>
+<p><strong>A <em>column</em> is a run of chunks on one theme, opened by a <code class="trail"># Heading</code>.</strong> It is the part of a lecture that <code class="nb">Shift</code> and an arrow moves you through in one press, and it is what the contents list on <code class="nb">T</code> shows – chunks never appear there.</p>
 <p><strong>Every lecture consists of one or more columns, and each column holds one or more chunks.</strong> Everything after this slide is what you may write inside a chunk.</p>
 
   
@@ -1887,7 +1888,7 @@ by using it.</p>
 
 <details><summary>Answer</summary>
 <p>A chunk is one <code class="nb">##</code> heading and what is written under it – one screen in the
-projection. A column is a run of chunks on one theme, opened by a <code># Heading</code>:
+projection. A column is a run of chunks on one theme, opened by a <code class="trail"># Heading</code>:
 <code class="nb">Shift</code> and an arrow moves through one per press, and the contents list on <code class="nb">T</code>
 shows columns only.</p>
 
@@ -2272,7 +2273,7 @@ shortens prose only: a list, a figure, a code block or a formula goes up whole.<
   <h2 class="chunk-heading">Chunk types</h2>
   <p><strong>Only the <code class="nb">{#id}</code> is required, and a chunk written with no type counts as <code class="nb">free</code>.</strong> The type, the sub-heading and the width are all optional.</p>
 <ul>
-<li><strong>The line is</strong> <code>## type: Heading | Sub-heading {.width #id}</code>.</li>
+<li><strong>The line is</strong> <code class="trail">## type: Heading | Sub-heading {.width #id}</code>.</li>
 <li><strong>The eleven types:</strong> <code class="nb">title</code>, <code class="nb">closing</code>, <code class="nb">outline</code>, <code class="nb">principle</code>, <code class="nb">statement</code>, <code class="nb">definition</code>, <code class="nb">example</code>, <code class="nb">question</code>, <code class="nb">figure</code>, <code class="nb">exercise</code>, <code class="nb">free</code>.</li>
 <li><strong><code class="nb">{.width}</code></strong> is <code class="nb">narrow</code>, <code class="nb">standard</code>, <code class="nb">wide</code> or <code class="nb">full</code>, and defaults to <code class="nb">standard</code>.</li>
 <li><strong><code class="nb">{#id}</code></strong> anchors links, the contents list and your reading position – rename one and those need fixing too.</li>
@@ -2447,7 +2448,7 @@ shortens prose only: a list, a figure, a code block or a formula goes up whole.<
 
 
 <p><strong><code class="nb">N</code> in either window writes an annotation on the chunk you are on.</strong> While you type, the note is the slide: it fills the frame, a single word stands large and centred, several lines stand as a block, and an address in it gets a QR code the room can scan. Whatever you write appears in the other window as you type it, and <code class="nb">Esc</code> leaves it beside the text as a margin note. Use it for the things a talk produces: the word that turned out to be missing, a question from the audience, a correction, a link.</p>
-<p>Annotations are kept in the browser, one set per lecture. <code class="nb">Shift-E</code> in the speaker view copies all of them to your clipboard as <code>&gt; annot:</code> Markdown; paste that under the matching chunk heading in <code class="nb">source.md</code>, run <code>node build.js &lt;source.md&gt; --integrate-annotations</code>, and the text becomes permanent – already in the typing box next time, and printed under the chunk in <code class="nb">print.html</code> and <code class="nb">print-notes.html</code>.</p>
+<p>Annotations are kept in the browser, one set per lecture. <code class="nb">Shift-E</code> in the speaker view copies all of them to your clipboard as <code>&gt; annot:</code> Markdown; paste that under the matching chunk heading in <code class="nb">source.md</code>, run <code class="trail">node build.js &lt;source.md&gt; --integrate-annotations</code>, and the text becomes permanent – already in the typing box next time, and printed under the chunk in <code class="nb">print.html</code> and <code class="nb">print-notes.html</code>.</p>
 </div><div class="side-b">
 
 
@@ -2469,7 +2470,7 @@ shortens prose only: a list, a figure, a code block or a formula goes up whole.<
 
 <details><summary>Answer</summary>
 <p>An annotation (<code class="nb">N</code>) is public: it appears in both windows and, once integrated
-into <code class="nb">source.md</code>, in both documents. A speaker note (<code>&gt; note:</code>) is private: the
+into <code class="nb">source.md</code>, in both documents. A speaker note (<code class="lead trail">&gt; note:</code>) is private: the
 speaker view and <code class="nb">print-notes.html</code> show it, the projection never does.</p>
 
 </details>
@@ -2584,7 +2585,7 @@ speaker view and <code class="nb">print-notes.html</code> show it, the projectio
   <span class="chunk-num" aria-hidden="true"><i>3</i><i>8</i></span>
   
   <h2 class="chunk-heading has-sub"><span class="hd-main">Text across two columns</span> <span class="hd-sub"><code>::: cols 2</code> and <code>::: cols 3</code></span></h2>
-  <p><strong><code>::: cols 2</code> (or <code>cols 3</code>) flows the body across that many columns, the way a newspaper page does.</strong> Use it when several short paragraphs read better side by side than stacked – a list of features, a brief comparison, two or three parallel definitions.</p>
+  <p><strong><code>::: cols 2</code> (or <code class="trail">cols 3</code>) flows the body across that many columns, the way a newspaper page does.</strong> Use it when several short paragraphs read better side by side than stacked – a list of features, a brief comparison, two or three parallel definitions.</p>
 <div class="cols cols-2">
 
 
@@ -2611,7 +2612,7 @@ speaker view and <code class="nb">print-notes.html</code> show it, the projectio
 <div class="side"><div class="side-a">
 
 
-<p><strong>Left pane.</strong> Write <code>::: side</code>, then the left content, then <code>::: flip</code>, then the right content, then <code class="nb">:::</code> to close. The two panes are equal halves unless you say otherwise, so neither side takes over the slide.</p>
+<p><strong>Left pane.</strong> Write <code class="trail">::: side</code>, then the left content, then <code class="trail">::: flip</code>, then the right content, then <code class="nb">:::</code> to close. The two panes are equal halves unless you say otherwise, so neither side takes over the slide.</p>
 </div><div class="side-b">
 
 
@@ -2661,7 +2662,7 @@ speaker view and <code class="nb">print-notes.html</code> show it, the projectio
 </aside></div>
 
 <p><strong><code>::: footnote</code> puts a small grey note under the chunk, labelled and always visible</strong> – down in the flow of the text rather than out at the side. No button, no separate panel, nothing to click.</p>
-<p><strong>A marginalia goes out into the margin and can be brought to the centre with a click; a footnote stays under the chunk and is read where it stands.</strong> Use <code>::: footnote</code> when the extra material is short and you want it on the page every time, and for <code>::: expand &lt;label&gt;</code>, the chevron button from earlier, when it should stay behind a button until somebody asks.</p>
+<p><strong>A marginalia goes out into the margin and can be brought to the centre with a click; a footnote stays under the chunk and is read where it stands.</strong> Use <code>::: footnote</code> when the extra material is short and you want it on the page every time, and for <code class="trail">::: expand &lt;label&gt;</code>, the chevron button from earlier, when it should stay behind a button until somebody asks.</p>
 
   
   
@@ -2678,7 +2679,7 @@ speaker view and <code class="nb">print-notes.html</code> show it, the projectio
 <div class="side"><div class="side-a">
 
 
-<p><strong>Whatever you write in the square brackets becomes the caption under the picture.</strong> The one beside this paragraph is <code>![An abstract dusk skyline](dusk)</code>, and the small grey line under it is that text – which is also the image&#39;s alt text, so a screen reader reads the same words. Leave the brackets empty and the picture stands on its own. On a <code class="nb">figure:</code> chunk whose heading already says what the picture is, a caption stacks two labels, so the checker warns and suggests leaving the alt text out.</p>
+<p><strong>Whatever you write in the square brackets becomes the caption under the picture.</strong> The one beside this paragraph is <code class="trail">![An abstract dusk skyline](dusk)</code>, and the small grey line under it is that text – which is also the image&#39;s alt text, so a screen reader reads the same words. Leave the brackets empty and the picture stands on its own. On a <code class="nb">figure:</code> chunk whose heading already says what the picture is, a caption stacks two labels, so the checker warns and suggests leaving the alt text out.</p>
 <p><strong>A drawing saved as SVG is written into the page as artwork</strong>, not as a picture file, so it takes its colours from the theme and changes with the <code class="nb">A</code> key. Photographs, and pictures like this skyline that carry their own colours, are embedded exactly as they are.</p>
 </div><div class="side-b">
 
@@ -2771,7 +2772,7 @@ which usually brings it well under the 2 MB limit.</p>
   <span class="chunk-num" aria-hidden="true"><i>4</i><i>4</i></span>
   
   <h2 class="chunk-heading has-sub"><span class="hd-main">Hosted players</span> <span class="hd-sub"><code>::: embed</code> for YouTube and Vimeo</span></h2>
-  <p><strong>A hosted player is written as <code>::: embed</code>, and a bare link never becomes one.</strong> This is the only thing you can write that makes a lecture fetch from somebody else&#39;s server while you are teaching, so you say so in the source:</p>
+  <p><strong>A hosted player is written as <code class="trail">::: embed</code>, and a bare link never becomes one.</strong> This is the only thing you can write that makes a lecture fetch from somebody else&#39;s server while you are teaching, so you say so in the source:</p>
 <pre class="shiki shiki-themes github-light github-dark-default" style="background-color:#fff;color:#24292e;--shiki-dark:#e6edf3" tabindex="0"><code><span class="line"><span style="color:#24292E;--shiki-dark:#E6EDF3">::: embed https://www.youtube.com/watch?v=aqz-KE-bpKQ</span></span>
 <span class="line"><span style="color:#24292E;--shiki-dark:#E6EDF3">Big Buck Bunny, Blender Foundation</span></span>
 <span class="line"><span style="color:#24292E;--shiki-dark:#E6EDF3">:::</span></span></code></pre>
@@ -2944,7 +2945,7 @@ speaker view leave it out.</p>
   <aside class="chunk-expansion chunk-expansion-expand" data-label="What the reader sees, and where the answers go">
 <p><strong>In the document the answer stays folded behind a button</strong>, and once it is open the reader says whether they knew it. Printed on paper, each answer stands under its question. Two or more questions on one chunk become a stack the reader answers one at a time.</p>
 <p><strong>The box is Pulse, a self-test service at <code class="nb">pulse.psi.uni-bamberg.de</code>, and it sends nothing until the reader signs in.</strong> Until then the answers stay in their browser; after signing in with an email address, the questions come back by mail at growing intervals.</p>
-<p><strong>Each question is filed under the chunk&#39;s id and the lecture&#39;s <code class="nb">title:</code></strong>, so reword a question freely but keep both once students have answered, or their progress starts over. A second question on the same chunk names its own key: <code>::: pulse {#signatures-verify}</code>.</p>
+<p><strong>Each question is filed under the chunk&#39;s id and the lecture&#39;s <code class="nb">title:</code></strong>, so reword a question freely but keep both once students have answered, or their progress starts over. A second question on the same chunk names its own key: <code class="trail">::: pulse {#signatures-verify}</code>.</p>
 
 </aside>
   
@@ -3002,7 +3003,7 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
 <span class="line"><span>box dst "Receiver"  right of mix gap 2.1</span></span>
 <span class="line"><span>edge src -> mix "encrypted"</span></span>
 <span class="line"><span>edge mix -> dst "recoded"</span></span></code></pre>
-<p><strong>The first element sits at the origin, so a simple figure needs no coordinates.</strong> Everything after it is placed against a neighbour – <code>right of</code>, <code>left of</code>, <code class="nb">above</code>, <code class="nb">below</code> – and <code class="nb">gap</code> says how far. There is no automatic layout: an element goes where its neighbour and its <code class="nb">gap</code> put it.</p>
+<p><strong>The first element sits at the origin, so a simple figure needs no coordinates.</strong> Everything after it is placed against a neighbour – <code class="trail">right of</code>, <code class="trail">left of</code>, <code class="nb">above</code>, <code class="nb">below</code> – and <code class="nb">gap</code> says how far. There is no automatic layout: an element goes where its neighbour and its <code class="nb">gap</code> put it.</p>
 
   
   
@@ -3187,7 +3188,7 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
 <p><strong><code class="nb">lang:</code> picks the hyphenation dictionary, and by default only the two printed views use it: a long German compound breaks at the end of a line there instead of leaving a hole, while the projection and the lectern view do not hyphenate.</strong> <code>style: {hyphenate: all}</code> puts it into the projection too, which a German lecture at <code class="nb">.narrow</code> usually wants, and <code class="nb">none</code> takes it out everywhere. Unlike the twelve keys on the last slide, it is not a setting the reader could change: it describes the lecture.</p>
 <p><strong>A key you write beats whatever the reader last chose, and a key you leave out leaves that choice alone.</strong> So in a lecture that sets none of them, font, theme and slide numbers follow the reader from lecture to lecture.</p>
 <p><code class="nb">slide-numbers</code> applies to <code class="nb">print.html</code> and <code class="nb">print-notes.html</code> too, and <code class="nb">print-slide-numbers:</code> overrides it there when the printed document wants different numbering from the projection. A value the tool does not know stops the build and lists the ones it does.</p>
-<p><strong><code class="nb">neighbours</code>, <code class="nb">note-button</code> and <code class="nb">transition</code> are the ones a keynote sets and a lecture does not.</strong> <code>transition: cut</code> lands on the next slide without the camera glide, and <code class="nb">fade</code> dips through the paper; both hide the neighbours unless you also write <code>neighbours: dim</code>. <code>neighbours: hidden</code> takes off the projection the faint slides above and below, which otherwise show where you are in the column. <code>note-button: off</code> hides the <code>+ note</code> hint in the slide&#39;s left gutter; <code class="nb">N</code> still opens an annotation, and <code class="nb">M</code> shows or hides the hint at any time, in either window.</p>
+<p><strong><code class="nb">neighbours</code>, <code class="nb">note-button</code> and <code class="nb">transition</code> are the ones a keynote sets and a lecture does not.</strong> <code>transition: cut</code> lands on the next slide without the camera glide, and <code class="nb">fade</code> dips through the paper; both hide the neighbours unless you also write <code class="trail">neighbours: dim</code>. <code>neighbours: hidden</code> takes off the projection the faint slides above and below, which otherwise show where you are in the column. <code>note-button: off</code> hides the <code>+ note</code> hint in the slide&#39;s left gutter; <code class="nb">N</code> still opens an annotation, and <code class="nb">M</code> shows or hides the hint at any time, in either window.</p>
 <p><strong><code>pitchblack: on</code> is for a projector, which cannot show a dark grey as black.</strong> The three dark themes then stand on a true black ground instead of their own dark paper, and a light theme is left as it is. It has no key: <code class="nb">Ctrl/Cmd</code>-<code class="nb">K</code>, type <code class="nb">pitch</code>, <code class="nb">Enter</code> switches it in either window, and the choice follows you from lecture to lecture like the theme.</p>
 <p><code class="lead">reader: off</code> ships the two documents without the contents sidebar and highlights.</p>
 
@@ -3202,7 +3203,7 @@ and answer. A rule inside either half is written <code class="nb">***</code>.</p
   <span class="chunk-num" aria-hidden="true"><i>6</i><i>1</i></span>
   <h1 class="title-main">That is the tour</h1>
     <p class="title-subtitle">now write your own <code class="nb">source.md</code></p>
-    <div class="closing-body"><p>Everything in this tour comes out of one Markdown file and one command, <code>node build.js source.md</code>. The four views are already sitting beside it.</p>
+    <div class="closing-body"><p>Everything in this tour comes out of one Markdown file and one command, <code class="trail">node build.js source.md</code>. The four views are already sitting beside it.</p>
 </div>
   
 </article>

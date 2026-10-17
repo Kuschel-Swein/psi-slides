@@ -3388,21 +3388,35 @@ console.log('\nlayout generations');
   // otherwise shaped like every other one here - the default is the
   // unattributed rule, and the two other looks are reached through
   // data-code.
+  // The second paragraph is the glue cases: a spaced span glued to a
+  // character has nothing to be separated from on that side.
   const CDECK = (fm) => DECK(fm,
-    '## free: A {#a}\n\nProse with `async def` in it, and `await` too.\n');
+    '## free: A {#a}\n\nProse with `async def` in it, and `await` too.\n\n'
+    + 'Mit `inf upload`: und (`make hello`) und `a b`&nbsp;x und **`c d`**: und `e f` frei.\n');
+  // The live half of every selector list below, as the build spells it.
+  const LIVE_CODE = String.raw`\.chunk code:not\(pre code\):not\(\.chunk-heading code\):not\(\.embed-blocked code\)`;
   {
     const dflt = raw(CDECK(''), []);
     ok(!/data-code=/.test(bodyOf(dflt.html)) && !/data-code=/.test(bodyOf(dflt.print))
        && !/data-code=/.test(bodyOf(speakerOf(dflt))),
        'a deck that says nothing opens spaced, and writes no attribute for it on any body',
        bodyOf(dflt.html));
-    ok(/\n\.chunk-body code \{ font-family: var\(--mono-font\); font-size: 0\.92em; \}/.test(dflt.html)
+    // .chunk, not .chunk-body: a cover's, a closing slide's or a divider's
+    // body, an overlay card and a dock are running text outside .chunk-body.
+    ok(/\n\.chunk code \{ font-family: var\(--mono-font\); font-size: 0\.92em; \}/.test(dflt.html)
        && /\ncode \{ font-family: var\(--mono\); font-size: 0\.92em; \}/.test(dflt.print),
-       'the base rule is unguarded and still says 0.92em, which is what plain resets to');
-    ok(/\n\.chunk-body code:not\(pre code\):not\(\.embed-blocked code\):not\(\.nb\)[\s\S]{0,120}?word-spacing: -0\.28em/.test(dflt.html)
+       'the base rule is unguarded, reaches any code in a chunk and still says 0.92em, which is what plain resets to');
+    ok(new RegExp('\\n' + LIVE_CODE + String.raw`:not\(\.nb\)[\s\S]{0,120}?word-spacing: -0\.28em`).test(dflt.html)
        && /\ncode:not\(pre code\):not\(\.chunk-heading code\):not\(\.nb\)[\s\S]{0,120}?word-spacing: -0\.28em/.test(dflt.print),
        'the spaced rule is the unattributed one, in both stylesheets, reaching only a span with whitespace in it');
-    ok(/body\[data-code=tint\] \.chunk-body code:not\(pre code\):not\(\.embed-blocked code\)[\s\S]{0,220}?padding: 0 0\.28em/.test(dflt.html)
+    const both = (re) => [dflt.html, dflt.print].every(h => re.test(h));
+    ok(both(/<code class="trail">inf upload<\/code>:/) && both(/\(<code class="lead trail">make hello<\/code>\)/)
+       && both(/<code>a b<\/code>&nbsp;x/) && both(/<strong><code>c d<\/code><\/strong>:/) && both(/<code>e f<\/code> frei/),
+       'a span glued to a character is marked on that side, and one beside a space, a no-break space or a tag is not',
+       (dflt.html.match(/<p>Mit[\s\S]*?<\/p>/) || [''])[0]);
+    ok(both(/:not\(\.nb\)\.trail \{ margin-right: 0; \}/),
+       'and the marked side drops its margin, in both stylesheets');
+    ok(new RegExp(String.raw`body\[data-code=tint\] ` + LIVE_CODE + String.raw`[\s\S]{0,220}?padding: 0 0\.28em`).test(dflt.html)
        && /body\[data-code=tint\][\s\S]{0,600}?background: color-mix\(in oklch, var\(--ink\) 7%, transparent\)/.test(dflt.html),
        'and tint is the addition on top of it, behind the attribute');
     ok(/body\[data-code=tint\][\s\S]{0,200}?margin: 0;\n  word-spacing: normal;/.test(dflt.html)
@@ -3410,7 +3424,7 @@ console.log('\nlayout generations');
        'tint cancels the spaced pair, or a span would carry a ground and a gap at once');
     // The size is per lecture, because the ratio it encodes is a property of
     // the roster: Literata over JetBrains Mono is not IBM Plex Sans over it.
-    ok(/body\[data-font=serif\] \.chunk-body code:not\(pre code\):not\(\.embed-blocked code\),\nbody\[data-font=serif\] \.exp-body code:not\(pre code\) \{ font-size: 0\.885em; \}/.test(dflt.html)
+    ok(new RegExp(String.raw`body\[data-font=serif\] ` + LIVE_CODE + String.raw` \{ font-size: 0\.885em; \}`).test(dflt.html)
        && /body\[data-font=sans\][^{]*\{ font-size: 0\.901em; \}/.test(dflt.html)
        && /body\[data-font=mono\][^{]*\{ font-size: 0\.96em; \}/.test(dflt.html),
        'the live size is emitted once per reading face, so the code follows the F key');
@@ -3426,7 +3440,7 @@ console.log('\nlayout generations');
     ok(!/font-size: 0\.885em|font-size: 0\.901em|font-size: 0\.96em/.test(plain.html)
        && !/font-size: 0\.885em/.test(plain.print),
        'and emits no per-face size at all, which is half of the way back to the 1.0.0 rendering');
-    ok(/body\[data-code=plain\] \.chunk-body code:not\(pre code\):not\(\.embed-blocked code\),\nbody\[data-code=plain\] \.exp-body code:not\(pre code\) \{\n  margin: 0;\n  word-spacing: normal;\n  font-size: 0\.92em;\n\}/.test(plain.html)
+    ok(new RegExp(String.raw`body\[data-code=plain\] ` + LIVE_CODE + String.raw` \{\n  margin: 0;\n  word-spacing: normal;\n  font-size: 0\.92em;\n\}`).test(plain.html)
        && /body\[data-code=plain\] code:not\(pre code\):not\(\.chunk-heading code\) \{\n  margin: 0;\n  word-spacing: normal;\n  font-size: 0\.92em;\n\}/.test(plain.print),
        'and is the other half: one reset, after the stylesheet so it outranks any size that lands there');
   }

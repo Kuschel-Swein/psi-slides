@@ -139,8 +139,7 @@ body[data-mode=dark][data-pitchblack=on][data-neutrals=tinted] :is(.overlay-card
 body[data-mode=dark][data-pitchblack=on][data-neutrals=tinted] .dock.ov-tint {
   background: color-mix(in oklch, var(--emph) 20%, transparent);
 }
-body[data-code=tint][data-mode=dark][data-pitchblack=on] .chunk-body code:not(pre code):not(.embed-blocked code),
-body[data-code=tint][data-mode=dark][data-pitchblack=on] .exp-body code:not(pre code) {
+body[data-code=tint][data-mode=dark][data-pitchblack=on] .chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code) {
   background: color-mix(in oklch, var(--ink) 24%, transparent);
 }
 body[data-mode=dark][data-pitchblack=on] .chunk[data-section=tinted] {
@@ -162,7 +161,8 @@ body[data-theme^=terminal] pre.shiki * {
 body[data-theme^=terminal] .chunk-body pre.shiki,
 body[data-theme^=terminal] .exp-body pre.shiki { background: var(--paper-warm) !important; padding: 0.5em 0.8em; }
 body[data-theme^=terminal] .chunk-body code,
-body[data-theme^=terminal] .exp-body code { color: var(--emph); }
+body[data-theme^=terminal] .exp-body code,
+body[data-theme^=terminal] .chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code) { color: var(--emph); }
 body[data-theme^=terminal] .chunk.expanded .exp-body.on { background: var(--paper-warm); }
 body[data-theme^=terminal] #psiINT-stage-viewport { background: var(--paper); }
 body[data-mode=dark] #psiINT-stage-viewport { background: var(--paper); }
@@ -326,17 +326,15 @@ a { color: var(--emph); text-decoration: underline; text-underline-offset: 2px; 
 a:hover { text-decoration-thickness: 2px; }
 .chunk-body ul, .chunk-body ol { margin: 0 0 var(--block-gap) 1.4em; }
 .chunk-body li { margin: 0.45em 0; }
-.chunk-body code { font-family: var(--mono-font); font-size: 0.92em; }
+.chunk code { font-family: var(--mono-font); font-size: 0.92em; }
 code.nb { white-space: nowrap; }
-.chunk-body code:not(pre code):not(.embed-blocked code):not(.nb),
-.exp-body code:not(pre code):not(.nb) {
+.chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code):not(.nb) {
   margin: 0 0.25em;
   word-spacing: -0.28em;
 }
-.chunk-body code:not(pre code):not(.embed-blocked code):not(.nb).lead,
-.exp-body code:not(pre code):not(.nb).lead { margin-left: 0; }
-body[data-code=tint] .chunk-body code:not(pre code):not(.embed-blocked code),
-body[data-code=tint] .exp-body code:not(pre code) {
+.chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code):not(.nb).lead { margin-left: 0; }
+.chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code):not(.nb).trail { margin-right: 0; }
+body[data-code=tint] .chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code) {
   margin: 0;
   word-spacing: normal;
   padding: 0 0.28em;
@@ -3003,12 +3001,9 @@ body.toc-visible #psiINT-toc { transform: translateX(0); }
 </style>
 
 <style>
-body[data-font=serif] .chunk-body code:not(pre code):not(.embed-blocked code),
-body[data-font=serif] .exp-body code:not(pre code) { font-size: 0.885em; }
-body[data-font=sans] .chunk-body code:not(pre code):not(.embed-blocked code),
-body[data-font=sans] .exp-body code:not(pre code) { font-size: 0.901em; }
-body[data-font=mono] .chunk-body code:not(pre code):not(.embed-blocked code),
-body[data-font=mono] .exp-body code:not(pre code) { font-size: 0.96em; }
+body[data-font=serif] .chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code) { font-size: 0.885em; }
+body[data-font=sans] .chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code) { font-size: 0.901em; }
+body[data-font=mono] .chunk code:not(pre code):not(.chunk-heading code):not(.embed-blocked code) { font-size: 0.96em; }
 </style>
 
 
@@ -3634,7 +3629,7 @@ its top</li>
 <ul>
 <li><strong class="card-lead">top</strong><br>the default: the text starts at the head of its card, however tall the row is, so a short card leaves its paper underneath</li>
 <li><strong class="card-lead">middle</strong><br>this text is centred against the tallest card in the row</li>
-<li><strong class="card-lead">baseline</strong><br>a word for <code>::: rows</code>, which has a body to line a term up with</li>
+<li><strong class="card-lead">baseline</strong><br>a word for <code class="trail">::: rows</code>, which has a body to line a term up with</li>
 </ul>
 
 </div>
@@ -3701,7 +3696,7 @@ so the heads do not jump when the reader presses <code class="nb">C</code>.</p>
     <div class="chunk-body"><div class="reveal-segment" data-seg="0"><p><strong><code>detail: fold</code> is the default</strong>, so the levels under the first are in the
 printed hand-out and off the projection, and <code class="nb">C</code> switches between the two. This
 deck opens with everything showing, because its frontmatter says
-<code>collapse: none</code>; press <code class="nb">C</code> once here and the second level folds away.</p>
+<code class="trail">collapse: none</code>; press <code class="nb">C</code> once here and the second level folds away.</p>
 <div class="cards cards-3 cs-large ca-left cv-top cd-fold cg-panel ck-round cx-veil">
 <ul>
 <li><strong>fold</strong><ul>
@@ -3741,7 +3736,7 @@ deck opens with everything showing, because its frontmatter says
     
     <h2 class="chunk-heading"><code>::: rows</code> turns a card row on its side</h2>
     <div class="chunk-body"><div class="reveal-segment" data-seg="0"><p><strong>A term in a small card on the left, its explanation beside it, several
-stacked.</strong> It takes the same words in braces as <code>::: cards</code>, the same automatic
+stacked.</strong> It takes the same words in braces as <code class="trail">::: cards</code>, the same automatic
 size, the same fold and the same print rules. Only the arrangement of an item
 differs.</p>
 <div class="cards rows cards-1 cs-medium ca-left cv-middle cd-fold cg-panel ck-round cx-veil">
@@ -3838,9 +3833,9 @@ second one. Any two numbers work.</p>
     <div class="chunk-body"><div class="reveal-segment" data-seg="0"><div class="side sv-middle" style="--side-a:2fr;--side-b:1fr"><div class="side-a">
 
 
-<p><strong>This slide is <code>::: side 2:1 {.middle}</code>: two parts of prose to one part figure</strong>, which is the shape a diagram with its commentary usually wants. The drawing is a <code>::: draw</code> block inside the second pane.</p>
+<p><strong>This slide is <code class="trail">::: side 2:1 {.middle}</code>: two parts of prose to one part figure</strong>, which is the shape a diagram with its commentary usually wants. The drawing is a <code>::: draw</code> block inside the second pane.</p>
 <p><strong>A short pane sits at the top of its half unless you say otherwise, and <code class="nb">{.middle}</code> centres it against the taller one.</strong> Here the <em>figure</em> is the short pane, so <code class="nb">{.middle}</code> is what puts it level with the middle of this column instead of at the top. <code class="nb">{.top}</code> is the default and often right – a caption over a figure should be aligned from the top. The word belongs to the block and not to either pane, because the taller pane is what makes the row tall, so centring can only move the shorter one.</p>
-<p><strong>A figure <em>above</em> or <em>below</em> the text needs nothing</strong> – put the block first or last in the chunk body. <code>::: cols</code> is the one place a figure does not belong: the columns are one run of text, and a figure breaks it. A <code>::: draw</code> written there is refused, and the message points you at <code>::: side</code>.</p>
+<p><strong>A figure <em>above</em> or <em>below</em> the text needs nothing</strong> – put the block first or last in the chunk body. <code>::: cols</code> is the one place a figure does not belong: the columns are one run of text, and a figure breaks it. A <code>::: draw</code> written there is refused, and the message points you at <code class="trail">::: side</code>.</p>
 </div><div class="side-b">
 
 
@@ -3944,7 +3939,7 @@ not, where the backdrop&#39;s list says where the picture is at each beat.</p>
 <p>An overlay and a reveal segment both fade in, and neither moves anything: the
 segment has its box in the text from the first beat, and the overlay has its
 cell over the picture. What <code class="nb">from</code> adds is the <em>number</em> – a segment takes the
-next beat in order unless it is written <code>--- from N</code>, where an overlay says
+next beat in order unless it is written <code class="trail">--- from N</code>, where an overlay says
 which beat it waits for and nothing else can reach it first.</p>
 </div></div>
     
@@ -3989,7 +3984,7 @@ which beat it waits for and nothing else can reach it first.</p>
   <div class="chunk-content">
     
     <h2 class="chunk-heading">Where the picture sits, and what it is veiled with</h2>
-    <div class="chunk-body"><div class="reveal-segment" data-seg="0"><p>Five groups of words go in the braces after <code>::: backdrop</code>, at most one from
+    <div class="chunk-body"><div class="reveal-segment" data-seg="0"><p>Five groups of words go in the braces after <code class="trail">::: backdrop</code>, at most one from
 each, and the first of every group is the default.</p>
 <div class="cards cards-5 cs-medium ca-left cv-top cd-fold cg-panel ck-round cx-veil">
 <ul>
@@ -4097,7 +4092,7 @@ compositions – and <code class="nb">third</code> / <code class="nb">half</code
 <p><strong><code>{.left .glass .panel .standard}</code> is a column, not a card.</strong> It reaches the
 top and the foot of the frame, its width is a share of the slide, and the glass
 blurs only what is behind the words.</p>
-<p>The backdrop is <code>{.cover .clear}</code>: no veil, because the panel sets the words
+<p>The backdrop is <code class="trail">{.cover .clear}</code>: no veil, because the panel sets the words
 off. A <code class="nb">.clear</code> picture under words outside a panel, an overlay or a dock earns
 the linter&#39;s <code class="nb">text-on-picture</code>.</p>
 </div>
