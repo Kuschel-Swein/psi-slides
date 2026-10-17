@@ -3408,6 +3408,18 @@ console.log('\nlayout generations');
     ok(/\n\.chunk code:not\(pre code\):not\(\.chunk-heading code\):not\(\.embed-blocked code\):not\(\.nb\)[\s\S]{0,120}?word-spacing: -0\.28em/.test(dflt.html)
        && /\ncode:not\(pre code\):not\(\.chunk-heading code\):not\(\.nb\)[\s\S]{0,120}?word-spacing: -0\.28em/.test(dflt.print),
        'the spaced rule is the unattributed one, in both stylesheets, reaching only a span with whitespace in it');
+    // A spaced span glued to a character has nothing to be separated from on
+    // that side: its margin there was a gap before the colon. Measured on a
+    // closing slide's "Abgabe mit `inf upload`:".
+    const glue = raw(DECK('', '## free: G {#g}\n\nMit `inf upload`: und (`make hello`) und `a b`&nbsp;x und **`c d`**: und `e f` frei.\n'), []);
+    ok(/<code class="trail">inf upload<\/code>:/.test(glue.html) && /<code class="trail">inf upload<\/code>:/.test(glue.print)
+       && /\(<code class="lead trail">make hello<\/code>\)/.test(glue.html)
+       && /<code>a b<\/code>&nbsp;x/.test(glue.html) && /<strong><code>c d<\/code><\/strong>:/.test(glue.html)
+       && /<code>e f<\/code> frei/.test(glue.html),
+       'a span glued to a character is marked on that side, and one beside a space, a no-break space or a tag is not',
+       (glue.html.match(/<p>Mit[\s\S]*?<\/p>/) || [''])[0]);
+    ok(/:not\(\.nb\)\.trail \{ margin-right: 0; \}/.test(dflt.html) && /:not\(\.nb\)\.trail \{ margin-right: 0; \}/.test(dflt.print),
+       'and the marked side drops its margin, in both stylesheets');
     ok(/body\[data-code=tint\] \.chunk code:not\(pre code\):not\(\.chunk-heading code\):not\(\.embed-blocked code\)[\s\S]{0,220}?padding: 0 0\.28em/.test(dflt.html)
        && /body\[data-code=tint\][\s\S]{0,600}?background: color-mix\(in oklch, var\(--ink\) 7%, transparent\)/.test(dflt.html),
        'and tint is the addition on top of it, behind the attribute');

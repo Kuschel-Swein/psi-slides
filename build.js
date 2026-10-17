@@ -3321,10 +3321,39 @@ function markAddresses(text) {
 // span the margin is on; a listing is preceded by its pre and never by one
 // of these openers.
 const CODE_LEAD_RE = /(<(?:p|li|td|th|dd)(?:\s[^>]*)?>|<span class="row-body">|<br\s*\/?>)(\s*)<code>/g;
+// A spaced span glued to a character - "`inf upload`:" or "(`a b`)" - has
+// nothing to be separated from on that side, and the margin there is a gap
+// before the colon, or after the bracket, that reads as a typo. So the side
+// that touches a character loses its margin too: .lead on the left, as for a
+// span that opens its block, and .trail on the right. Only a bare span is
+// looked at (a .nb span carries no margin), and a code span's text is escaped
+// and holds no tag, so [^<]* is the whole of it. A tag next to the span is
+// not a character (</strong>: stays as it is), and a no-break space is a
+// space, though it arrives as an entity like a glued quote does.
+const CODE_SPAN_RE = /<code( class="lead")?>([^<]*)<\/code>/g;
+const NBSP_ENTITY_RE = /^&(?:nbsp|#160|#x0*a0);/i;
+function gluedAfter(s, end) {
+  const c = s[end];
+  if (!c || c === '<' || /\s/.test(c)) return false;
+  return !NBSP_ENTITY_RE.test(s.slice(end, end + 8));
+}
+function gluedBefore(s, at) {
+  const c = s[at - 1];
+  if (!c || c === '>' || /\s/.test(c)) return false;
+  if (c !== ';') return true;
+  const amp = s.lastIndexOf('&', at - 1);
+  return amp < 0 || at - amp > 8 || !NBSP_ENTITY_RE.test(s.slice(amp, at));
+}
 marked.use({
   hooks: {
     postprocess(html) {
-      return html.replace(CODE_LEAD_RE, '$1$2<code class="lead">');
+      return html.replace(CODE_LEAD_RE, '$1$2<code class="lead">')
+        .replace(CODE_SPAN_RE, (m, lead, body, at, s) => {
+          const cls = [];
+          if (lead || gluedBefore(s, at)) cls.push('lead');
+          if (gluedAfter(s, at + m.length)) cls.push('trail');
+          return `<code${cls.length ? ` class="${cls.join(' ')}"` : ''}>${body}</code>`;
+        });
     },
   },
 });
@@ -10358,8 +10387,11 @@ ${inlineCodeSel('print', '', ':not(.nb)')} {
   word-spacing: -0.28em;
 }
 /* A span that opens its block keeps the right-hand margin only: on the left
-   it would indent the line. Marked by the build, see CODE_LEAD_RE. */
+   it would indent the line. One glued to a character loses the margin on
+   that side, or the colon after it stands off. Marked by the build, see
+   CODE_LEAD_RE and CODE_SPAN_RE. */
 ${inlineCodeSel('print', '', ':not(.nb).lead')} { margin-left: 0; }
+${inlineCodeSel('print', '', ':not(.nb).trail')} { margin-right: 0; }
 ${inlineCodeSel('print', 'body[data-code=tint]')} {
   margin: 0;
   word-spacing: normal;
@@ -16330,8 +16362,11 @@ ${inlineCodeSel('live', '', ':not(.nb)')} {
   word-spacing: -0.28em;
 }
 /* A span that opens its block keeps the right-hand margin only: on the left
-   it would indent the line. Marked by the build, see CODE_LEAD_RE. */
+   it would indent the line. One glued to a character loses the margin on
+   that side, or the colon after it stands off. Marked by the build, see
+   CODE_LEAD_RE and CODE_SPAN_RE. */
 ${inlineCodeSel('live', '', ':not(.nb).lead')} { margin-left: 0; }
+${inlineCodeSel('live', '', ':not(.nb).trail')} { margin-right: 0; }
 ${inlineCodeSel('live', 'body[data-code=tint]')} {
   margin: 0;
   word-spacing: normal;
