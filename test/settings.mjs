@@ -4394,6 +4394,120 @@ console.log('\nlayout generations');
     }
   }
 
+  // ── kind: document ─────────────────────────────────────────────────
+  // A long piece of prose read and never projected - a syllabus first. It
+  // builds print.html alone, numbers its parts and sections so the source
+  // carries no numbers, sets its ::: marginalia in the margin, and the
+  // linter stops measuring it against a slide. What a laid-out page shows
+  // (where the notes stand, the reader's card stepping aside) is
+  // test/document.mjs; this is what the build and the linter write.
+  {
+    console.log('\nkind: document');
+    const long = Array.from({ length: 320 }, (_, i) => ['word', 'term', 'page'][i % 3]).join(' ') + '.';
+    const DOC = (extra = '', body = '') => `---\ntitle: A syllabus\nkind: document\n${extra}---\n\n`
+      + '## title: {#title}\n\n## About {#about}\n\nFront matter.\n\n'
+      + '# Course Format {#format}\n\n'
+      + `## definition: Materials {#materials}\n\n${long}\n\n::: marginalia\nOne.\n:::\n\nA paragraph.\n\n::: marginalia\nTwo.\n:::\n\nAnother.\n\n`
+      + '### A subsection {#sub}\n\nText.\n\n#### A paragraph heading\n\nText.\n\n'
+      + '## {#cont}\n\nA chunk with no heading continues the section above.\n\n'
+      + '## The lecture {#lecture}\n\nText.\n\n'
+      + '# Booklet {#booklet}\n\n## Requirements {#requirements}\n\nSee [Materials](#materials) and [the subsection](#sub).\n'
+      + body;
+    const d = raw(DOC());
+    ok(d.code === 0, 'a document builds', d.out.split('\n').slice(-2).join(' '));
+    ok(d.files.join() === 'print.html', 'and writes print.html alone - no projection, cockpit or notes view',
+       d.files.join());
+    const pr = d.print || '';
+    const body = (pr.match(/<body [^>]*>/) || [''])[0];
+    ok(/data-kind="document"/.test(body) && /data-marginalia="margin"/.test(body) && /data-slide-nums="off"/.test(body),
+       'its body says document, margin notes in the margin, no slide numbers', body);
+    ok(/<title>A syllabus<\/title>/.test(pr), 'and its tab carries the title alone, with no "– print"');
+    ok(/<h1 class="column-heading"><span class="sec-num">1<\/span> Course Format<\/h1>/.test(pr)
+       && /<h1 class="column-heading"><span class="sec-num">2<\/span> Booklet<\/h1>/.test(pr),
+       'the parts are numbered in their headings');
+    const secs = [...pr.matchAll(/<h2 class="chunk-heading"><span class="sec-num">([\d.]+)<\/span> ([^<]+)<\/h2>/g)]
+      .map(m => m[1] + ' ' + m[2]);
+    ok(secs.join('|') === '1.1 Materials|1.2 The lecture|2.1 Requirements', 'and the sections in theirs, 1.1 onwards per part',
+       secs.join('|'));
+    ok(/<h2 class="chunk-heading">About<\/h2>/.test(pr),
+       'a chunk before the first part is front matter and unnumbered; one with no heading takes no number');
+    const toc = (pr.match(/<nav class="toc toc-document"[\s\S]*?<\/nav>/) || [''])[0];
+    ok(/toc-num">1<\/span> Course Format/.test(toc) && /toc-num">1\.2<\/span> The lecture/.test(toc)
+       && /toc-num">2\.1<\/span> Requirements/.test(toc) && !/About/.test(toc),
+       'the printed contents list the parts and their sections with the same numbers', toc.replace(/\s+/g, ' ').slice(0, 300));
+    const side = (pr.match(/<nav id="psiINT-reader-contents"[\s\S]*?<\/nav>/) || [''])[0];
+    ok(/rd-num">1\.1<\/span><span class="rd-text">Materials/.test(side) && /rd-part-num">2<\/span> Booklet/.test(side)
+       && /data-rd="about"><span class="rd-num"><\/span>/.test(side) && !/data-rd="cont"/.test(side),
+       'and so does the reader\'s sidebar, the front matter without a number and a heading-less chunk not at all');
+    ok(!/class="chunk-label"/.test(pr), 'a document prints no type word over a chunk');
+    ok(/<h3 id="sub">A subsection<\/h3>/.test(pr) && /<h4>A paragraph heading<\/h4>/.test(pr),
+       'a ### heading takes its {#id} and the brace leaves the words');
+    ok((pr.match(/<aside class="marginalia">/g) || []).length === 2, 'two margin notes in one chunk both print');
+    ok(/@page \{ margin: 2\.2cm 1\.6cm 2\.6cm 2\.2cm; \}/.test(pr), 'and the sheet keeps a margin wide enough for them');
+    ok(/body\[data-marginalia=margin\] main \.marginalia \{\s*float: right;/.test(pr),
+       'the stylesheet floats a note into the margin under the attribute and nowhere else');
+
+    const lab = raw(DOC('style:\n  labels: on\n'));
+    ok(/<span class="chunk-label">definition<\/span>/.test(lab.print || ''),
+       'style: {labels: on} written in a document brings the type word back');
+    const inl = raw(DOC('style:\n  print-marginalia: inline\n'));
+    ok(!/data-marginalia/.test((inl.print || '').match(/<body [^>]*>/)[0]),
+       'style: {print-marginalia: inline} keeps a document\'s notes in the column');
+
+    // A lecture is the bytes it was: no attribute, its numbers, its suffix.
+    const lec = raw(FM + '## free: A {#a}\n\nText.\n\n::: marginalia\nNote.\n:::\n\n### Sub {#s}\n\nText.\n');
+    const lbody = (lec.print.match(/<body [^>]*>/) || [''])[0];
+    ok(lec.code === 0 && lec.files.length === 4 && !/data-kind|data-marginalia/.test(lbody)
+       && /<title>T – print<\/title>/.test(lec.print) && !/sec-num"/.test(lec.print),
+       'a lecture still builds four views, its handout without the document\'s attributes or numbers', lbody);
+    ok(/<h3 id="s">Sub<\/h3>/.test(lec.print) && /<h3>Sub<\/h3>/.test(lec.html) && !/\{#s\}/.test(lec.html),
+       'a ### {#id} in a lecture is an id in the documents and no stray brace on the projection');
+    const lecM = raw('---\ntitle: T\nstyle:\n  print-marginalia: margin\n---\n\n## title: {#title}\n\n## free: A {#a}\n\nText.\n');
+    ok(/data-marginalia="margin"/.test(lecM.print || ''), 'and a lecture can ask for its notes in the margin');
+
+    // Refusals: a word the key does not know, a view a document does not
+    // have, an id twice, an id of the build's.
+    const bad = raw('---\ntitle: T\nkind: slides\n---\n\n## title: {#title}\n');
+    ok(bad.code === 1 && /"kind: slides" is not a value/.test(bad.out) && !bad.files.length,
+       'kind: slides is refused before anything is written', bad.out.split('\n')[0]);
+    ok(/unknown-kind/.test(lintOf('---\ntitle: T\nkind: slides\n---\n\n## title: {#title}\n')),
+       'and the linter says so as an error');
+    const only = raw(DOC(), ['--audience-only']);
+    ok(only.code === 1 && /--audience-only needs a lecture/.test(only.out) && !only.files.length,
+       '--audience-only on a document is refused by name', only.out.split('\n')[0]);
+    for (const flag of ['--slides-pdf', '--print-notes-pdf', '--check-fit', '--present']) {
+      const r = raw(DOC(), [flag]);
+      ok(r.code === 1 && new RegExp(flag + ' needs a lecture').test(r.out) && !r.files.length,
+         `${flag} on a document is refused before a build`, r.out.split('\n')[0]);
+    }
+    const dup = raw(DOC('', '\n### Again {#materials}\n\nText.\n'));
+    ok(dup.code === 1 && /id 'materials' is used twice/.test(dup.out), 'a ### {#id} that takes a chunk\'s id is refused',
+       dup.out.split('\n')[0]);
+    ok(/duplicate-id/.test(lintOf(DOC('', '\n### Again {#materials}\n\nText.\n'))), 'and lint says duplicate-id');
+    const res = raw(DOC('', '\n### Ours {#psiINT-x}\n\nText.\n'));
+    ok(res.code === 1 && /psiINT- are the build's own/.test(res.out), 'a ### {#psiINT-…} is refused',
+       res.out.split('\n')[0]);
+    ok(/reserved-id/.test(lintOf(DOC('', '\n### Ours {#psiINT-x}\n\nText.\n'))), 'and lint says reserved-id');
+    const fenced = raw(DOC('', '\n```md\n### In a fence {#materials}\n```\n'));
+    ok(fenced.code === 0, 'a heading line inside a code fence names no id', fenced.out.split('\n')[0]);
+    const inAside = DOC('', '\n::: expand More\n### In an aside {#materials}\n\nText.\n:::\n');
+    const ia = raw(inAside);
+    ok(ia.code === 1 && /id 'materials' is used twice/.test(ia.out) && /error\s+duplicate-id/.test(lintOf(inAside)),
+       'and one in an aside is held to the same namespace by both', ia.out.split('\n')[0]);
+
+    // The linter: quiet about the slide, loud about what is still wrong.
+    const lintDoc = lintOf(DOC());
+    ok(!/density|orphan-column|duplicate-marginalia/.test(lintDoc),
+       'a document is not held to a slide\'s word budget, a part\'s two chunks or one marginalia per chunk',
+       lintDoc.split('\n').filter(l => /warn|error/.test(l)).join(' | '));
+    const lintLec = lintOf(DOC().replace('kind: document\n', ''));
+    ok(/density/.test(lintLec) && /duplicate-marginalia/.test(lintLec),
+       'and the same source as a lecture is, so the silence is the kind\'s');
+    const noted = lintOf(DOC('theme: dark\n', '\n> note: Said to nobody.\n'));
+    ok(/note-in-document/.test(noted) && /document-no-op/.test(noted),
+       'a speaker note and a live-only key in a document are warned about, since no view shows them');
+  }
+
 }
 
 // ── building a source.md somebody sent you ─────────────────────────────

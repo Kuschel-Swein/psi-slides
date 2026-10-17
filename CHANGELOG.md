@@ -9,6 +9,37 @@ from building the same way is a major version.
 
 ### Added
 
+- **`kind: document`: a source that is read and never projected.** A
+  syllabus was the first. The build writes `print.html` alone (and
+  `print.pdf` with `--print-pdf`); a flag that needs a lecture – another
+  view's `--*-only`, `--slides-pdf`, `--print-notes-pdf`, `--check-fit`,
+  `--squint`, `--frames`, `--present`, the prompter – is refused by name
+  before anything is built. The parts are numbered 1, 2, … and their
+  headed chunks 1.1, 1.2, … in the headings, the printed contents (now two
+  levels) and the reader's sidebar, so the source carries no numbers; the
+  slide number and the type word are gone (`style: {labels: on}` brings the
+  word back), the title opens the first page instead of a cover sheet, the
+  contents take no page of their own, and the tab says the title alone.
+  The linter stops holding a document to a slide – no word budget, no
+  orphan part, any number of margin notes, none of the beat and press
+  checks – and warns about a `> note:` (no view of a document prints it)
+  and a key only a lecture reads (`document-no-op`). `kind: slides` is
+  refused by both (`unknown-kind`).
+
+- **Margin notes in the margin** – `style: {print-marginalia: margin}`, the
+  default in a `kind: document`. A `::: marginalia` stands in the right
+  margin of the printed document beside the block written after it, on a
+  screen with room for it and on paper, stacking under the note above it;
+  under 920 px it is the indented aside it was. A document's page area
+  moves to leave 5 cm for them. A reader's note card steps out of a margin
+  note's way. A lecture keeps `inline`, so no handout moves until its
+  author writes the key.
+
+- **`### Heading {#id}`** gives a subsection inside a chunk an anchor for
+  `[text](#id)` in the documents; the brace leaves the words in every view.
+  The id shares the chunk ids' namespace – a duplicate or a `psiINT-` one is
+  refused by the build and the linter.
+
 - **`--present` starts a talk in one flag.** It means `--watch --serve
   --open`, plus `--prompter` when the lecture has a `prompter:` block or the
   line names `--prompter`, `--prompter-dry-run` or `--prompter-model`; a key
@@ -288,6 +319,14 @@ from building the same way is a major version.
   instead of `-latest`.
 
 ### Fixed
+
+- **`###` and `####` inside a chunk, a definition list, and the last page,
+  on paper.** A `###` in a chunk body printed at the browser's 1.17em, larger
+  than the chunk heading over it; it is now the body size in bold, and
+  `####` an italic paragraph heading. `<dl>` / `<dt>` / `<dd>` print with the
+  term bold and its description indented. And the part of the last sheet
+  under the last line printed in the screen's paper tone (#fafaf7) where
+  every other sheet was white.
 
 - **`-h`, `--help`, a folder and a port.** `-h` was taken for a file name
   (`Input not found: …/-h`); it now prints the help, and `--help` prints it

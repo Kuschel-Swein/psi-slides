@@ -101,6 +101,37 @@ const KNOWN_FRONTMATTER_KEYS = new Set([
   // the time of day the talk is planned to begin, which the cockpit's clock
   // can be set against (speaker.md, Clock)
   'start',
+  // what the source is: a lecture (the default) or a document, which builds
+  // print.html alone (build.js, lectureKind)
+  'kind',
+]);
+
+// Mirrors LECTURE_KINDS in build.js. An unknown word is refused there in the
+// pre-flight, so it is an error here (`unknown-kind`).
+const LECTURE_KINDS = ['lecture', 'document'];
+// What a `kind: document` does not need to hear. Every one is a warning about
+// a slide in a room - how many words fit on one, how many parts a talk is cut
+// into, a beat or a press that leads nowhere, a bold the collapse lifts out,
+// a picture behind words on the projection - and a document has no slide,
+// no room and no press. Errors are never on this list: a missing or a
+// duplicate id, an unclosed block and every refusal stay what they are.
+// The decisions, one by one, are in the psi-slides-authoring skill under
+// "A document".
+const DOCUMENT_QUIET = new Set([
+  'density', 'orphan-column', 'duplicate-marginalia', 'reveal-overuse', 'empty-beat',
+  'single-word-bold', 'text-on-picture', 'dock-narrows-measure', 'layout-too-narrow',
+  'note-advance-beyond', 'note-from-beyond', 'reveal-from-beyond', 'overlay-from-beyond',
+  'explicit-in-side', 'side-without-flip', 'figure-type-without-figure',
+]);
+// The top-level keys that change something only in a view a document does
+// not have - the projection, the cockpit, the prompter, the slide number in
+// a lecture's margin - so in a `kind: document` they are read and do
+// nothing. A warning (`document-no-op`), the unknown-frontmatter-key one a
+// layer down: the key is real, just not here.
+const DOCUMENT_NO_OP_KEYS = new Set([
+  'theme', 'font', 'collapse', 'auto-fit', 'slide-numbers', 'print-slide-numbers',
+  'editor', 'note-button', 'neighbours', 'transition', 'pitchblack',
+  'section', 'section-mark', 'duration', 'start', 'prompter',
 ]);
 
 // Mirrors VIEW_DEFAULT_SPEC in build.js: frontmatter keys that pin how a
@@ -305,6 +336,11 @@ const STYLE_ENUMS = {
   // Whether the printed document is set in the serif or the sans. The live
   // views answer this with `F` and with `font:`; print had no answer at all.
   'print-body': ['serif', 'sans'],
+  // Where a ::: marginalia prints: the aside in the column, or the outer
+  // margin beside the block it is written before. Unset, it is `margin` in a
+  // `kind: document` and `inline` in a lecture - a deferral the build
+  // resolves (printMarginalia); this file only accepts the two words.
+  'print-marginalia': ['inline', 'margin'],
   // How a `**bold**` phrase the derivation reads looks – live views and the
   // documents separately. Bold is a selection mark here before it is a
   // weight, which is why `plain` is a legal answer.
@@ -653,7 +689,7 @@ import {
   CHUNK_SLOTS, CHUNK_STYLE_CLASSES, COLUMN_SLOTS, VALID_WIDTHS, VALID_CHUNK_CLASSES,
   CARDS_SLOTS, OVERLAY_SLOTS, BACKDROP_SLOTS, SIDE_SLOTS, DOCK_SLOTS,
   splitTail, parseTail, strayTailProblem, parseDrawOpener, parseRevealMark,
-  fenceTracker, fenceOpener,
+  fenceTracker, fenceOpener, headingIdOf, RESERVED_ID_PREFIX,
 } from './tails.mjs';
 // The third zero-dep module, imported for the same reason as tails.mjs and
 // with nothing behind it: `cueAdvance` decides whether a bracketed line in a
@@ -2999,8 +3035,13 @@ function lintFile(filePath) {
   // An ignore comment silences a warning and never an error. An error is a
   // deck the build refuses, and a deck somebody sent could otherwise carry
   // its own `ignore asset-outside-root` past the pre-commit gate.
+  // kind: document. Read off the header the way the other top-level keys
+  // below are, quotes and a trailing comment allowed.
+  const kindLine = header.match(/^kind:[ \t]*["']?([^"'\s#]*)["']?[ \t]*(?:#.*)?$/m);
+  const isDocument = !!kindLine && kindLine[1] === 'document';
   const add = (bodyLine, severity, rule, msg) => {
     if (severity !== 'error' && ignores.has(rule)) return;
+    if (severity !== 'error' && isDocument && DOCUMENT_QUIET.has(rule)) return;
     findings.push({
       file: filePath, line: fmLines + bodyLine, severity, rule, msg,
     });
@@ -3023,6 +3064,19 @@ function lintFile(filePath) {
         + 'looked at, so nothing on any slide changes when you edit it. Delete '
         + 'it, or check the spelling.');
       return;
+    }
+    if (m[1] === 'kind') {
+      const value = m[2].replace(/\s+#.*$/, '').trim().replace(/^["']|["']$/g, '');
+      if (!LECTURE_KINDS.includes(value)) {
+        addFm(i + 2, 'error', 'unknown-kind',
+          `'kind: ${value}' is not a value this key accepts – valid: ${LECTURE_KINDS.join(', ')}`);
+      }
+      return;
+    }
+    if (isDocument && DOCUMENT_NO_OP_KEYS.has(m[1])) {
+      addFm(i + 2, 'warn', 'document-no-op',
+        `'${m[1]}:' sets something only a lecture's projection, cockpit or slide numbers read, `
+        + 'and a kind: document builds print.html alone – it changes nothing here. Delete it.');
     }
     const allowed = VIEW_DEFAULTS[m[1]];
     if (!allowed) return;
@@ -5126,6 +5180,43 @@ function lintFile(filePath) {
     if (pct > REVEAL_PCT_WARN) {
       add(1, 'warn', 'reveal-overuse',
           `${reveals}/${nonTitle.length} chunks use reveal segments (${Math.round(pct * 100)}% > ${REVEAL_PCT_WARN * 100}%) – split the column, or add '<!-- linter: ignore reveal-overuse -->'`);
+    }
+  }
+
+  // Ids on a `### Heading {#id}` and, in a document, speaker notes. One walk
+  // of its own after the main one, so a chunk or part id is always the first
+  // owner of a name and the heading is the duplicate - the order the build's
+  // assertDistinctIds reads them in. A ::: draw body is a figure's own
+  // grammar (a `#` there is a comment), and a fence or a comment is no
+  // heading.
+  {
+    const hFence = fenceTracker();
+    let inDraw = false;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const ln = i + 1;
+      if (hFence.step(line, ln) || hFence.inside || hFence.commented) continue;
+      if (inDraw) { if (/^:::\s*$/.test(line)) inDraw = false; continue; }
+      if (parseDrawOpener(line)) { inDraw = true; continue; }
+      const h = headingIdOf(line);
+      if (h) {
+        if (h.id.startsWith(RESERVED_ID_PREFIX)) {
+          add(ln, 'error', 'reserved-id',
+              `"{#${h.id}}" – ids starting with ${RESERVED_ID_PREFIX} are the build's own; name it without the prefix`);
+        } else if (ids.has(h.id)) {
+          add(ln, 'error', 'duplicate-id',
+              `id '${h.id}' already defined at line ${ids.get(h.id)}`);
+        } else {
+          ids.set(h.id, fmLines + ln);
+        }
+      }
+      // A note in a document is said to nobody: the view that prints it
+      // (print-notes.html) and the cockpit that shows it are not built.
+      if (isDocument && /^>\s*note:/i.test(line)) {
+        add(ln, 'warn', 'note-in-document',
+            '> note: in a kind: document – the notes print in print-notes.html and show in the cockpit, '
+            + 'and a document builds neither, so no reader sees it; write it as text, a ::: marginalia or a comment');
+      }
     }
   }
 

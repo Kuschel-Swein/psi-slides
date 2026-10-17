@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 psi-slides is a **lecture medium**: one Markdown `source.md` per lecture produces four static HTML views – `print.html` (document), `print-notes.html` (document + speaker notes), `audience.html` (live projection), `speaker.html` (cockpit). All four are self-contained, `file://`-openable, no runtime server required.
 
+**A `source.md` that says `kind: document`** (a syllabus, prose that is read and never projected) builds `print.html` alone, numbered and with its margin notes in the margin – see *Documents* under Architecture.
+
 Status: released, 2.0.0, one maintainer. **From 1.0.0 the source format is the interface** – a change that stops an existing `source.md` from building the same way is a major version. The internals carry no such promise. The `lectures/` folder holds the canonical examples of what the tool supports; the design rationale is in `PRD.md`. A separate content repo `../psi-slides-mylectures/` consumes this engine via `node ../psi-slides/build.js` and holds the lectures actively being authored.
 
 ## Commands
@@ -334,7 +336,7 @@ node lint.js lectures/ --strict                # warnings → exit 2
 # image-reference set against the one collector both go through, and `cli`
 # holds the command line's flag table against what main() reads and against
 # this block.
-# test/ is the things that only break in a built page - 57 specs, about four
+# test/ is the things that only break in a built page - 58 specs, about four
 # minutes: six at a time by default (--jobs N, half the cores, at most six),
 # each in a child process with its own Chromium, and the nine that export
 # `serial = true` alone afterwards; --jobs 1 is the old one-browser run. Three
@@ -362,7 +364,7 @@ node lint.js lectures/ --strict                # warnings → exit 2
 # createSpanTable, or anything that moves a label or an extent. Anything
 # checkable without a browser belongs in lint.js or in test/gates/, never here.
 #
-# WHAT EACH GATE AND EACH SPEC FAMILY GUARDS, and the twenty-five specs that build a
+# WHAT EACH GATE AND EACH SPEC FAMILY GUARDS, and the twenty-six specs that build a
 # deck of their own rather than hunting shapes in a real one: test/README.md.
 npm run gate                                   # all gates
 node test/gates/run.mjs semantics              # gates whose name matches
@@ -594,6 +596,10 @@ Checks enforced:
   and the warning then describes a collapse that no longer happens.
 - Reveal-overuse (>50% of chunks using segments in a lecture flags a warning).
 - Orphan columns (columns with <2 chunks).
+- In a `kind: document`, the warnings that only a projected slide needs are
+  silent (`DOCUMENT_QUIET`: density, orphan columns, duplicate marginalia, the
+  beat and press checks, …) and two are its own (`note-in-document`,
+  `document-no-op`). Errors are never silenced.
 - Figure caption redundancy (`figure:` chunk opens with an image whose alt text becomes a `<figcaption>` stacked under the heading – discourages three-label pile-ups of heading + sub-heading + caption).
 
 **`build.js` and `lint.js` are a deliberate duplication, and keeping them congruent is the work.** A code review over the decoration family found eight defects, seven of which were places the two disagreed – four in the direction that matters, where the build *accepted* what the linter refuses. That direction merges green, because `gates.yml`, the CI job that runs on every push, lints `lectures/network-security` and `lectures/diagrams` but builds neither; only `pages.yml` on `main` and `release.yml` on a tag build them. **When you add a refusal to one file, grep the other for the same key in the same commit.** And when a rule already exists – a pre-flight, a fallback refusal for an unreadable directive – the question is not whether to write it but which other constructs are still missing from it.
@@ -653,6 +659,51 @@ store between the two documents, Firefox keeps one per file (the export
 carries highlights across); under `--serve` all three share. `test/reader.mjs`
 guards it on fixture decks of its own. The decisions and the browser
 measurements, slice by slice, are in `docs/history/PLAN-reader-highlights.md`.
+
+### Documents (`kind: document`)
+
+A second kind of source beside the lecture, for prose that is never projected
+– a course syllabus was the first. `lectureKind()` reads the key and refuses
+any word but `lecture` / `document` in the `buildOnce` pre-flight; lint.js
+mirrors it (`unknown-kind`). **Everything it changes is in the print renderer,
+its stylesheet, the target list and the command line**, so a lecture builds
+the bytes it did:
+
+- `buildOnce` keeps the `print` target alone and refuses a `--*-only` flag
+  naming another view; `main()` refuses the flags that need a lecture before
+  anything is built (`DOCUMENT_REFUSES`, `refuseForDocument`), and `--open` /
+  the address list name `print.html`.
+- `documentNumbers(columns)` is the one walk the numbers come from: parts 1,
+  2, …; a part's chunks that have a heading 1.1, 1.2, …; front matter before
+  the first part and heading-less chunks unnumbered. `renderHeadingHtml`,
+  `renderColumn`, `renderDocumentToc` (two levels) and `renderReaderContents`
+  read it. The number is a `.sec-num` span, which the reader's text skips
+  (`SKIP` in `PRINT_HIGHLIGHTS_JS`), so a renumbering moves no highlight.
+- `renderDocument` writes `data-kind="document"`, forces `data-slide-nums="off"`,
+  drops the type word unless `style: {labels}` is written, drops "– print"
+  from the title and appends `DOCUMENT_PAGE_CSS` (an `@page` that widens the
+  outer margin; an `@page` cannot key off a body attribute).
+- **Margin notes** are `style: {print-marginalia: inline | margin}`, a
+  deferral resolved by `printMarginalia()` – `margin` in a document, `inline`
+  in a lecture. `body[data-marginalia=margin]` floats `.marginalia` right
+  with a negative margin of its own width plus a gap, the construction the
+  reader's printed notes (`.rd-pnote`) already used; on screen from
+  `READER_NOTES_PX` in the column the reader keeps, on paper in the page
+  area. The reader's cards step out of a note's way (`pack()`).
+- **`### Heading {#id}`** is read by `headingIdOf` in `tails.mjs` for both
+  files: the marked `heading` renderer takes the brace off the words in every
+  view and writes the id only while `documentHeadingIds` is set, which
+  `renderDocument` does – the cockpit draws a chunk twice, and an id there
+  would be two elements. `assertDistinctIds` holds it to the chunk-id
+  namespace and the `psiINT-` fence; lint.js does the same in a walk of its
+  own after the main one.
+- lint.js silences the checks that only a slide needs (`DOCUMENT_QUIET`, never
+  an error) and adds `note-in-document` and `document-no-op`
+  (`DOCUMENT_NO_OP_KEYS`). The reasons per check are in the
+  `psi-slides-authoring` skill under *A document*.
+
+The PRD's §2.2 is the design; `test/settings.mjs` (*kind: document*) holds
+the build and the linter, `test/document.mjs` the laid-out page.
 
 ### A source.md someone sent you
 
@@ -1108,7 +1159,7 @@ plan, its decisions and its build log are `docs/history/PLAN-electron-builder.md
 
 - `CONTRIBUTING.md` – **the build and release procedure** (§ Building and releasing): what the two workflows do, what has to be true before tagging, and why the release asset names cannot change. Follow it rather than improvising a release.
 - `SECURITY.md` – **what a deck someone sent can do, what the build refuses from a `source.md` someone else wrote, and what `--watch`, `--serve` and `--prompter` expose** – written for lecturers and evaluators, its claims checked against the code or in a browser. Change it in the same commit as a refusal, a `--serve` rule or a prompter data flow it describes.
-- `test/README.md` – **the two test suites and which one a thing belongs in**: what each of the twenty-five gates guards, the four browser-spec families, and the twenty-five specs that build a deck of their own rather than hunting shapes in a real one.
+- `test/README.md` – **the two test suites and which one a thing belongs in**: what each of the twenty-five gates guards, the four browser-spec families, and the twenty-six specs that build a deck of their own rather than hunting shapes in a real one.
 - `PRD.md` – §1 non-negotiables, §2 content model, §2.1 type vocabulary, §3 source format + parsing contract, §4 visual language, §7 speaker view, §9 build system. Read this before making design-shape changes.
 - `speaker.md` – speaker spec and the `window.postMessage` sync protocol (fields, direction, freeze gating, timer, localStorage recovery).
 - `editor.md` – the diagram editor: what it is for, the four decisions, the grammar contract it edits against, the drag policy, and **§15, a build log written while building** – what landed, what it cost, and what bit. Read §15 first if you are picking the work up. §13 answers the two questions the plan left open, from the running prototype, and §14 is how a picture gets into a figure.

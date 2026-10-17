@@ -51,7 +51,7 @@ import {
   CARDS_SLOTS, OVERLAY_SLOTS, BACKDROP_SLOTS, SIDE_SLOTS, DOCK_SLOTS,
   splitTail, parseTail, slotTable, strayTailProblem,
   parseDrawOpener, formatDrawOpener, drawCompilerAttrs, parseRevealMark,
-  fenceTracker, htmlCommentOpens,
+  fenceTracker, htmlCommentOpens, headingIdOf, HEADING_ID_TAIL_RE, RESERVED_ID_PREFIX,
 } from './tails.mjs';
 // The live views' commands: which key means what, and the ? panel's rows.
 // Imported here to render the panel; its text is also spliced into both
@@ -3329,8 +3329,24 @@ marked.use({
   },
 });
 
+// Whether a `### Heading {#id}` gives its heading the id. Set by
+// renderDocument for the length of its render and nowhere else: the
+// documents carry each chunk once, where the cockpit draws a chunk in more
+// than one place and an id there would be two elements with one name. Every
+// view takes the brace off the words either way (HEADING_ID_TAIL_RE).
+let documentHeadingIds = false;
 marked.use({
   renderer: {
+    // Byte for byte marked's own heading, plus the id. A level-1 or level-2
+    // heading in a body is not touched: those are structure everywhere but
+    // inside an aside, and their tails belong to parseTail.
+    heading(text, level) {
+      const m = level >= 3 ? HEADING_ID_TAIL_RE.exec(text) : null;
+      if (!m) return `<h${level}>${text}</h${level}>\n`;
+      const headingId = m[1];
+      const idAttr = documentHeadingIds ? ` id="${escapeHtml(headingId)}"` : '';
+      return `<h${level}${idAttr}>${text.slice(0, m.index)}</h${level}>\n`;
+    },
     code(code, infostring) {
       const lang = (infostring || '').trim().split(/\s+/)[0].toLowerCase();
       if (lang) {
@@ -8560,6 +8576,20 @@ const STYLE_SPEC = {
   // no sensible reading as a whole printed document, which a deferral would
   // have to invent one for.
   'print-body': { kind: 'enum', values: ['serif', 'sans'], dflt: 'serif' },
+  // Where a ::: marginalia prints. On the projection it stands in the
+  // slide's right margin; in the documents it has been an indented aside in
+  // the text column, and the empty outer margin the print layout keeps
+  // (main's rule in PRINT_CSS's @media print block) is where it belongs.
+  //
+  //   inline - the aside in the column, as before.
+  //   margin - in the right margin beside the block it is written before,
+  //            on a screen wide enough to have one and on paper; a narrow
+  //            window falls back to the aside.
+  //
+  // Its default is a deferral, resolved by printMarginalia(): `margin` in a
+  // `kind: document`, `inline` in a lecture, so no lecture's handout moves
+  // until its author writes `print-marginalia: margin`.
+  'print-marginalia': { kind: 'enum', values: ['inline', 'margin'], dflt: '' },
   // How a `**bold**` phrase looks. In this tool bold is a selection mark
   // first - the collapse lifts it onto the slide as a bullet of its own - and
   // a typographic weight only by the accident of markdown. `bold` answers for
@@ -8864,6 +8894,70 @@ function viewDefaults(frontmatter = {}) {
 function printSlideNums(frontmatter = {}) {
   const d = viewDefaults(frontmatter);
   return d.printSlideNums || d.slideNums || SLIDE_NUM_DEFAULT;
+}
+// What a source.md is. `lecture` is every deck there has ever been and the
+// default; `document` is a long piece of prose that is read and never
+// projected - a course syllabus was the first - and it builds the printed
+// document alone. Not a viewer default: it does not say how a view opens
+// but which views there are, so it is a top-level key of its own, refused
+// in the pre-flight like the twelve when the value is a word it does not
+// know. lint.js mirrors the two words (`unknown-kind`).
+//
+// What a document changes, all of it in the print renderer and its
+// stylesheet: the parts and their chunks are numbered (1, 1.1) in the
+// headings, the printed contents and the reader's sidebar, so the source
+// carries no numbers; the slide number in the margin and the type word over
+// a chunk are gone; the cover is a masthead on paper rather than a page of
+// its own; and a ::: marginalia stands in the right margin beside the block
+// it is written before (style: {print-marginalia}). lint.js drops the
+// checks that only a projected slide needs (DOCUMENT_QUIET there).
+const LECTURE_KINDS = ['lecture', 'document'];
+function lectureKind(frontmatter = {}) {
+  if (frontmatter.kind == null) return 'lecture';
+  const raw = String(frontmatter.kind).trim();
+  if (!LECTURE_KINDS.includes(raw)) {
+    const err = new Error(
+      `Frontmatter: "kind: ${raw}" is not a value this key accepts.\n` +
+      `  Valid values for kind: ${LECTURE_KINDS.join(', ')}\n` +
+      '  `kind: document` builds print.html alone, for prose that is read and not projected.');
+    err.userFacing = true;
+    throw err;
+  }
+  return raw;
+}
+const isDocumentKind = (frontmatter) => lectureKind(frontmatter) === 'document';
+// Where a ::: marginalia prints. `inline` is the quiet aside in the text
+// column it has always been; `margin` sets it in the outer margin beside
+// the block that follows it, the way a Tufte book does. The default is a
+// deferral like print-neutrals' - an unset key is `margin` in a document
+// and `inline` in a lecture, so no lecture's handout moves - and this is
+// the one place it is resolved.
+function printMarginalia(st, frontmatter = {}) {
+  return st['print-marginalia'] || (isDocumentKind(frontmatter) ? 'margin' : 'inline');
+}
+// The numbers a document prints: 1, 2, … for its parts and 1.1, 1.2, … for
+// the chunks of each part that carry a heading. A chunk before the first
+// part is front matter and goes unnumbered, and so does one with no heading
+// - a number on a heading that is not there would be a number nobody can
+// find on the page - as do the cover, a closing chunk and an outline, which
+// are not sections. One walk, read by the headings, the printed contents
+// and the sidebar alike, so the three cannot disagree.
+function documentNumbers(columns) {
+  const part = new Map();
+  const chunk = new Map();
+  let p = 0;
+  for (const col of columns) {
+    if (!col.heading) continue;
+    p += 1;
+    part.set(col, String(p));
+    let k = 0;
+    for (const c of col.chunks) {
+      if (!c.heading || ['title', 'closing', 'outline'].includes(c.tag)) continue;
+      k += 1;
+      chunk.set(c, `${p}.${k}`);
+    }
+  }
+  return { part, chunk };
 }
 // How a slide change is drawn: pan (the default), cut or fade.
 function slideTransition(frontmatterDefaults = {}) {
@@ -9394,9 +9488,12 @@ function renderInlineMd(text) {
   }
 }
 
-function renderHeadingHtml(chunk, cls = 'chunk-heading') {
+// `num` is a document's section number (documentNumbers), set before the
+// words in a span of its own so the reader's text, the highlights' anchor,
+// can skip it the way it skips the slide number.
+function renderHeadingHtml(chunk, cls = 'chunk-heading', num = '') {
   if (!chunk.heading && !chunk.headingSub) return '';
-  const main = renderInlineMd(chunk.heading);
+  const main = (num ? `<span class="sec-num">${num}</span> ` : '') + renderInlineMd(chunk.heading);
   if (!chunk.headingSub) return `<h2 class="${cls}">${main}</h2>`;
   const sub = renderInlineMd(chunk.headingSub);
   // Space between spans so the print renderer (which uses display:inline
@@ -9455,7 +9552,10 @@ function renderChunk(chunk, frontmatter, num, opts = {}) {
   // label either, and for the reason the type exists: its heading and its
   // paragraphs are one utterance set at one size, and a small-caps word over
   // them turns three lines of speech into a labelled specimen.
-  const labelTag = tag && tag !== 'free' && tag !== 'figure' && tag !== 'statement' ? tag : null;
+  // A document prints no type word unless its author asked for one
+  // (opts.noLabels, renderDocument): a syllabus section is not a definition
+  // or an example, whatever prefix its heading line carries.
+  const labelTag = !opts.noLabels && tag && tag !== 'free' && tag !== 'figure' && tag !== 'statement' ? tag : null;
   const label = labelTag
     ? `<span class="chunk-label">${escapeHtml((S.type[labelTag] || labelTag).toLowerCase())}</span>`
     : '';
@@ -9508,7 +9608,7 @@ ${inner}
   ${bd.html}
   ${numHtml}
   ${label}
-  ${renderHeadingHtml(chunk)}
+  ${renderHeadingHtml(chunk, 'chunk-heading', opts.docNums ? (opts.docNums.chunk.get(chunk) || '') : '')}
   ${bodyHtml}
   ${dockHtml}
   ${overlayHtml}
@@ -9579,8 +9679,9 @@ function renderColumn(col, frontmatter, nums, chunkOpts = {}) {
 <div class="speaker-note-body">${col.speakerNotes.map(n => marked.parse(n)).join('\n')}</div>
 </aside>`
     : '';
+  const secNum = chunkOpts.docNums ? chunkOpts.docNums.part.get(col) : '';
   return `<section class="column"${idAttr}${bdHas}${bdScrim}>
-  <h1 class="column-heading">${escapeHtml(col.heading)}</h1>
+  <h1 class="column-heading">${secNum ? `<span class="sec-num">${secNum}</span> ` : ''}${escapeHtml(col.heading)}</h1>
   ${bd.html}
   ${lede}
   ${renderDock(col.dock, `the divider for "${col.heading}"`, null, nums)}
@@ -9588,6 +9689,29 @@ function renderColumn(col, frontmatter, nums, chunkOpts = {}) {
   ${notesHtml}
 ${chunksHtml}
 </section>`;
+}
+
+// A document's contents: the parts and, under each, its numbered sections,
+// with the numbers the headings carry. Two levels because a document is
+// looked things up in - "where are the exam rules" is a section, not a part -
+// where a lecture's printed contents list the parts it was given in.
+function renderDocumentToc(columns, docNums, S) {
+  const text = (t) => renderInlineMd(t).replace(/<\/?a\b[^>]*>/g, '');
+  const num = (n) => n ? `<span class="toc-num">${n}</span> ` : '';
+  const items = columns.filter(c => c.heading).map(c => {
+    const subs = c.chunks.filter(ch => docNums.chunk.has(ch) && ch.id)
+      .map(ch => `<li><a href="#${escapeHtml(ch.id)}">${num(docNums.chunk.get(ch))}${text(ch.heading)}</a></li>`)
+      .join('');
+    return `<li><a href="#${escapeHtml(c.id || '')}">${num(docNums.part.get(c))}${escapeHtml(c.heading)}</a>`
+      + (subs ? `<ol>${subs}</ol>` : '') + '</li>';
+  }).join('\n    ');
+  if (!items) return '';
+  return `<nav class="toc toc-document" aria-label="${escapeHtml(S.contents)}">
+  <h2>${escapeHtml(S.contents)}</h2>
+  <ol>
+    ${items}
+  </ol>
+</nav>`;
 }
 
 function renderToc(columns, S) {
@@ -9624,7 +9748,7 @@ function renderToc(columns, S) {
 // and the second is a contents list already. A chunk with no heading is
 // named by its type word where it has one and by its id where it does not,
 // because an entry with nothing in it cannot be clicked.
-function renderReaderContents(columns, nums, S) {
+function renderReaderContents(columns, nums, S, docNums = null) {
   const entry = (c) => {
     if (!c.id || c.tag === 'title' || c.tag === 'outline') return '';
     // A heading may hold a link, and a link cannot sit inside the entry's
@@ -9632,7 +9756,13 @@ function renderReaderContents(columns, nums, S) {
     const text = c.heading || c.headingSub
       ? renderInlineMd(c.heading || c.headingSub).replace(/<\/?a\b[^>]*>/g, '')
       : escapeHtml((S.type[c.tag]) || c.id);
-    const num = nums.of.get(c);
+    // A document lists its section numbers where a lecture lists its slide
+    // numbers, and a chunk with no heading is no entry: it continues the
+    // section above it, and the type word or the id is no name for a place
+    // in a document. Front matter before the first part keeps its entry
+    // and has no number.
+    if (docNums && !c.heading) return '';
+    const num = docNums ? (docNums.chunk.get(c) || '') : nums.of.get(c);
     return `<li><a href="#${escapeHtml(c.id)}" data-rd="${escapeHtml(c.id)}">` +
       `<span class="rd-num">${num || ''}</span><span class="rd-text">${text}</span></a></li>`;
   };
@@ -9646,9 +9776,10 @@ function renderReaderContents(columns, nums, S) {
   const groups = ordered.map(col => {
     const items = col.chunks.map(entry).filter(Boolean).join('');
     if (!col.heading) return items;
+    const partNum = docNums ? `<span class="rd-part-num">${docNums.part.get(col)}</span> ` : '';
     const head = col.id
-      ? `<a class="rd-part" href="#${escapeHtml(col.id)}">${escapeHtml(col.heading)}</a>`
-      : `<span class="rd-part">${escapeHtml(col.heading)}</span>`;
+      ? `<a class="rd-part" href="#${escapeHtml(col.id)}">${partNum}${escapeHtml(col.heading)}</a>`
+      : `<span class="rd-part">${partNum}${escapeHtml(col.heading)}</span>`;
     if (!items) return `<li class="rd-group"><div class="rd-part-row">${head}</div></li>`;
     const listId = `psiINT-rd-part-${++part}`;
     const fold = `<button type="button" class="rd-fold" aria-expanded="false" aria-controls="${listId}" ` +
@@ -9753,14 +9884,22 @@ function renderDocument(lecture, opts = {}) {
   // in the argument. A deck with no outline chunk still gets the nav, which
   // is what it is there for.
   const hasOutline = columns.some(c => (c.chunks || []).some(ch => ch.tag === 'outline'));
-  const toc = hasOutline ? '' : renderToc(columns, S);
+  // kind: document (lectureKind). Its numbers are the one walk the
+  // headings, the contents and the sidebar all read.
+  const docMode = isDocumentKind(frontmatter);
+  const docNums = docMode ? documentNumbers(columns) : null;
+  const toc = hasOutline ? '' : (docMode ? renderDocumentToc(columns, docNums, S) : renderToc(columns, S));
   // The one numbering, shared with renderColumnsHtml, so the print numbers
   // match the audience's chunk-num badges 1:1 - and so a dock's link
   // states in both views compare against the same "slide 12".
   const nums = chunkNumbers(columns);
   // Title / anon columns render above the TOC (cover page first),
   // named columns render after (body of the document).
-  const chunkOpts = { withNotes: !!opts.withNotes, strings: S };
+  // A document prints no type word unless its author wrote style: {labels}
+  // themselves - the default is the lecture's `on`, so the question is
+  // whether the key was written, not what it resolved to.
+  const labelsWritten = !!(frontmatter.style && typeof frontmatter.style === 'object' && 'labels' in frontmatter.style);
+  const chunkOpts = { withNotes: !!opts.withNotes, strings: S, docNums, noLabels: docMode && !labelsWritten };
   const forPrint = (html) => stripDarkTokenColors(stripDiagramPayloads(stripBackdropFrames(html)));
   // The parts a lecture has, and which one each column is, threaded through
   // so an `outline:` chunk can list them. Print reorders the columns (anon
@@ -9770,25 +9909,43 @@ function renderDocument(lecture, opts = {}) {
   const partNoOf = new Map();
   { let n = 0; for (const c of columns) if (c.heading) partNoOf.set(c, ++n); }
   const colOpts = (c) => ({ ...chunkOpts, parts, partNo: partNoOf.get(c) || 0 });
-  const anonHtml = forPrint(columns.filter(c => !c.heading)
-    .map(c => renderColumn(c, frontmatter, nums, colOpts(c))).join('\n'));
-  const namedHtml = forPrint(columns.filter(c => c.heading)
-    .map(c => renderColumn(c, frontmatter, nums, colOpts(c))).join('\n'));
+  // The heading ids of a `### Heading {#id}` exist in the documents only;
+  // see documentHeadingIds. Reset in a finally, so a renderer that throws
+  // cannot leave the live views rendering them on the next build.
+  let anonHtml, namedHtml;
+  documentHeadingIds = true;
+  try {
+    anonHtml = forPrint(columns.filter(c => !c.heading)
+      .map(c => renderColumn(c, frontmatter, nums, colOpts(c))).join('\n'));
+    namedHtml = forPrint(columns.filter(c => c.heading)
+      .map(c => renderColumn(c, frontmatter, nums, colOpts(c))).join('\n'));
+  } finally {
+    documentHeadingIds = false;
+  }
 
-  const titleSuffix = opts.withNotes ? S['title-print-notes'] : S['title-print'];
+  // A document is the only view of itself, so its tab carries the title
+  // alone, with no "– print" to tell it from views it does not have.
+  const titleSuffix = docMode ? '' : opts.withNotes ? S['title-print-notes'] : S['title-print'];
   // Print has no keyboard, so the frontmatter is its only say over the
   // slide-number markers. The other viewer defaults are live-view concepts
   // (collapse, auto-fit) or already fixed here (print has its own type).
   // A document is read at arm's length and a projection across a room, so
   // the two can want different markers – `print-slide-numbers` says so, and
   // says nothing by following the live key.
-  const printNums = printSlideNums(frontmatter);
+  // A document numbers its sections in the headings, so the slide number
+  // in the margin would be a second, different count beside them.
+  const printNums = docMode ? 'off' : printSlideNums(frontmatter);
   const styleOpts = styleSettings(frontmatter);
+  // Two attributes the stylesheet keys a document and its margin notes off,
+  // written only when they say something, so a lecture's handout is the
+  // bytes it was.
+  const kindAttrs = (docMode ? ' data-kind="document"' : '')
+    + (printMarginalia(styleOpts, frontmatter) === 'margin' ? ' data-marginalia="margin"' : '');
   // reader: off ships none of it - no attribute, no sidebar, no script - so
   // the CSS keyed off body[data-reader=on] has nothing to match and the
   // lightbox is the only script left, which is what the key promises.
   const readerOn = (viewDefaults(frontmatter).reader || 'on') === 'on';
-  const readerHtml = readerOn ? renderReaderContents(columns, nums, S) : '';
+  const readerHtml = readerOn ? renderReaderContents(columns, nums, S, docNums) : '';
   // What the highlights script needs from the build: the key its store is
   // filed under, the folder name its export file is named by and the store
   // used to be filed under, the title its export is headed with, and the
@@ -9825,18 +9982,18 @@ function renderDocument(lecture, opts = {}) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escapeHtml(title)} – ${escapeHtml(titleSuffix)}</title>
+<title>${escapeHtml(title)}${titleSuffix ? ` – ${escapeHtml(titleSuffix)}` : ''}</title>
 <style>
 ${shipCss(PRINT_CSS)}
 ${shipCss(DIAGRAM_CSS)}
-${hasPulse ? shipCss(PULSE_PRINT_CSS) : ''}</style>
+${hasPulse ? shipCss(PULSE_PRINT_CSS) : ''}${docMode ? shipCss(DOCUMENT_PAGE_CSS) : ''}</style>
 ${fontStyleTag(opts.fontEmbed, 'print')}
 ${styleBlockCss(styleOpts)}
 ${codeTag(styleOpts, opts.codeSizing, 'print')}
 ${katexStyleTag(anonHtml + namedHtml)}
 ${reloadScript(opts.watchPort, null, { receiveOnly: true, run: opts.watchRun })}
 </head>
-<body data-slide-nums="${printNums}" ${styleBodyAttrs(styleOpts, frontmatter)}${readerOn ? ' data-reader="on"' : ''}>
+<body data-slide-nums="${printNums}" ${styleBodyAttrs(styleOpts, frontmatter)}${kindAttrs}${readerOn ? ' data-reader="on"' : ''}>
 ${readerOn ? readerHtml + READER_EARLY_JS : ''}<main>
 ${anonHtml}
 ${toc}
@@ -10824,6 +10981,129 @@ body[data-blocks=left] .math-display .katex-display > .katex,
 }
 .marginalia > :first-child { margin-top: 0; }
 .marginalia > :last-child { margin-bottom: 0; }
+/* A picture in a margin note is the note's width and stands at its head:
+   the figure rule further down centres a picture in the measure with a rem
+   of white over it, and in a note that white is the gap between the note
+   and the line it belongs to. Where the note falls back to the aside, on a
+   narrow screen, the picture keeps a margin note's size rather than taking
+   the whole column - it is the note's picture, not the text's. */
+body[data-marginalia=margin] main .marginalia figure.figure-img { margin: 0.2em 0 0.4em; text-align: left; }
+/* marked wraps a picture standing alone in a paragraph, and the parser
+   closes that paragraph in front of the figure: two empty p elements, one
+   either side, whose margins were the gap between a note's picture and the
+   paragraph it stands beside. */
+body[data-marginalia=margin] main .marginalia p:empty { display: none; }
+body[data-marginalia=margin] main .marginalia figure.figure-img :is(img, svg) { display: block; max-width: min(100%, 11rem); height: auto; }
+@media print, screen and (min-width: ${READER_NOTES_PX}px) {
+  body[data-marginalia=margin] main .marginalia figure.figure-img :is(img, svg) { max-width: 100%; }
+}
+
+/* ── a margin note in the margin (style: {print-marginalia: margin}) ──
+   The default in a kind: document, written by renderDocument as
+   body[data-marginalia=margin]. The aside is a right float whose negative
+   right margin is its own width and a gap, so its margin box stands wholly
+   outside the text column - no line of the text is shortened for it - and
+   clear: right stacks a second note under the first instead of beside it.
+   Tufte's construction, and the one the reader's printed notes (.rd-pnote
+   below) already use. A float stands where it is written, so a note is
+   level with the top of the block that follows it: written before a
+   paragraph, it sits beside that paragraph's first line.
+   Two widths, because the margin is two different places: on a screen it
+   is the column the layout keeps right of the text (the reader's notes
+   column, reserved below for a page without the reader too), from the
+   READER_NOTES_PX breakpoint on; on paper it is the free strip of the
+   page area right of the 38rem column, in cm like the page is. Under the
+   breakpoint there is no margin, and the note is the aside above. */
+@media screen and (min-width: ${READER_NOTES_PX}px) {
+  body[data-marginalia=margin] { padding: 0 18.5rem 0 1.5rem; }
+  body[data-marginalia=margin] { --mn-w: 14rem; --mn-gap: 2.5rem; }
+}
+@media print {
+  body[data-marginalia=margin] { --mn-w: 3.3cm; --mn-gap: 0.45cm; }
+  body[data-kind=document][data-marginalia=margin] { --mn-w: 4.4cm; --mn-gap: 0.55cm; }
+}
+@media print, screen and (min-width: ${READER_NOTES_PX}px) {
+  body[data-marginalia=margin] main .marginalia {
+    float: right;
+    clear: right;
+    width: var(--mn-w);
+    margin: 0.2em calc(-1 * (var(--mn-w) + var(--mn-gap))) 0.6rem 0;
+    padding: 0;
+    border: 0;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: var(--ink-soft);
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  body[data-marginalia=margin] main .marginalia :is(p, li) { orphans: 1; widows: 1; }
+  body[data-marginalia=margin] main .marginalia p { margin: 0 0 0.45em; }
+}
+
+/* Headings inside a chunk. The chunk's own heading is an h2 at 1.12rem and
+   a part's an h1, so a ### written in a body is the third rank and has to
+   read as smaller than the chunk heading over it - the browser's own h3
+   is 1.17em and stood above it. h3 is a subsection: the body size, set
+   bold, with the white above it that a new subsection needs. h4 and below
+   are paragraph headings: italic, at the body size, close over the
+   paragraph they name. A {#id} on any of them is its anchor in the
+   documents (headingIdOf in tails.mjs). */
+.chunk :is(h3, h4, h5, h6),
+.column-lede :is(h3, h4, h5, h6) {
+  font-size: 1rem;
+  line-height: 1.35;
+  letter-spacing: normal;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+.chunk h3, .column-lede h3 { font-weight: 600; margin: 1.5em 0 0.35em; }
+.chunk :is(h4, h5, h6), .column-lede :is(h4, h5, h6) {
+  font-weight: 500;
+  font-style: italic;
+  margin: 1.1em 0 0.15em;
+}
+.chunk :is(h3, h4, h5, h6) + :is(p, ul, ol, dl) { margin-top: 0; }
+
+/* A definition list, written as raw HTML (dl, dt, dd): the term bold, its
+   description indented under it. Kept together where it is short; a long
+   one breaks between entries, never between a term and its first line. */
+dl { margin: 0.5em 0 1em; }
+dt { font-weight: 600; margin: 0.7em 0 0.1em; break-after: avoid; page-break-after: avoid; }
+dt:first-child { margin-top: 0; }
+dd { margin: 0 0 0.35em 1.4em; }
+dd > :first-child { margin-top: 0; }
+dd > :last-child { margin-bottom: 0; }
+
+/* ── a document (kind: document) ──────────────────────────────────────
+   The section numbers renderDocument writes before a heading's words, the
+   two-level contents, and three things a lecture's handout keeps and a
+   document does not: the cover as a page of its own, the contents as a
+   page of its own, and a part's opening words in the lede's grey. */
+.sec-num { font-variant-numeric: tabular-nums; margin-right: 0.3em; }
+.column-heading .sec-num { margin-right: 0.45em; }
+.toc-document ol { list-style: none; padding-left: 0; margin: 0; }
+.toc-document > ol > li { margin: 0.55em 0 0; font-size: 1rem; }
+.toc-document ol ol { margin: 0.15em 0 0 2.1em; }
+.toc-document ol ol li { margin: 0.1em 0; font-size: 0.92rem; }
+.toc-document .toc-num {
+  display: inline-block;
+  min-width: 2.1em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+}
+.toc-document ol ol .toc-num { min-width: 2.6em; }
+body[data-kind=document] .toc { page-break-after: auto; break-after: auto; margin-bottom: 2rem; }
+/* The contents may break across a page, between parts and never inside one. */
+.toc-document > ol > li { break-inside: avoid; page-break-inside: avoid; }
+/* A bold in a document is a bold. In a lecture's handout the accent marks
+   the bold the projection did not lift out (a list item's, a card's), and
+   the derivation's own look is style: {print-bold} - DERIVED_STRONG, which
+   outranks this rule and still answers that key here. A document has no
+   derivation, so a bold in a list must not come out red where the same
+   bold in a paragraph is black. */
+body[data-kind=document] strong { color: inherit; }
+body[data-kind=document] .column-lede { color: var(--ink); max-width: none; }
+body[data-kind=document] .rd-part-num { font-variant-numeric: tabular-nums; margin-right: 0.25em; }
 
 /* Explicit-slide blocks (§4.5). Print shows both halves in source order –
    it is the reading copy, and losing either would defeat the point. The
@@ -11017,7 +11297,10 @@ pre.shiki .line { display: inline; }
    future CSS. */
 
 @media print {
-  body { background: white; }
+  /* Both, because the page is longer than the body on the last sheet: with
+     the paper tone left on html, the part of that sheet under the last line
+     printed in the screen's #fafaf7 and the rest of the document in white. */
+  html, body { background: white; }
   /* Smaller and tighter than the screen copy, and both halves matter.
      10pt over 1.6 is a reading size for a lit screen at arm's length; on
      paper it set the text so loosely that a chunk of four paragraphs filled
@@ -11101,6 +11384,17 @@ pre.shiki .line { display: inline; }
     border-bottom: 0;
     break-after: page;
     page-break-after: always;
+  }
+  /* A document opens with its title over its first words, the way a
+     syllabus or a report does, rather than on a cover sheet of its own. */
+  body[data-kind=document] .chunk-title {
+    min-height: 0;
+    justify-content: flex-start;
+    padding: 0 0 1.4rem;
+    margin: 0 0 1.8rem;
+    border-bottom: 0.5pt solid var(--rule);
+    break-after: auto;
+    page-break-after: auto;
   }
   pre { background: rgba(0,0,0,0.03); }
 }
@@ -11544,6 +11838,11 @@ body[data-reader=on] {
      highlights' own yellow: it says what is there, as the marks do. */
   body[data-reader=on].rd-ready .rd-contents li > a[data-rd] { grid-template-columns: 1.9em minmax(0, 1fr) auto; }
   body[data-reader=on][data-slide-nums=off].rd-ready .rd-contents li > a[data-rd] { grid-template-columns: minmax(0, 1fr) auto; }
+  /* A document prints no slide numbers and does print section numbers, so
+     the sidebar shows its numbers under slide-numbers: off - wider, for
+     "4.12" - and an entry before the first part keeps the column empty. */
+  body[data-reader=on][data-kind=document].rd-ready .rd-contents li > a[data-rd] { grid-template-columns: 2.3em minmax(0, 1fr) auto; }
+  body[data-kind=document] .rd-contents .rd-num { display: block; text-align: left; }
   .rd-contents .rd-part:has(.rd-count, .rd-sum) { display: flex; align-items: baseline; gap: 0.35em; }
   .rd-group.is-open .rd-sum, .rd-group:not(.is-open) .rd-part .rd-count { display: none; }
   .rd-count, .rd-sum {
@@ -11922,6 +12221,16 @@ body[data-reader=on] main :is(pre, .math-display) { position: relative; }
 @media print {
   #psiINT-lightbox { display: none !important; }
 }
+`;
+
+// A document's sheet (kind: document). The page area moves right so the
+// strip beside the 38rem column is wide enough for a margin note with a
+// picture in it: 17.2cm of A4 less the 12.1cm column leaves 5.1cm, where a
+// lecture's 16cm leaves 3.9. An @page rule cannot be keyed off a body
+// attribute, so it is emitted into a document only, after PRINT_CSS, and
+// overrides the margins alone - the page number in the foot stays.
+const DOCUMENT_PAGE_CSS = `
+@page { margin: 2.2cm 1.6cm 2.6cm 2.2cm; }
 `;
 
 // ::: pulse (Pulse Embed v2) in the documents, emitted only into a document
@@ -12364,7 +12673,7 @@ const PRINT_HIGHLIGHTS_JS = `
   // caption with it - and has highlights of its own; so does a code block,
   // whose words are anchored in the block's own text, so that marking code
   // moves no offset of a slide's prose.
-  const SKIP = UI + ', .speaker-note, pulse-question, pulse-deck, pulse-summary, .chunk-num, .chunk-label, .psi-diagram, figure, '
+  const SKIP = UI + ', .speaker-note, pulse-question, pulse-deck, pulse-summary, .chunk-num, .chunk-label, .sec-num, .psi-diagram, figure, '
     + '.katex, .math-display, pre, button, script, style, svg, video, iframe, textarea';
   // A whitespace node that is a child of one of these sits between two
   // blocks, and a mark round it would be an inline box in a block's place.
@@ -13042,6 +13351,24 @@ const PRINT_HIGHLIGHTS_JS = `
       }
       if (items.length && items[0].top < 0) forward();
     }
+    // A margin note (style: {print-marginalia: margin}) stands in this same
+    // column, and a card laid over it would hide the author's words under
+    // the reader's: a card that meets one moves below it, and the cards
+    // after it make way in turn. Only a note the layout floated is in the
+    // column - under the breakpoint it is an aside in the text.
+    const inMargin = Array.from(main.querySelectorAll('.marginalia'))
+      .filter(n => getComputedStyle(n).float === 'right')
+      .map(n => { const r = n.getBoundingClientRect(); return { top: r.top + window.scrollY, bottom: r.bottom + window.scrollY }; })
+      .sort((a, b) => a.top - b.top);
+    if (inMargin.length) {
+      let floor = -Infinity;
+      for (const it of items) {
+        let top = Math.max(it.top, floor);
+        for (const n of inMargin) if (top < n.bottom + gap && top + it.h + gap > n.top) top = n.bottom + gap;
+        it.top = top;
+        floor = top + it.h + gap;
+      }
+    }
     for (const it of items) it.card.style.top = Math.round(it.top) + 'px';
   };
   // ── paper (plan §6) ──
@@ -13448,7 +13775,7 @@ const PRINT_HIGHLIGHTS_JS = `
   const plain = (el) => {
     if (!el) return '';
     const c = el.cloneNode(true);
-    for (const x of c.querySelectorAll('.katex-mathml, .rd-count, .rd-sum, .chunk-num, .chunk-label, [data-rd-ui]')) x.remove();
+    for (const x of c.querySelectorAll('.katex-mathml, .rd-count, .rd-sum, .chunk-num, .chunk-label, .sec-num, .rd-part-num, [data-rd-ui]')) x.remove();
     return oneLine(c.textContent);
   };
   // The heading a slide's highlights stand under: the number the page prints
@@ -14114,7 +14441,7 @@ function abbrevForLabel(label) {
 // and `##`), so the build accepting it is the direction this project does
 // not allow. A pre-flight beside assertCoverBody, walking the parsed
 // structure rather than the source, so `--print-only` refuses it too.
-function assertDistinctIds(lecture) {
+function assertDistinctIds(lecture, src = '') {
   const seen = new Map();
   const check = (id, what) => {
     if (!id) return;
@@ -14146,6 +14473,36 @@ function assertDistinctIds(lecture) {
       const what = `chunk ## ${chunk.tag ? chunk.tag + ': ' : ''}${chunk.heading || chunk.id || ''}`;
       check(chunk.id || `c${ci}-${xi}`, chunk.id ? what : `${what} (no id, so it is given c${ci}-${xi} by its position)`);
     });
+  });
+  // A `### Heading {#id}` is an element in the documents, in the same
+  // getElementById namespace, so it is held to the same two rules as a chunk
+  // id: one name per element, and none of the build's own. Read off the
+  // source the way lint.js reads it - one walk after the chunks and parts,
+  // so a heading that takes a chunk's name is the one called the duplicate,
+  // fenced lines and comments skipped, a ::: draw body skipped (a `#` there
+  // is a figure's comment) - because a heading can stand in any body the
+  // renderer draws: a chunk's, an aside's, an overlay's, a card's, a
+  // divider's.
+  const lines = String(src).replace(/\r\n?/g, '\n').split('\n');
+  const fence = fenceTracker();
+  let inFrontmatter = /^\uFEFF?---[A-Za-z]*\s*$/.test(lines[0] || '');
+  let inDraw = false;
+  lines.forEach((line, i) => {
+    if (inFrontmatter) { if (i > 0 && /^---\s*$/.test(line)) inFrontmatter = false; return; }
+    if (fence.step(line) || fence.inside || fence.commented) return;
+    if (inDraw) { if (/^:::\s*$/.test(line)) inDraw = false; return; }
+    if (parseDrawOpener(line)) { inDraw = true; return; }
+    const h = headingIdOf(line);
+    if (!h) return;
+    if (h.id.startsWith(RESERVED_ID_PREFIX)) {
+      const err = new Error(
+        `"{#${h.id}}" on the heading "${h.text}" (line ${i + 1}):\n` +
+        `  ids starting with ${RESERVED_ID_PREFIX} are the build's own (the chrome and the generated\n` +
+        '  figure ids live there). Name it without the prefix.');
+      err.userFacing = true;
+      throw err;
+    }
+    check(h.id, `the heading "${h.text}" (line ${i + 1})`);
   });
 }
 
@@ -32900,7 +33257,7 @@ function buildOnce(absIn, only, opts = {}) {
   // parseLecture, so a reset further down wiped the very thing it collects.
   embedsThisBuild = [];
   const lecture = parseLecture(src);
-  assertDistinctIds(lecture);
+  assertDistinctIds(lecture, src);
   assertCoverBody(lecture);
   // Pre-flight, beside assertInlinable and assertCoverBody: a viewer default
   // or a style key with a value the tool does not know fails the build here
@@ -32912,6 +33269,18 @@ function buildOnce(absIn, only, opts = {}) {
   // would ever have looked at.
   viewDefaults(lecture.frontmatter);
   const styleOpts = styleSettings(lecture.frontmatter);
+  // kind: a document builds print.html alone. A --*-only flag naming a
+  // view it does not have is refused rather than answered with nothing,
+  // and before anything is written.
+  const docMode = isDocumentKind(lecture.frontmatter);
+  if (docMode && only && only !== '--print-only') {
+    const err = new Error(
+      `${only}: this source is a document (kind: document), and a document has no\n` +
+      '  projection, cockpit or notes - print.html is its one view.\n' +
+      '  node build.js <source.md>          builds it; --print-pdf prints it.');
+    err.userFacing = true;
+    throw err;
+  }
   // Same pre-flight contract: an unknown `labels:` key fails the build here,
   // before any view is written, rather than inside a renderer. Resolved once
   // and passed to all three renderers via renderOpts.strings, which is why
@@ -33046,7 +33415,7 @@ function buildOnce(absIn, only, opts = {}) {
     ['print-notes', (l, o) => renderDocument(l, { ...o, withNotes: true })],
     ['audience',    renderAudience],
     ['speaker',     renderSpeaker],
-  ].filter(([name]) => !only || only === `--${name}-only`);
+  ].filter(([name]) => (!only || only === `--${name}-only`) && (!docMode || name === 'print'));
   renderOpts.absentViews = siblingViewsAbsent(outDir, targets.map(([name]) => name));
 
   // Render every view first, write afterwards. The pre-flights above catch
@@ -33853,11 +34222,13 @@ async function runServe(rootDir, wantedPort, { absIn = null } = {}) {
 // before anything was built – a fresh folder printed no address at all, and
 // a second run listed the files of the first. The cockpit first, because it
 // is the one a lecturer opens; the projection is opened from it (S).
-function printViewAddresses(rootDir, base, { prompter = false } = {}) {
+function printViewAddresses(rootDir, base, { prompter = false, document = false } = {}) {
+  // A document's folder may still hold the views of a build from before it
+  // said `kind: document`; only the one it has is named.
   const rows = [
     ['cockpit', 'speaker'], ['projection', 'audience'],
     ['document', 'print'], ['with notes', 'print-notes'],
-  ].filter(([, name]) => fs.existsSync(path.join(rootDir, `${name}.html`)));
+  ].filter(([, name]) => (!document || name === 'print') && fs.existsSync(path.join(rootDir, `${name}.html`)));
   if (!rows.length) return;
   console.log('');
   for (const [label, name] of rows) console.log(`  ${label.padEnd(11)} ${base}/${name}.html`);
@@ -35772,10 +36143,36 @@ function lectureWantsPrompter(absIn) {
   }
 }
 
+// Whether the source is a `kind: document`, asked before anything is built
+// so a flag that needs a projection is refused in one sentence. A
+// frontmatter that does not read is not a document here; the build then
+// says what is wrong with it.
+function sourceIsDocument(absIn) {
+  try {
+    return isDocumentKind(safeMatter(fs.readFileSync(absIn, 'utf8')).data || {});
+  } catch (e) {
+    return false;
+  }
+}
+// The flags that ask for something only a lecture has: a view other than
+// print.html, an export or a probe of the projection, the prompter. On a
+// document each was a build of nothing or of a stale file.
+const DOCUMENT_REFUSES = ['--present', '--audience-only', '--speaker-only', '--print-notes-only',
+  '--slides-pdf', '--print-notes-pdf', '--check-fit', '--squint', '--frames',
+  '--prompter', '--prompter-dry-run', '--prompter-model'];
+function refuseForDocument(flags, absIn) {
+  const asked = DOCUMENT_REFUSES.filter(n => flags.has(n));
+  if (!asked.length || !sourceIsDocument(absIn)) return;
+  throw cliError(`Error: ${joinFlagNames(asked)} ${asked.length > 1 ? 'need' : 'needs'} a lecture, and this source is a document (kind: document).\n`
+    + '  A document builds print.html alone: no projection, cockpit or notes view.\n'
+    + '  node build.js <source.md> --print-pdf     the document and its PDF\n'
+    + '  node build.js <source.md> --watch --serve --open   to write it with a live page');
+}
+
 // --open's target: the cockpit if there is one, else the projection; over
-// http under --serve, as a file otherwise.
-function openCockpit(rootDir, base, { chrome = false } = {}) {
-  const name = ['speaker', 'audience'].find(n => fs.existsSync(path.join(rootDir, `${n}.html`)));
+// http under --serve, as a file otherwise. A document's is its one view.
+function openCockpit(rootDir, base, { chrome = false, document = false } = {}) {
+  const name = (document ? ['print'] : ['speaker', 'audience']).find(n => fs.existsSync(path.join(rootDir, `${n}.html`)));
   if (!name) {
     console.log('Nothing to open yet: no speaker.html or audience.html was written.');
     return;
@@ -36115,6 +36512,8 @@ async function main() {
   // Resolved before the Shiki init, so a wrong path is said at once; and a
   // viewport before the build it would measure, not after it.
   const absIn = resolveSourceArg(inputPath);
+  refuseForDocument(flags, absIn);
+  const docMode = sourceIsDocument(absIn);
   // --present is the three flags a talk is started with, and the prompter
   // when the lecture has settings for one or the line asks for it. Expanded
   // here, so everything below reads the flags it always read.
@@ -36230,11 +36629,11 @@ async function main() {
     let base = null;
     if (flags.has('--serve')) {
       ({ base } = await runServe(path.dirname(absIn), servePort, { absIn }));
-      printViewAddresses(path.dirname(absIn), base, { prompter: !!opts.souffleuse });
+      printViewAddresses(path.dirname(absIn), base, { prompter: !!opts.souffleuse, document: docMode });
     } else if (opts.souffleuse) {
       console.log('Prompter: open speaker.html in Chrome (speech recognition); Shift-S there switches it on.');
     }
-    if (flags.has('--open')) openCockpit(path.dirname(absIn), base, { chrome: !!opts.souffleuse });
+    if (flags.has('--open')) openCockpit(path.dirname(absIn), base, { chrome: !!opts.souffleuse, document: docMode });
     return;
   }
 
@@ -36290,8 +36689,8 @@ async function main() {
   }
   if (flags.has('--serve')) {
     const { base } = await runServe(path.dirname(absIn), servePort, { absIn });
-    printViewAddresses(path.dirname(absIn), base);
-    if (flags.has('--open')) openCockpit(path.dirname(absIn), base);
+    printViewAddresses(path.dirname(absIn), base, { document: docMode });
+    if (flags.has('--open')) openCockpit(path.dirname(absIn), base, { document: docMode });
   }
 }
 

@@ -741,6 +741,46 @@ try {
     /^Error: --pdf-out without a PDF to write\./,
     '--pdf-out with none');
 
+  // ── kind: document ────────────────────────────────────────────────
+  // A document's one PDF, and where its margin note lands on the sheet:
+  // beside the paragraph written after it, right of the text column, on
+  // the same page. Read with pdftotext -bbox, word by word.
+  console.log('\nkind: document: print.pdf alone, the margin note in the margin');
+  const ddir = path.join(dir, 'doc');
+  fs.mkdirSync(ddir);
+  const filler = Array.from({ length: 70 }, () => 'Bodyword').join(' ');
+  fs.writeFileSync(path.join(ddir, 'source.md'), '---\ntitle: A syllabus\nkind: document\n---\n\n'
+    + '## title: {#title}\n\n# Format {#format}\n\n## Materials {#materials}\n\n' + filler + '.\n\n'
+    + '::: marginalia\nNoteword stands beside the paragraph.\n:::\n\nBesideword ' + filler + '.\n');
+  const rdoc = build(ddir, ['--print-pdf']);
+  ok(rdoc.status === 0, 'a document exports print.pdf', (rdoc.stdout || '').slice(-300) + (rdoc.stderr || '').slice(-300));
+  ok(fs.readdirSync(ddir).filter(f => /\.(html|pdf)$/.test(f)).sort().join() === 'print.html,print.pdf',
+     'and writes print.html and print.pdf alone', fs.readdirSync(ddir).join(','));
+  const refusedDoc = build(ddir, ['--print-notes-pdf']);
+  ok(refusedDoc.status !== 0 && /--print-notes-pdf needs a lecture/.test(refusedDoc.stderr || '')
+     && !/\[pdf\] Chromium/.test(refusedDoc.stdout || ''),
+     '--print-notes-pdf on a document is refused before a browser starts', (refusedDoc.stderr || '').split('\n')[0]);
+  if (have('pdftotext') && fs.existsSync(path.join(ddir, 'print.pdf'))) {
+    const bbox = spawnSync('pdftotext', ['-bbox', path.join(ddir, 'print.pdf'), '-'], { encoding: 'utf8' }).stdout || '';
+    const words = [];
+    let pageNo = 0;
+    for (const line of bbox.split('\n')) {
+      if (/<page /.test(line)) pageNo += 1;
+      const m = /<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)</.exec(line);
+      if (m) words.push({ x0: +m[1], y0: +m[2], x1: +m[3], y1: +m[4], w: m[5], page: pageNo });
+    }
+    const body = words.filter(w => /^Bodyword/.test(w.w));
+    const noteW = words.find(w => w.w === 'Noteword');
+    const beside = words.find(w => w.w === 'Besideword');
+    const right = Math.max(...body.map(w => w.x1));
+    ok(!!noteW && !!beside && noteW.x0 > right + 5,
+       'the note stands right of the text column on paper', JSON.stringify({ noteW, right }));
+    ok(!!noteW && !!beside && noteW.page === beside.page && Math.abs(noteW.y0 - beside.y0) < 6,
+       'level with the first line of the paragraph written after it, on the same page', JSON.stringify({ noteW, beside }));
+  } else {
+    note('pdftotext is not on PATH – skipping where the note landed.');
+  }
+
   // ── ::: pulse ─────────────────────────────────────────────────────
   console.log('\n::: pulse: the answers on paper, the widget\'s chrome not, and no request');
   const pdir = path.join(dir, 'pulse');

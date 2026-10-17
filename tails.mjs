@@ -540,6 +540,24 @@ export function parseRevealMark(line) {
   return { from: Number(tok), problems: [] };
 }
 
+// ── an id on a heading inside a chunk ────────────────────────────────
+// `### Requirements {#requirements}` - a subsection a cross-reference can
+// point at. Only `###` to `######`: `#` and `##` are the deck's structure and
+// carry their tails through parseTail. The id is the one token the brace
+// takes; anything else in it leaves the line as the words it was. The
+// documents give the heading the id; every view takes the brace off the
+// words. build.js (assertDistinctIds, the heading renderer) and lint.js
+// (duplicate-id, reserved-id) read it here, so the two agree about which
+// line names an id.
+const HEADING_ID_RE = /^ {0,3}(#{3,6})[ \t]+(.*?)[ \t]+\{#([A-Za-z][\w-]*)\}[ \t]*$/;
+export function headingIdOf(line) {
+  const m = HEADING_ID_RE.exec(String(line ?? ''));
+  return m ? { level: m[1].length, text: m[2], id: m[3] } : null;
+}
+// The same brace at the end of a heading's rendered words, for the
+// renderer, which is handed the inline HTML and not the source line.
+export const HEADING_ID_TAIL_RE = /[ \t]+\{#([A-Za-z][\w-]*)\}[ \t]*$/;
+
 export const AUTOPLAY_MIN = 200;
 export const AUTOPLAY_MAX = 60000;
 export const DRAW_OPENER_EXAMPLE = '::: draw 150x56 autoplay 1200 cycle';

@@ -1,6 +1,6 @@
 ---
 name: psi-slides-authoring
-description: 'Write or edit a psi-slides lecture source.md – chunk grammar (## type: Heading | Sub {.width #id}), the ::: directive vocabulary (expand, margin, marginalia, cols, cards, side/flip, slide, script, backdrop, overlay), reveal segments, speaker notes, image shorthand, KaTeX math, and the frontmatter keys (viewer defaults, cover variants, the style block, embedded fonts). Use when drafting a new lecture, restructuring or polishing an existing one, fixing lint findings from lint.js, or when a Markdown file has chunk headings like "## principle:" / "## definition:" or ":::" blocks. Not for changing build.js or lint.js themselves.'
+description: 'Write or edit a psi-slides lecture source.md – chunk grammar (## type: Heading | Sub {.width #id}), the ::: directive vocabulary (expand, margin, marginalia, cols, cards, side/flip, slide, script, backdrop, overlay), reveal segments, speaker notes, image shorthand, KaTeX math, and the frontmatter keys (viewer defaults, cover variants, the style block, embedded fonts, kind: document for a syllabus or other prose that is never projected). Use when drafting a new lecture, restructuring or polishing an existing one, fixing lint findings from lint.js, or when a Markdown file has chunk headings like "## principle:" / "## definition:" or ":::" blocks. Not for changing build.js or lint.js themselves.'
 ---
 
 # Authoring psi-slides lectures
@@ -973,6 +973,15 @@ it is on screen; `Esc`, or a click on the slide, gives the frame back. So
 write it to be read *after* the slide, not with it, and keep it short: a
 marginalia shares the chunk's height and cannot grow taller than it.
 
+In the documents it is an indented aside in the text column by default.
+`style: {print-marginalia: margin}` – the default in a `kind: document` – sets
+it in the right margin instead, beside **the block written after it**: write
+the note directly *before* the paragraph it belongs to, as Tufte's side notes
+stand at the line they annotate. Several notes stack under each other, a
+picture in one is the note's width, and a window narrower than 920 px falls
+back to the aside. In a lecture keep to one per chunk (`duplicate-marginalia`):
+the projection anchors every one at the top of the margin.
+
 ### `::: slide` / `::: script`
 
 Covered above. In directive terms they behave like the other layout wrappers:
@@ -1309,6 +1318,87 @@ wrapper or an aside: each compiles to something of its own.
 
 Neither is in a tagged release yet. A lecture using them builds from this
 repository and not against a released psi-slides.
+
+## A document (`kind: document`)
+
+For prose that is read and never projected – a course syllabus, a set of
+rules, a reading guide – write `kind: document` in the frontmatter. The
+grammar is the lecture's; what changes is what the build makes of it.
+
+```markdown
+---
+title: Introduction to Security and Privacy
+subtitle: Syllabus for Winter Semester 2026
+presenter: Prof. Dr. Dominik Herrmann
+kind: document
+---
+
+## title: {#title}
+
+## About this course {#about}
+
+Front matter: before the first part, so unnumbered.
+
+# Course Format {#format}
+
+## Materials {#materials}
+
+::: marginalia
+A note in the margin, beside the paragraph below.
+:::
+
+The paragraph it belongs to. See [Requirements](#requirements).
+
+### How the script marks its parts {#script-marks}
+
+#### A paragraph heading
+
+Text.
+```
+
+- **One view**: `print.html`, and `print.pdf` with `--print-pdf`. A flag that
+  needs a lecture – `--audience-only`, `--speaker-only`, `--print-notes-only`,
+  `--slides-pdf`, `--print-notes-pdf`, `--check-fit`, `--squint`, `--frames`,
+  `--present`, the `--prompter*` flags – is refused by name. `--watch`,
+  `--serve` and `--open` work and open the document.
+- **Numbers come from the build.** Parts are 1, 2, …; the chunks of a part that
+  have a heading are 1.1, 1.2, …; in the headings, the printed contents (two
+  levels) and the reader's sidebar alike. Write no numbers into headings. A
+  chunk before the first `#` is front matter and unnumbered; a chunk with no
+  heading (`## {#id}`) continues the section above and takes no number.
+- **Headings inside a chunk**: `###` is a subsection (bold, body size),
+  `####` a paragraph heading (italic). `{#id}` on either is an anchor for
+  `[text](#id)`; it shares the namespace of chunk and part ids (`duplicate-id`,
+  `reserved-id`).
+- **Margin notes**: `::: marginalia` stands in the margin beside the block
+  after it, several per chunk; see the directive above. `::: footnote` stays
+  what it is in a lecture, a labelled note at the end of its chunk.
+- **A definition list** is raw HTML – `<dl>`, `<dt>`, `<dd>` – and prints with
+  the term bold and its description indented. Tables are Markdown tables.
+- **Gone**: the slide number in the margin, the type word over a chunk
+  (`style: {labels: on}` brings it back), the cover as a sheet of its own, the
+  contents as a page of their own, the "– print" in the tab's title. The chunk
+  type still sets the rule above a `principle:` or a `definition:`; a document
+  is usually all `free:`, which is what a heading without a type is.
+- **The linter** treats it as prose. Silent in a document, each for one reason:
+  `density` (a word budget is what fits on a slide), `orphan-column` (a part of
+  one section is a short part, not a misplaced slide), `duplicate-marginalia`
+  (the margin stacks notes; only the projection overlaps them),
+  `reveal-overuse` and `empty-beat` (no beats – a `---` is shown whole),
+  `note-advance-beyond`, `note-from-beyond`, `reveal-from-beyond`,
+  `overlay-from-beyond` (presses that do not exist), `single-word-bold` (no
+  collapse lifts a bold out), `text-on-picture` and `dock-narrows-measure` (a
+  slide's frame; print draws a backdrop as a band and a dock as a box),
+  `layout-too-narrow` (judged against a slide's measure), `explicit-in-side`
+  and `side-without-flip` (panes stack in print), and
+  `figure-type-without-figure` (a live-only key). Every error stays, and so do
+  the warnings about the text itself (`unclosed-math`, `unresolved-asset`,
+  `figure-caption-redundant`, `title-count`, …). Two warnings are a document's
+  own: `note-in-document` (a `> note:` is printed in `print-notes.html` and
+  shown in the cockpit, and a document builds neither) and `document-no-op` (a
+  top-level key only a lecture's projection, cockpit or slide numbers read –
+  `theme`, `font`, `collapse`, `slide-numbers`, `print-slide-numbers`,
+  `transition`, `section`, `duration`, `prompter`, …).
 
 ## Viewer defaults in frontmatter
 
@@ -1796,6 +1886,11 @@ not a `WxH` in grid units), `bad-section-stack` / `bad-section-bare` (a
 `reveal-from-beyond`, `note-from-beyond` and `note-advance-beyond` (a
 `--- from N`, a `> note: from N` or a note's `[Klick …]` lines asking for a
 beat the slide never takes).
+
+`unknown-kind` refuses a `kind:` other than `lecture` or `document`, as the
+build does; `note-in-document` and `document-no-op` are the two warnings only
+a `kind: document` earns (see *A document*), which also silences the checks
+listed there.
 
 `unknown-frontmatter-key` names a top-level key that no renderer reads, and it
 is the layer above `unknown-view-default` and `unknown-style-setting`: those

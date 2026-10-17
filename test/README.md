@@ -7,7 +7,7 @@ Two suites, split by one question: **can this be decided without a browser?**
   hand-mirrored list one file keeps of another's. Twenty-five gates, about three seconds,
   no browser and no `npm install`. Run by `gates.yml` on push and pull
   request.
-- **`test/`** – the things that only break in a built page. 57 specs, about 2,080
+- **`test/`** – the things that only break in a built page. 58 specs, about 2,110
   assertions, about four minutes on a twelve-core machine with six specs at a
   time (about eleven minutes one at a time). Three of them, `souffleuse`,
   `live-trust` and `watch-resume`, start an engine of their own beside their
@@ -262,8 +262,20 @@ window), `touch-rail`, `math-focus`, `block-align`, `auto-fit`, `camera-fit`,
 **The editor** – the `editor-*` specs: its gestures, its panel, and the
 neighbour-alignment guides, which are what a gesture snaps to.
 
-**The documents** are the one view outside those four, and one spec reads
-them: `reader`, the contents sidebar `print.html` and `print-notes.html` carry
+**The documents** are the one view outside those four, and two specs read
+them. `document` builds a `kind: document` and measures what only its laid-out
+page can show: at 1440 and at 1024 px every `::: marginalia` – several in one
+chunk, one with a picture, a long one with another right after it – is floated
+right of the text column and inside the window, level with the paragraph
+written after it or right under the note that pushed it, with no two
+overlapping and the picture the note's width at its head; at 390 px every one
+falls back to the aside inside the column, its picture capped; a reader's note
+card whose highlight stands level with a margin note steps out of its way;
+and the section numbers the build writes (1, 1.1) are the ones in the
+headings and the sidebar, where a lecture under `slide-numbers: off` shows
+none. What the build writes for a document – the one view, the numbers in the
+markup, the refusals, the linter's silence – is `test/settings.mjs`. The
+other is `reader`, the contents sidebar `print.html` and `print-notes.html` carry
 under `reader: on` – that its entries are the slides with the numbers the page
 prints, that the scroll-spy marks the slide whose top crossed 30% of the
 window, that its parts fold to their headings with the part being read open
@@ -358,7 +370,7 @@ is fine. **They assert the property and never a coordinate.**
 context the bar is not in the document and a measurement of it reports no
 overlaps among no buttons.
 
-### The twenty-five specs that build a deck of their own
+### The twenty-six specs that build a deck of their own
 
 Four different reasons, and the last is the one to remember.
 
@@ -438,7 +450,10 @@ drawing at `.full` has labels of the same size, an overlay held to a beat
 stands in the gutter, the cockpit lays the next step's name over the figure,
 and the document still hugs the drawing – which needs one figure drawn exactly
 to its canvas, one well inside it and one with a caption riding it, and a
-lecture that had all three would stop having them at the next edited label).
+lecture that had all three would stop having them at the next edited label)
+and `document` (no lecture is a `kind: document`, and a syllabus's shape - five
+margin notes in one part, one a picture, two written back to back - is the
+fixture's whole point).
 
 `pitchblack` is here too (a card row, a figure with a `.tone-2` box and a
 frontmatter that pins nothing, then one that pins `theme` and `pitchblack`:

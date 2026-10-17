@@ -86,6 +86,7 @@ const SPECS = [
   './figure-framing-network.mjs',
   './figure-dotted.mjs',
   './reader.mjs',
+  './document.mjs',
 ];
 
 // ── the command line ────────────────────────────────────────────────

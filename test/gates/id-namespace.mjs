@@ -66,6 +66,8 @@ const ALLOWED = [
     'renderColumn and renderColumnsHtml: a column section carries its author {#id}'],
   ['build.js', 'attr', '${escapeHtml(chunk.id)}', 1,
     'renderTitleChunk: the title or closing chunk carries its author {#id}'],
+  ['build.js', 'attr', '${escapeHtml(headingId)}', 1,
+    'the heading renderer: a ### Heading {#id} in a document carries its author id (headingIdOf; assertDistinctIds holds it)'],
   // ── built from a prefix that is itself psiINT- (asserted below) ──
   ['build.js', 'attr', '${rootId}', 1, 'inlineSvg: psiINT-fig-N-root'],
   ['build.js', 'attr', '${sym.id}', 1, 'dgAssetMarkup: a shared picture symbol, psiINT-sym-N'],
