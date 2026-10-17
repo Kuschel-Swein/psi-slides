@@ -129,3 +129,7 @@ desktop/.env
 # npm install; the page it writes is docs/site/display-faces.html, which is
 # published and therefore tracked - see build-playground.mjs --check.
 tools/font-playground/node_modules/
+
+# npm run test:coverage writes its report here (c8, HTML and lcov); a
+# measurement, regenerated on demand, never committed.
+/coverage/

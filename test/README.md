@@ -623,3 +623,23 @@ Run it after touching `AUDIENCE_JS`, the key map (`commands.mjs`, `COMMAND_RUN`)
 **`no page errors` is asserted by the runner after every spec**, not by each
 spec: it is an invariant of running one at all, and the one spec that forgot the
 line swallowed console errors for as long as it existed.
+
+## Measuring coverage
+
+`npm run test:coverage` runs the half of `npm test` that needs no browser –
+the gates, `settings`, `containers`, `cli`, `present` and `reproducible` –
+under [c8](https://github.com/bcoe/c8) and prints a table per file, with an
+HTML report in `coverage/` (gitignored). It is a measurement, not a gate: no
+threshold fails a run. c8 reads V8's own coverage through `NODE_V8_COVERAGE`,
+which a child process inherits, so the `build.js` runs that `cli.mjs` and
+`reproducible.mjs` spawn are counted too. The browser suite and
+`pdf-export.mjs` are left out, which is why `chrome-path.mjs` and
+`pdf-export.mjs` read 0 %; `editor.mjs` runs only in a page and is not listed.
+
+**Read `build.js`'s line figure with care.** V8 counts a template literal as
+one expression, so the moment `const AUDIENCE_CSS = …` is evaluated every line
+of that stylesheet counts as covered. About 23,700 of the file's 37,000 lines
+are inside the two dozen literal constants – the inlined runtime and
+stylesheets – and read 99.8 %; the Node-side logic outside them read 77 % on
+the first measurement, against 91.6 % for the file as a whole. The function
+and branch columns are not inflated this way.
