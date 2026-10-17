@@ -95,6 +95,13 @@ const HEADER = `# Reviewed survivors of the old \`::: draw {unit=WxH autoplay=N 
 
 export async function run({ report }) {
   const { ok, note } = report;
+  // An unpacked release archive has no .git to list files with, and its
+  // allowlist names files .gitattributes leaves out of it (CHANGELOG.md, the
+  // plans), so there is nothing here to compare. A clone has both.
+  if (!fs.existsSync(path.join(ROOT, '.git'))) {
+    note('no .git: an unpacked release archive, legacy syntax not inventoried');
+    return;
+  }
   const { files, openers, rows: found } = inventory();
   note(`${files} tracked text file(s) scanned`);
   ok(openers.length === 0, 'no active authoring surface carries the old ::: draw opener (nor the spliced pages\' prose an old token)', openers.join('\n      '));
