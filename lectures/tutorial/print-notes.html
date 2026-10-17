@@ -660,7 +660,7 @@ body[data-marginalia=margin] main .marginalia figure.figure-img :is(img, svg) { 
   body[data-marginalia=margin] main .marginalia figure.figure-img :is(img, svg) { max-width: 100%; }
 }
 @media screen and (min-width: 920px) {
-  body[data-marginalia=margin] { padding: 0 18.5rem 0 1.5rem; }
+  body[data-marginalia=margin]:has(main :is(.marginalia, .fn-slot)) { padding: 0 18.5rem 0 1.5rem; }
   body[data-marginalia=margin] { --mn-w: 14rem; --mn-gap: 2.5rem; }
 }
 @media print {
@@ -668,7 +668,7 @@ body[data-marginalia=margin] main .marginalia figure.figure-img :is(img, svg) { 
   body[data-kind=document][data-marginalia=margin] { --mn-w: 4.4cm; --mn-gap: 0.55cm; }
 }
 @media print, screen and (min-width: 920px) {
-  body[data-marginalia=margin] main .marginalia {
+  body[data-marginalia=margin] main :is(.marginalia, .fn-slot) {
     float: right;
     clear: right;
     width: var(--mn-w);
@@ -681,8 +681,21 @@ body[data-marginalia=margin] main .marginalia figure.figure-img :is(img, svg) { 
     break-inside: avoid;
     page-break-inside: avoid;
   }
-  body[data-marginalia=margin] main .marginalia :is(p, li) { orphans: 1; widows: 1; }
-  body[data-marginalia=margin] main .marginalia p { margin: 0 0 0.45em; }
+  body[data-marginalia=margin] main :is(.marginalia, .fn-slot) :is(p, li) { orphans: 1; widows: 1; }
+  body[data-marginalia=margin] main :is(.marginalia, .fn-slot) p { margin: 0 0 0.45em; }
+  body[data-marginalia=margin] main .fn-slot > .chunk-expansion {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-size: inherit;
+    color: inherit;
+  }
+  body[data-marginalia=margin] main .fn-slot > .chunk-expansion::before { content: none; }
+  body[data-marginalia=margin] main .chunk::after { content: ''; display: block; clear: right; }
+}
+@media screen and (max-width: 919.98px) {
+  body[data-marginalia=margin] main .chunk:has(> .fn-slot) { display: table; table-layout: fixed; width: 100%; }
+  body[data-marginalia=margin] main .chunk > .fn-slot { display: table-footer-group; }
 }
 .chunk :is(h3, h4, h5, h6),
 .column-lede :is(h3, h4, h5, h6) {
@@ -1710,7 +1723,7 @@ code:not(pre code):not(.chunk-heading code) { font-size: 0.885em; }
 </style>
 
 </head>
-<body data-slide-nums="horizontal"  data-reader="on">
+<body data-slide-nums="horizontal"  data-marginalia="margin" data-reader="on">
 <button type="button" class="rd-toggle" aria-controls="psiINT-reader-contents" aria-expanded="false" hidden>Contents</button>
 <nav id="psiINT-reader-contents" class="rd-contents" aria-label="Contents" hidden>
   <div class="rd-head"><span class="rd-label">Contents</span><button type="button" class="rd-close" aria-label="Close contents">×</button></div>
@@ -2701,15 +2714,17 @@ speaker view and <code class="nb">print-notes.html</code> show it, the projectio
   <span class="chunk-num" aria-hidden="true"><i>4</i><i>1</i></span>
   
   <h2 class="chunk-heading has-sub"><span class="hd-main">Footnotes</span> <span class="hd-sub"><code>::: footnote</code> is a small note under the chunk</span></h2>
-  <p><strong><code>::: footnote</code> puts a small grey note under the chunk, labelled and always visible</strong> – down in the flow of the text rather than out at the side. No button, no separate panel, nothing to click.</p>
+  <div class="fn-slot"><aside class="chunk-expansion chunk-expansion-margin" data-label="note">
+<p>This is a footnote. The label above it reads NOTE in English (<code class="nb">labels:</code> or another <code class="nb">lang:</code> changes the word), and the note sits in grey under a dotted rule. Unlike a marginalia it stays in the middle column, under the body it was written beneath.</p>
+
+</aside></div>
+
+<p><strong><code>::: footnote</code> puts a small grey note under the chunk, labelled and always visible</strong> – down in the flow of the text rather than out at the side. No button, no separate panel, nothing to click.</p>
 <p><strong>A marginalia goes out into the margin and can be brought to the centre with a click; a footnote stays under the chunk and is read where it stands.</strong> Use <code>::: footnote</code> when the extra material is short and you want it on the page every time, and for <code>::: expand &lt;label&gt;</code>, the chevron button from earlier, when it should stay behind a button until somebody asks.</p>
 
   
   
-  <aside class="chunk-expansion chunk-expansion-margin" data-label="note">
-<p>This is a footnote. The label above it reads NOTE in English (<code class="nb">labels:</code> or another <code class="nb">lang:</code> changes the word), and the note sits in grey under a dotted rule. Unlike a marginalia it stays in the middle column, under the body it was written beneath.</p>
-
-</aside>
+  
   
   
 </article>
